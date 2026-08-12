@@ -240,7 +240,7 @@ func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested ti
 					o := model.FundamentalObservation{
 						Source: "sec", IssuerID: issuerID, Taxonomy: taxonomy, Concept: concept, Unit: unit, Value: value,
 						Currency: currency, Revision: 0,
-						Temporal:    model.Temporal{ObservedAt: end.UTC(), PublishedAt: published, PublishedPrecision: precision, AvailableAt: available, IngestedAt: ingested},
+						Temporal:    model.Temporal{ObservedAt: end.UTC(), ObservedPrecision: model.PrecisionDate, PublishedAt: published, PublishedPrecision: precision, AvailableAt: available, IngestedAt: ingested},
 						PeriodStart: start, PeriodEnd: end.UTC(), AccessionNumber: f.Accn, Form: f.Form, FiscalYear: fy, FiscalPeriod: fiscalPeriod(f.FP, start), Frame: f.Frame, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion},
 					}
 					o.Provenance.RawRecordLocator = strings.Join([]string{"companyfacts", "taxonomy=" + taxonomy, "concept=" + concept, "unit=" + unit, "accn=" + f.Accn, "start=" + f.Start, "end=" + f.End, "frame=" + f.Frame}, "/")

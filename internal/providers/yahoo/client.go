@@ -156,7 +156,7 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 		if _, ok := unique[key]; ok {
 			continue
 		}
-		unique[key] = model.PriceBar{Source: "yahoo", SecurityID: securityID, Currency: currency, Interval: "1d", PriceBasis: "raw", Open: open, High: high, Low: low, Close: closeValue, Volume: volume, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, RawRecordLocator: "chart/date=" + key, IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion}, Temporal: model.Temporal{ObservedAt: closeAt, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
+		unique[key] = model.PriceBar{Source: "yahoo", SecurityID: securityID, Currency: currency, Interval: "1d", PriceBasis: "raw", Open: open, High: high, Low: low, Close: closeValue, Volume: volume, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, RawRecordLocator: "chart/date=" + key, IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion}, Temporal: model.Temporal{ObservedAt: closeAt, ObservedPrecision: model.PrecisionSecond, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
 	}
 	bars := make([]model.PriceBar, 0, len(unique))
 	for _, v := range unique {

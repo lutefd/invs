@@ -90,7 +90,7 @@ func parseCSV(b []byte, seriesID string, ingested time.Time) ([]model.EconomicOb
 		}
 		day = day.UTC()
 		vintage := ingested
-		unique[row[0]] = model.EconomicObservation{Source: "fred", SeriesID: seriesID, Geography: "US", Unit: "unknown", Frequency: "irregular", Value: value, Revision: 0, VintageAt: &vintage, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, RawRecordLocator: "csv/date=" + row[0], IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion}, Temporal: model.Temporal{ObservedAt: day, PublishedAt: ingested, PublishedPrecision: model.PrecisionUnknown, AvailableAt: ingested, IngestedAt: ingested}}
+		unique[row[0]] = model.EconomicObservation{Source: "fred", SeriesID: seriesID, Geography: "US", Unit: "unknown", Frequency: "irregular", Value: value, Revision: 0, VintageAt: &vintage, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, RawRecordLocator: "csv/date=" + row[0], IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion}, Temporal: model.Temporal{ObservedAt: day, ObservedPrecision: model.PrecisionDate, PublishedAt: ingested, PublishedPrecision: model.PrecisionUnknown, AvailableAt: ingested, IngestedAt: ingested}}
 	}
 	result := make([]model.EconomicObservation, 0, len(unique))
 	for _, o := range unique {

@@ -48,7 +48,7 @@ func TestCollectCompanyNormalizesAndDeduplicates(t *testing.T) {
 		t.Fatalf("unexpected result: %+v", r)
 	}
 	f := r.Facts[0]
-	if f.Temporal.PublishedPrecision != "second" || !f.Temporal.AvailableAt.Equal(time.Date(2024, 2, 2, 21, 3, 4, 0, time.UTC)) {
+	if f.Temporal.ObservedPrecision != "date" || f.Temporal.PublishedPrecision != "second" || !f.Temporal.AvailableAt.Equal(time.Date(2024, 2, 2, 21, 3, 4, 0, time.UTC)) {
 		t.Fatalf("unsafe availability: %+v", f.Temporal)
 	}
 	if f.Value != "123.5" || f.IssuerID != "issuer-1" || f.RawPayloadHash == "" {
@@ -75,6 +75,9 @@ func TestFactWithoutAcceptanceUsesFortyEightHourFallback(t *testing.T) {
 	}
 	if !got[0].Temporal.PublishedAt.Equal(got[0].Temporal.AvailableAt) {
 		t.Fatal("published_at exposed unsafe filed midnight")
+	}
+	if got[0].Temporal.ObservedPrecision != "date" {
+		t.Fatalf("observed precision=%q want date", got[0].Temporal.ObservedPrecision)
 	}
 }
 

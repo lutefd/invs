@@ -26,7 +26,7 @@ func TestV1PhysicalSchemasContainCanonicalColumns(t *testing.T) {
 		name string
 		cols map[string]bool
 		want []string
-	}{{"price", columnsOf[PriceRow](), []string{"schema_version", "security_id", "interval", "price_basis", "currency", "observed_at", "published_at", "has_published_at", "open", "high", "low", "close", "volume", "has_volume", "data_source_id", "ingestion_run_id", "raw_payload_hash", "ingested_at"}}, {"fundamental", columnsOf[FundamentalRow](), []string{"schema_version", "issuer_id", "security_id", "has_security_id", "concept", "value", "has_value", "unit", "currency", "has_currency", "period_start", "has_period_start", "period_end", "fiscal_period", "observed_at", "published_at", "revision", "data_source_id", "ingestion_run_id"}}, {"economic", columnsOf[EconomicRow](), []string{"schema_version", "series_id", "geography", "value", "has_value", "unit", "frequency", "seasonal_adjustment", "has_seasonal_adjustment", "observed_at", "published_at", "revision", "data_source_id", "ingestion_run_id"}}}
+	}{{"price", columnsOf[PriceRow](), []string{"schema_version", "security_id", "interval", "price_basis", "currency", "observed_at", "observed_precision", "published_at", "has_published_at", "open", "high", "low", "close", "volume", "has_volume", "data_source_id", "ingestion_run_id", "raw_payload_hash", "ingested_at"}}, {"fundamental", columnsOf[FundamentalRow](), []string{"schema_version", "issuer_id", "security_id", "has_security_id", "concept", "value", "has_value", "unit", "currency", "has_currency", "period_start", "has_period_start", "period_end", "fiscal_period", "observed_at", "observed_precision", "published_at", "revision", "data_source_id", "ingestion_run_id"}}, {"economic", columnsOf[EconomicRow](), []string{"schema_version", "series_id", "geography", "value", "has_value", "unit", "frequency", "seasonal_adjustment", "has_seasonal_adjustment", "observed_at", "observed_precision", "published_at", "revision", "data_source_id", "ingestion_run_id"}}}
 	for _, tc := range cases {
 		for _, name := range tc.want {
 			if !tc.cols[name] {
@@ -48,6 +48,104 @@ func provenance(at time.Time) model.Provenance {
 func price(at time.Time) model.PriceBar {
 	at = at.Truncate(time.Microsecond)
 	return model.PriceBar{Source: "yahoo", SecurityID: securityID, Interval: "1d", PriceBasis: "raw", Currency: "USD", Temporal: model.Temporal{ObservedAt: at, PublishedAt: at.Add(time.Hour), AvailableAt: at.Add(time.Hour), IngestedAt: at.Add(2 * time.Hour), PublishedPrecision: model.PrecisionSecond}, Open: "1.000000000000000001", High: "3", Low: "1", Close: "2", Volume: "10", RawPayloadHash: rawHash, Provenance: provenance(at.Add(2 * time.Hour))}
+}
+
+func TestObservedPrecisionIsValidatedAndDefaultsToUnknown(t *testing.T) {
+	bar := price(time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC))
+	row, err := priceRow(bar)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.ObservedPrecision != string(model.PrecisionUnknown) {
+		t.Fatalf("observed_precision=%q want unknown", row.ObservedPrecision)
+	}
+	bar.Temporal.ObservedPrecision = model.TimePrecision("millisecond")
+	if _, err := priceRow(bar); err == nil || !strings.Contains(err.Error(), "observed_precision") {
+		t.Fatalf("invalid observed precision error=%v", err)
+	}
+	bar = price(time.Date(2024, 1, 2, 20, 0, 0, 123000000, time.UTC))
+	bar.Temporal.ObservedPrecision = model.PrecisionSecond
+	if _, err := priceRow(bar); err == nil || !strings.Contains(err.Error(), "whole-second") {
+		t.Fatalf("inconsistent observed precision error=%v", err)
+	}
+}
+
+func TestObservedPrecisionPhysicalTypeIsUTF8(t *testing.T) {
+	column, ok := parquet.SchemaOf(new(PriceRow)).Lookup("observed_precision")
+	if !ok || column.Node.Type().Kind() != parquet.ByteArray || column.Node.Type().LogicalType() == nil || column.Node.Type().LogicalType().UTF8 == nil {
+		t.Fatalf("observed_precision schema=%v, want UTF8 BYTE_ARRAY", column.Node)
+	}
+}
+
+type legacyPriceRow struct {
+	SchemaVersion      string `parquet:"schema_version"`
+	Source             string `parquet:"source"`
+	SecurityID         string `parquet:"security_id"`
+	Interval           string `parquet:"interval"`
+	PriceBasis         string `parquet:"price_basis"`
+	Currency           string `parquet:"currency"`
+	ObservedAt         int64  `parquet:"observed_at,timestamp(microsecond:utc)"`
+	PublishedAt        int64  `parquet:"published_at,timestamp(microsecond:utc)"`
+	HasPublishedAt     bool   `parquet:"has_published_at"`
+	PublishedPrecision string `parquet:"published_precision"`
+	AvailableAt        int64  `parquet:"available_at,timestamp(microsecond:utc)"`
+	IngestedAt         int64  `parquet:"ingested_at,timestamp(microsecond:utc)"`
+	Open               string `parquet:"open"`
+	High               string `parquet:"high"`
+	Low                string `parquet:"low"`
+	Close              string `parquet:"close"`
+	Volume             string `parquet:"volume"`
+	HasVolume          bool   `parquet:"has_volume"`
+	RawPayloadHash     string `parquet:"raw_payload_hash"`
+	DataSourceID       string `parquet:"data_source_id"`
+	IngestionRunID     string `parquet:"ingestion_run_id"`
+	RawRecordLocator   string `parquet:"raw_record_locator"`
+	NormalizerVersion  string `parquet:"normalizer_version"`
+}
+
+func legacyPriceRowFrom(r PriceRow) legacyPriceRow {
+	return legacyPriceRow{
+		SchemaVersion: r.SchemaVersion, Source: r.Source, SecurityID: r.SecurityID, Interval: r.Interval, PriceBasis: r.PriceBasis, Currency: r.Currency,
+		ObservedAt: r.ObservedAt, PublishedAt: r.PublishedAt, HasPublishedAt: r.HasPublishedAt, PublishedPrecision: r.PublishedPrecision,
+		AvailableAt: r.AvailableAt, IngestedAt: r.IngestedAt, Open: r.Open, High: r.High, Low: r.Low, Close: r.Close, Volume: r.Volume,
+		HasVolume: r.HasVolume, RawPayloadHash: r.RawPayloadHash, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID,
+		RawRecordLocator: r.RawRecordLocator, NormalizerVersion: r.NormalizerVersion,
+	}
+}
+
+func TestExistingV1PartWithoutObservedPrecisionDefaultsToUnknown(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Dir(pricePath(root))
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	row, err := priceRow(price(time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	partTemp := filepath.Join(dir, "legacy.parquet")
+	if err := parquet.WriteFile(partTemp, []legacyPriceRow{legacyPriceRowFrom(row)}); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := sha256File(partTemp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partPath := filepath.Join(dir, contentPartFilename(hash))
+	if err := os.Rename(partTemp, partPath); err != nil {
+		t.Fatal(err)
+	}
+	manifest := Manifest{ManifestVersion: ManifestVersion, SchemaVersion: model.SchemaVersion, NormalizerVersion: row.NormalizerVersion, GitCommit: UnknownGitCommit, Source: row.Source, DataSourceID: row.DataSourceID, IngestionRunID: row.IngestionRunID, Partition: map[string]string{"dataset": "prices", "source": row.Source, "security_id": row.SecurityID}, RowCount: 1, Parts: []ManifestPart{{Path: filepath.Base(partPath), SHA256: hash, RowCount: 1}}}
+	if err := writeManifest(filepath.Join(dir, ManifestFilename), manifest, defaultPublicationOps()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readCommitted[PriceRow](dir, manifest.Partition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ObservedPrecision != string(model.PrecisionUnknown) {
+		t.Fatalf("rows=%+v want one unknown observed precision", got)
+	}
 }
 
 func TestParquetRejectsSubMicrosecondTimestamps(t *testing.T) {
@@ -113,6 +211,9 @@ func TestParquetExactMicrosecondTimestampsRoundTrip(t *testing.T) {
 		t.Fatalf("price rows=%d, want 1", len(priceRows))
 	}
 	storedPrice := priceRows[0]
+	if storedPrice.ObservedPrecision != string(model.PrecisionUnknown) {
+		t.Fatalf("observed precision=%q want unknown", storedPrice.ObservedPrecision)
+	}
 	priceWant := []time.Time{bar.Temporal.ObservedAt, bar.Temporal.PublishedAt, bar.Temporal.AvailableAt, bar.Temporal.IngestedAt}
 	priceGot := []time.Time{time.UnixMicro(storedPrice.ObservedAt).UTC(), time.UnixMicro(storedPrice.PublishedAt).UTC(), time.UnixMicro(storedPrice.AvailableAt).UTC(), time.UnixMicro(storedPrice.IngestedAt).UTC()}
 	for i := range priceWant {

@@ -23,6 +23,7 @@ const (
 // any plausible acceptance time on that date (SEC currently uses filed date plus 48 hours).
 type Temporal struct {
 	ObservedAt         time.Time
+	ObservedPrecision  TimePrecision
 	PublishedAt        time.Time
 	PublishedPrecision TimePrecision
 	AvailableAt        time.Time

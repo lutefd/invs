@@ -44,7 +44,7 @@ func TestParseNormalizesExchangeCloseAndRejectsMissing(t *testing.T) {
 		t.Fatalf("bars=%v received=%d rejected=%d", bars, received, rejected)
 	}
 	want := time.Date(2024, 7, 1, 20, 0, 0, 0, time.UTC)
-	if !bars[0].Temporal.ObservedAt.Equal(want) || bars[0].Source != "yahoo" {
+	if !bars[0].Temporal.ObservedAt.Equal(want) || bars[0].Temporal.ObservedPrecision != model.PrecisionSecond || bars[0].Source != "yahoo" {
 		t.Fatalf("bar=%+v", bars[0])
 	}
 	if !bars[0].Temporal.AvailableAt.Equal(ingested) || !bars[0].Temporal.PublishedAt.Equal(ingested) {

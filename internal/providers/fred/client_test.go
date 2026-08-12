@@ -30,7 +30,7 @@ func TestParseCSVUsesConservativeAvailabilityAndDeduplicates(t *testing.T) {
 	if len(obs) != 1 || received != 3 || rejected != 0 {
 		t.Fatalf("obs=%v received=%d rejected=%d", obs, received, rejected)
 	}
-	if !obs[0].Temporal.AvailableAt.Equal(ingested) || !obs[0].Temporal.PublishedAt.Equal(ingested) || obs[0].Temporal.PublishedPrecision != model.PrecisionUnknown || obs[0].Temporal.ObservedAt.Equal(ingested) || obs[0].VintageAt == nil || !obs[0].VintageAt.Equal(ingested) {
+	if obs[0].Temporal.ObservedPrecision != model.PrecisionDate || !obs[0].Temporal.AvailableAt.Equal(ingested) || !obs[0].Temporal.PublishedAt.Equal(ingested) || obs[0].Temporal.PublishedPrecision != model.PrecisionUnknown || obs[0].Temporal.ObservedAt.Equal(ingested) || obs[0].VintageAt == nil || !obs[0].VintageAt.Equal(ingested) {
 		t.Fatalf("bad temporal semantics: %+v", obs[0].Temporal)
 	}
 }

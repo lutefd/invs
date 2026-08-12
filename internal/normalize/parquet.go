@@ -27,6 +27,7 @@ type PriceRow struct {
 	PriceBasis         string `parquet:"price_basis"`
 	Currency           string `parquet:"currency"`
 	ObservedAt         int64  `parquet:"observed_at,timestamp(microsecond:utc)"`
+	ObservedPrecision  string `parquet:"observed_precision"`
 	PublishedAt        int64  `parquet:"published_at,timestamp(microsecond:utc)"`
 	HasPublishedAt     bool   `parquet:"has_published_at"`
 	PublishedPrecision string `parquet:"published_precision"`
@@ -57,6 +58,7 @@ type FundamentalRow struct {
 	Currency           string `parquet:"currency"`
 	HasCurrency        bool   `parquet:"has_currency"`
 	ObservedAt         int64  `parquet:"observed_at,timestamp(microsecond:utc)"`
+	ObservedPrecision  string `parquet:"observed_precision"`
 	PublishedAt        int64  `parquet:"published_at,timestamp(microsecond:utc)"`
 	PublishedPrecision string `parquet:"published_precision"`
 	AvailableAt        int64  `parquet:"available_at,timestamp(microsecond:utc)"`
@@ -89,6 +91,7 @@ type EconomicRow struct {
 	SeasonalAdjustment    string `parquet:"seasonal_adjustment"`
 	HasSeasonalAdjustment bool   `parquet:"has_seasonal_adjustment"`
 	ObservedAt            int64  `parquet:"observed_at,timestamp(microsecond:utc)"`
+	ObservedPrecision     string `parquet:"observed_precision"`
 	PublishedAt           int64  `parquet:"published_at,timestamp(microsecond:utc)"`
 	PublishedPrecision    string `parquet:"published_precision"`
 	AvailableAt           int64  `parquet:"available_at,timestamp(microsecond:utc)"`
@@ -404,7 +407,13 @@ func priceRow(o model.PriceBar) (PriceRow, error) {
 	if compareDecimal(low, high) > 0 || compareDecimal(open, low) < 0 || compareDecimal(open, high) > 0 || compareDecimal(closeValue, low) < 0 || compareDecimal(closeValue, high) > 0 {
 		return PriceRow{}, errors.New("invalid OHLC invariant")
 	}
-	r := PriceRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SecurityID: o.SecurityID, Interval: o.Interval, PriceBasis: o.PriceBasis, Currency: o.Currency, ObservedAt: observedAt, PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: availableAt, IngestedAt: ingestedAt, Open: open, High: high, Low: low, Close: closeValue, Volume: volume, HasVolume: o.Volume != ""}
+	observedPrecision := normalizeObservedPrecision(o.Temporal.ObservedPrecision)
+	temporal := o.Temporal
+	temporal.ObservedPrecision = observedPrecision
+	if err := validateTemporal(temporal, !o.Temporal.PublishedAt.IsZero()); err != nil {
+		return PriceRow{}, err
+	}
+	r := PriceRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SecurityID: o.SecurityID, Interval: o.Interval, PriceBasis: o.PriceBasis, Currency: o.Currency, ObservedAt: observedAt, ObservedPrecision: string(observedPrecision), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: availableAt, IngestedAt: ingestedAt, Open: open, High: high, Low: low, Close: closeValue, Volume: volume, HasVolume: o.Volume != ""}
 	if !o.Temporal.PublishedAt.IsZero() {
 		r.PublishedAt = publishedAt
 		r.HasPublishedAt = true
@@ -452,7 +461,13 @@ func fundamentalRow(o model.FundamentalObservation) (FundamentalRow, error) {
 			return FundamentalRow{}, errors.New("period_start after period_end")
 		}
 	}
-	r := FundamentalRow{SchemaVersion: model.SchemaVersion, Source: o.Source, IssuerID: o.IssuerID, SecurityID: o.SecurityID, HasSecurityID: o.SecurityID != "", Taxonomy: o.Taxonomy, Concept: o.Concept, Unit: o.Unit, Currency: o.Currency, HasCurrency: o.Currency != "", ObservedAt: observedAt, PublishedAt: publishedAt, PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: availableAt, IngestedAt: ingestedAt, PeriodStart: start, HasPeriodStart: hasStart, PeriodEnd: days(o.PeriodEnd), Value: value, HasValue: o.Value != "", Revision: int32(o.Revision), AccessionNumber: o.AccessionNumber, Form: o.Form, FiscalYear: int32(o.FiscalYear), FiscalPeriod: o.FiscalPeriod, Frame: o.Frame}
+	observedPrecision := normalizeObservedPrecision(o.Temporal.ObservedPrecision)
+	temporal := o.Temporal
+	temporal.ObservedPrecision = observedPrecision
+	if err := validateTemporal(temporal, true); err != nil {
+		return FundamentalRow{}, err
+	}
+	r := FundamentalRow{SchemaVersion: model.SchemaVersion, Source: o.Source, IssuerID: o.IssuerID, SecurityID: o.SecurityID, HasSecurityID: o.SecurityID != "", Taxonomy: o.Taxonomy, Concept: o.Concept, Unit: o.Unit, Currency: o.Currency, HasCurrency: o.Currency != "", ObservedAt: observedAt, ObservedPrecision: string(observedPrecision), PublishedAt: publishedAt, PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: availableAt, IngestedAt: ingestedAt, PeriodStart: start, HasPeriodStart: hasStart, PeriodEnd: days(o.PeriodEnd), Value: value, HasValue: o.Value != "", Revision: int32(o.Revision), AccessionNumber: o.AccessionNumber, Form: o.Form, FiscalYear: int32(o.FiscalYear), FiscalPeriod: o.FiscalPeriod, Frame: o.Frame}
 	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
 	return r, nil
 }
@@ -477,7 +492,13 @@ func economicRow(o model.EconomicObservation) (EconomicRow, error) {
 	if err != nil {
 		return EconomicRow{}, err
 	}
-	r := EconomicRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SeriesID: o.SeriesID, Geography: o.Geography, Unit: o.Unit, Frequency: o.Frequency, SeasonalAdjustment: o.SeasonalAdjustment, HasSeasonalAdjustment: o.SeasonalAdjustment != "", ObservedAt: observedAt, PublishedAt: publishedAt, PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: availableAt, IngestedAt: ingestedAt, Value: value, HasValue: o.Value != "", Revision: int32(o.Revision)}
+	observedPrecision := normalizeObservedPrecision(o.Temporal.ObservedPrecision)
+	temporal := o.Temporal
+	temporal.ObservedPrecision = observedPrecision
+	if err := validateTemporal(temporal, true); err != nil {
+		return EconomicRow{}, err
+	}
+	r := EconomicRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SeriesID: o.SeriesID, Geography: o.Geography, Unit: o.Unit, Frequency: o.Frequency, SeasonalAdjustment: o.SeasonalAdjustment, HasSeasonalAdjustment: o.SeasonalAdjustment != "", ObservedAt: observedAt, ObservedPrecision: string(observedPrecision), PublishedAt: publishedAt, PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: availableAt, IngestedAt: ingestedAt, Value: value, HasValue: o.Value != "", Revision: int32(o.Revision)}
 	if o.VintageAt != nil {
 		r.VintageAt, err = micros(*o.VintageAt)
 		if err != nil {
@@ -530,6 +551,21 @@ func validateTemporal(t model.Temporal, publishedRequired bool) error {
 	if t.ObservedAt.IsZero() || t.AvailableAt.IsZero() || t.IngestedAt.IsZero() {
 		return errors.New("required temporal field is zero")
 	}
+	observedPrecision := normalizeObservedPrecision(t.ObservedPrecision)
+	switch observedPrecision {
+	case model.PrecisionDate:
+		observed := t.ObservedAt.UTC()
+		if observed.Hour() != 0 || observed.Minute() != 0 || observed.Second() != 0 || observed.Nanosecond() != 0 {
+			return errors.New("date observed_precision requires observed_at at UTC midnight")
+		}
+	case model.PrecisionSecond:
+		if t.ObservedAt.Nanosecond() != 0 {
+			return errors.New("second observed_precision requires whole-second observed_at")
+		}
+	case model.PrecisionUnknown:
+	default:
+		return fmt.Errorf("invalid observed_precision %q", t.ObservedPrecision)
+	}
 	if publishedRequired && t.PublishedAt.IsZero() {
 		return errors.New("published_at required")
 	}
@@ -543,6 +579,13 @@ func validateTemporal(t model.Temporal, publishedRequired bool) error {
 		return errors.New("available_at after ingested_at")
 	}
 	return nil
+}
+
+func normalizeObservedPrecision(precision model.TimePrecision) model.TimePrecision {
+	if precision == "" {
+		return model.PrecisionUnknown
+	}
+	return precision
 }
 func isCurrency(v string) bool {
 	if len(v) != 3 {
@@ -824,26 +867,17 @@ func readV1[T any](path string) ([]T, error) {
 	if err != nil {
 		return nil, err
 	}
-	physical := make(map[string]struct{})
-	for _, c := range pf.Schema().Columns() {
-		if len(c) == 1 {
-			physical[c[0]] = struct{}{}
-		}
-	}
-	for _, c := range parquet.SchemaOf(new(T)).Columns() {
-		if len(c) != 1 {
-			continue
-		}
-		if _, ok := physical[c[0]]; !ok {
-			return nil, fmt.Errorf("%w: %s has no %s column", ErrMigrationRequired, path, c[0])
-		}
+	if err := validatePhysicalSchema[T](pf.Schema(), path); err != nil {
+		return nil, err
 	}
 	rows, err := parquet.Read[T](f, st.Size())
 	if err != nil {
 		return nil, fmt.Errorf("%w: cannot decode %s: %v", ErrMigrationRequired, path, err)
 	}
 	seen := make(map[string]struct{}, len(rows))
-	for _, r := range rows {
+	for i := range rows {
+		defaultStoredObservedPrecision(&rows[i])
+		r := rows[i]
 		key, err := validateExistingRow(r)
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid row in %s: %v", ErrMigrationRequired, path, err)
@@ -854,6 +888,50 @@ func readV1[T any](path string) ([]T, error) {
 		seen[key] = struct{}{}
 	}
 	return rows, nil
+}
+
+func validatePhysicalSchema[T any](actual *parquet.Schema, path string) error {
+	expected := parquet.SchemaOf(new(T))
+	for _, column := range expected.Columns() {
+		if len(column) != 1 {
+			continue
+		}
+		name := column[0]
+		actualColumn, present := actual.Lookup(name)
+		if !present {
+			if name == "observed_precision" {
+				continue
+			}
+			return fmt.Errorf("%w: %s has no %s column", ErrMigrationRequired, path, name)
+		}
+		expectedColumn, ok := expected.Lookup(name)
+		actualNode := strings.TrimSpace(actualColumn.Node.String())
+		if index := strings.Index(actualNode, ":"); index >= 0 {
+			actualNode = strings.TrimSpace(actualNode[index+1:])
+		}
+		expectedNode := strings.TrimSpace(expectedColumn.Node.String())
+		if !ok || actualNode != expectedNode {
+			return fmt.Errorf("%w: %s has incompatible %s column type: got %s want %s", ErrMigrationRequired, path, name, actualColumn.Node.String(), expectedColumn.Node.String())
+		}
+	}
+	return nil
+}
+
+func defaultStoredObservedPrecision[T any](row *T) {
+	switch r := any(row).(type) {
+	case *PriceRow:
+		if r.ObservedPrecision == "" {
+			r.ObservedPrecision = string(model.PrecisionUnknown)
+		}
+	case *FundamentalRow:
+		if r.ObservedPrecision == "" {
+			r.ObservedPrecision = string(model.PrecisionUnknown)
+		}
+	case *EconomicRow:
+		if r.ObservedPrecision == "" {
+			r.ObservedPrecision = string(model.PrecisionUnknown)
+		}
+	}
 }
 
 func validateExistingRow[T any](row T) (string, error) {
@@ -882,7 +960,7 @@ func validateStoredPrice(r PriceRow) error {
 	if r.HasPublishedAt != (r.PublishedAt != 0) {
 		return errors.New("published_at presence mismatch")
 	}
-	temporal := storedTemporal(r.ObservedAt, r.PublishedAt, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, r.HasPublishedAt)
+	temporal := storedTemporal(r.ObservedAt, r.PublishedAt, r.ObservedPrecision, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, r.HasPublishedAt)
 	if err := validateTemporal(temporal, false); err != nil {
 		return err
 	}
@@ -940,7 +1018,7 @@ func validateStoredFundamental(r FundamentalRow) error {
 	if r.HasPeriodStart && r.PeriodStart > r.PeriodEnd {
 		return errors.New("period_start after period_end")
 	}
-	temporal := storedTemporal(r.ObservedAt, r.PublishedAt, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, true)
+	temporal := storedTemporal(r.ObservedAt, r.PublishedAt, r.ObservedPrecision, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, true)
 	if err := validateTemporal(temporal, true); err != nil {
 		return err
 	}
@@ -972,7 +1050,7 @@ func validateStoredEconomic(r EconomicRow) error {
 	if r.HasVintageAt != (r.VintageAt != 0) {
 		return errors.New("vintage_at presence mismatch")
 	}
-	return validateTemporal(storedTemporal(r.ObservedAt, r.PublishedAt, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, true), true)
+	return validateTemporal(storedTemporal(r.ObservedAt, r.PublishedAt, r.ObservedPrecision, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, true), true)
 }
 
 func validateStoredCommon(schemaVersion, source, hash, dataSourceID, runID, normalizerVersion string) error {
@@ -1013,10 +1091,11 @@ func validateCanonicalDecimal(v string, nonNegative bool) error {
 	return nil
 }
 
-func storedTemporal(observed, published int64, precision string, available, ingested int64, hasPublished bool) model.Temporal {
+func storedTemporal(observed, published int64, observedPrecision, publishedPrecision string, available, ingested int64, hasPublished bool) model.Temporal {
 	t := model.Temporal{
 		ObservedAt:         time.UnixMicro(observed).UTC(),
-		PublishedPrecision: model.TimePrecision(precision),
+		ObservedPrecision:  normalizeObservedPrecision(model.TimePrecision(observedPrecision)),
+		PublishedPrecision: model.TimePrecision(publishedPrecision),
 		AvailableAt:        time.UnixMicro(available).UTC(),
 		IngestedAt:         time.UnixMicro(ingested).UTC(),
 	}
