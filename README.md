@@ -2,9 +2,9 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The current vertical slice is under active development, and v0 acceptance remains pending the live acceptance follow-up described below.
+Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The current vertical slice is under active development, and the post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply.
 
-The current vertical slice covers Yahoo daily prices, SEC company facts, and FRED macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; run finalization publishes accepted price/macro candidates to those projections in the same PostgreSQL transaction that closes the run. A partial run may publish successful entities while a parse-error entity publishes no snapshot.
+The current vertical slice covers Yahoo daily prices, SEC company facts, FRED macro series, and BCB SGS macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; run finalization publishes accepted price/macro candidates to those projections in the same PostgreSQL transaction that closes the run. A partial run may publish successful entities while a parse-error entity publishes no snapshot.
 
 ## Requirements
 
@@ -21,6 +21,8 @@ make setup
 ```
 
 This creates untracked `.env` and `config/config.local.yaml` files with private permissions. Before SEC ingestion:
+
+The committed `config/config.example.yaml` is the safe starter configuration: Yahoo and FRED are enabled, while SEC and BCB are disabled by default. `make setup` copies it to the untracked `config/config.local.yaml`; the completed acceptance used a local override with SEC and BCB enabled and a bounded BCB end date. That local acceptance override is not the committed example configuration.
 
 1. Set `SEC_USER_AGENT` in `.env` to a descriptive value with your contact address.
 2. Review the starting universe and date range in `config/config.local.yaml`, then set `providers.sec.enabled: true` when the contact is ready. SEC is disabled in the safe starter configuration.
@@ -40,7 +42,7 @@ After pulling a version that adds a database migration, upgrade an existing Post
 make migrate
 ```
 
-Fresh volumes apply both metadata and latest-snapshot migrations automatically. `make migrate` checks for the v2 snapshot schema and applies `000002` only when it is absent, so rerunning it on an upgraded volume is a no-op.
+Fresh volumes apply the current forward migration sequence automatically: `000001_core_metadata`, `000002_latest_observation_snapshots`, `000003_observed_precision`, and `000004_run_inputs`. For an existing initialized volume, `make migrate` conditionally applies any missing `000002`–`000004` changes in order; its schema checks make rerunning it idempotent. The `000001` core metadata schema is the base created during volume initialization.
 
 `make urls` prints the current tokenized Jupyter URL. Grafana is at `http://127.0.0.1:3000` by default. If port 3000 is occupied, set `GRAFANA_PORT=3300` in `.env` before startup.
 
@@ -94,7 +96,7 @@ Earlier valid v1 Parquet parts may omit optional `observed_precision`; readers i
 
 Unmanaged pre-contract or pre-manifest normalized data is handled by an explicit archive/reset policy. The collector validates `data/normalized/` before starting a run and refuses to touch a pre-contract normalized tree, `data.parquet` or other Parquet files without a manifest, or an invalid manifest/part pair. Do not migrate those files in place: move the complete normalized tree to a recoverable archive location, recreate an empty `data/normalized/`, keep `data/raw/` and the PostgreSQL source/run catalog intact, and reingest. This reset obtains v1 provenance from the new run; no attempted migration invents missing lineage.
 
-This does not claim a historical backtest. Yahoo and current FRED backfills are only known to this system when collected, so v0 cannot reconstruct what their provider data looked like on past trading dates. A backtest must vary decision timestamps and use sources with defensible historical availability/vintage data.
+This does not claim a historical backtest or full historical point-in-time availability. Yahoo prices and current-vintage FRED/BCB backfills are only known to this system when collected; v0 cannot reconstruct what those provider datasets looked like on past trading dates or recover historical vintages from a current-vintage pull. A backtest must vary decision timestamps and use sources with defensible historical availability/vintage data.
 
 Optional environment variables can pin a configured slice:
 
@@ -120,7 +122,16 @@ Run all of those checks and build every local image:
 make validate
 ```
 
-Operational status and next step: v0 acceptance is not complete. The prior fresh FRED acceptance run orphaned before the bounded snapshot-finalization fix, so fresh acceptance remains pending a post-fix FRED run. If that run is still queued or running after the process has stopped, only an operator may cancel it with an explicit reason; the collector does not automatically cancel orphan active runs.
+Operational status: the post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB. The passing r3 evidence contains raw run manifests and manifest-backed normalized output:
+
+| Source | Retained result evidence |
+| --- | --- |
+| SEC | 2 raw objects; 25,135 normalized fundamental rows |
+| Yahoo | 1 raw object; 1,661 normalized price rows |
+| FRED | 2 raw objects; 16,137 `DGS10` rows and 954 `CPIAUCSL` rows |
+| BCB | 1 raw object; 2,416 normalized macro rows |
+
+The recoverable evidence archive is retained outside the checkout at `/home/luis/invs-acceptance/2026-08-12-v0-r3` on the acceptance host. This absolute path is an operator reference to the current archive, not a portability or runtime requirement. Earlier partial/failure evidence remains separately retained in sibling archives under `/home/luis/invs-acceptance`; use r3 as the passing acceptance record. If a queued or running run is later confirmed orphaned, only an operator may cancel it with an explicit reason; the collector does not automatically cancel orphan active runs.
 
 Validate the provisioned market dashboard as strict JSON and ask PostgreSQL to plan every dashboard query against the migrated schema:
 
@@ -128,7 +139,7 @@ Validate the provisioned market dashboard as strict JSON and ask PostgreSQL to p
 make dashboard-smoke
 ```
 
-The market dashboard shows configured securities even when no accepted Yahoo snapshot exists, exposes an explicit no-snapshot row for FRED, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED series still live only in YAML, so the dashboard deliberately reports FRED source-level presence rather than claiming per-series coverage.
+The market dashboard shows configured securities even when no accepted Yahoo snapshot exists, exposes explicit no-snapshot rows for macro sources, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED and BCB series still live only in YAML, so the dashboard deliberately reports source-level presence rather than claiming per-series coverage.
 
 Stop containers while retaining PostgreSQL and Grafana volumes:
 

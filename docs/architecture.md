@@ -2,14 +2,21 @@
 
 This is the first actively developed v1/v0 foundation. The first vertical slice
 collects daily US equity prices, SEC company metadata and fundamentals, and FRED
-macro series. It preserves source bytes, publishes canonical
+and BCB macro series. It preserves source bytes, publishes canonical
 Parquet through immutable manifests, registers operational metadata in PostgreSQL,
 and publishes accepted latest-only price/macro projections for Grafana. It exposes
 canonical history through DuckDB/Jupyter. It intentionally does not include a feature
 engine, backtester, distributed queue, or live execution.
 
+The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC,
+Yahoo, FRED, and BCB. Its raw run manifests and normalized evidence are retained in
+the recoverable r3 archive at `/home/luis/invs-acceptance/2026-08-12-v0-r3` on the
+acceptance host. That absolute path is an operator reference, not a required checkout
+or portability dependency; earlier partial/failure runs remain in separate sibling
+archives.
+
 ```text
-SEC / FRED / price provider
+SEC / FRED / BCB / price provider
             |
             v
  collector + source adapter -----> PostgreSQL
@@ -74,6 +81,14 @@ automatic cancellation is not used. Only an operator may cancel a confirmed orph
 active run, with an explicit reason, and that action neither publishes nor deletes
 snapshot data.
 
+## Database migrations
+
+Fresh PostgreSQL volumes apply the forward migrations in order: `000001_core_metadata`,
+`000002_latest_observation_snapshots`, `000003_observed_precision`, and
+`000004_run_inputs`. Existing initialized volumes use `make migrate`, which conditionally
+applies missing `000002`–`000004` changes in order; its schema checks make rerunning the
+command idempotent. `000001` is the base schema created during volume initialization.
+
 ## Point-in-time query boundary
 
 Research access is split into an explicit point-in-time mode and a present-day
@@ -88,7 +103,11 @@ convenience mode:
   `issuer_id` links used by this research slice. They are current configuration
   mappings, not historical identifier resolution, and are not reconstructed by
   `decision_at`.
-- `latest()` is a present-day convenience view and is forbidden in backtest code.
+- `latest()` is a present-day convenience view and is forbidden in backtest code. The
+  accepted FRED and BCB macro projections are current-vintage latest rows, not a
+  historical-vintage store; Yahoo backfills likewise provide only the provider data
+  returned and collected at ingestion time. The acceptance therefore does not establish
+  full historical point-in-time availability.
 
 Macro latest-row selection uses the same total order as PostgreSQL finalization:
 `observed_at DESC`, `revision DESC`, `available_at DESC`, `ingested_at DESC`, then
@@ -127,6 +146,8 @@ implementation-neutral so an S3-compatible RawStore can replace the filesystem.
   retained without fabricating accepted output.
 - Latest-only PostgreSQL snapshots are replaceable operational projections, never
   authoritative history.
+- Grafana exposes latest-only price and macro projections; SEC remains ingestion-only
+  because there is no fundamental snapshot table.
 - Unmanaged pre-contract or pre-manifest normalized data that lacks the required
   schema, provenance, or manifest contract fails closed and requires a recoverable
   archive/reset before reingestion; raw evidence is retained. Earlier valid v1
