@@ -37,6 +37,7 @@ type app struct {
 	log        *slog.Logger
 	metadata   metadataStore
 	batchKey   string
+	now        func() time.Time
 }
 
 type httpGetter interface {
@@ -80,6 +81,17 @@ type metrics struct {
 	RunKey                         string
 }
 
+func canonicalTime(t time.Time) time.Time {
+	return t.UTC().Truncate(time.Microsecond)
+}
+
+func (a *app) nowUTC() time.Time {
+	if a.now == nil {
+		return canonicalTime(time.Now())
+	}
+	return canonicalTime(a.now())
+}
+
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
 	source := flag.String("source", "all", "collector source: all, sec, prices, fred, or bcb")
@@ -114,7 +126,7 @@ func main() {
 			os.Exit(2)
 		}
 		defer metadataRepo.Close()
-		run, err := cancelOrphanRun(ctx, metadataRepo, cancelOptions, time.Now().UTC())
+		run, err := cancelOrphanRun(ctx, metadataRepo, cancelOptions, canonicalTime(time.Now()))
 		if err != nil {
 			log.Error("run cancellation failed", "error", err)
 			os.Exit(1)
@@ -157,9 +169,9 @@ func main() {
 	}
 	batchKey := *runKey
 	if batchKey == "" {
-		batchKey = time.Now().UTC().Format("20060102T150405.000000000Z") + "-" + uuid.NewString()
+		batchKey = canonicalTime(time.Now()).Format("20060102T150405.000000000Z") + "-" + uuid.NewString()
 	}
-	a := &app{cfg: cfg, raw: raw, normalized: normalized, http: httpClient, log: log, metadata: metadataRepo, batchKey: batchKey}
+	a := &app{cfg: cfg, raw: raw, normalized: normalized, http: httpClient, log: log, metadata: metadataRepo, batchKey: batchKey, now: time.Now}
 	if err := a.run(ctx, *source); err != nil {
 		log.Error("collection failed", "source", *source, "error", err)
 		os.Exit(1)
@@ -192,6 +204,7 @@ func validateCancellationOptions(options cancellationOptions) error {
 }
 
 func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options cancellationOptions, finished time.Time) (metadata.Run, error) {
+	finished = canonicalTime(finished)
 	if err := validateCancellationOptions(options); err != nil {
 		return metadata.Run{}, err
 	}
@@ -251,7 +264,7 @@ func (a *app) run(ctx context.Context, source string) error {
 
 func (a *app) collectSEC(ctx context.Context) error {
 	c := sec.NewClient(a.http)
-	m := metrics{Source: "sec", StartedAt: time.Now().UTC(), Cursor: map[string]any{}}
+	m := metrics{Source: "sec", StartedAt: a.nowUTC(), Cursor: map[string]any{}}
 	run, skip, err := a.start(ctx, &m)
 	if err != nil {
 		return err
@@ -319,12 +332,12 @@ func (a *app) collectSEC(ctx context.Context) error {
 
 func (a *app) collectPrices(ctx context.Context) error {
 	c := yahoo.NewClient(a.http)
-	m := metrics{Source: "yahoo", StartedAt: time.Now().UTC(), Cursor: map[string]any{}}
+	m := metrics{Source: "yahoo", StartedAt: a.nowUTC(), Cursor: map[string]any{}}
 	start, err := time.Parse("2006-01-02", a.cfg.Providers.Prices.Start)
 	if err != nil {
 		return fmt.Errorf("prices.start: %w", err)
 	}
-	end := time.Now().UTC()
+	end := a.nowUTC()
 	if a.cfg.Providers.Prices.End != "" {
 		end, err = time.Parse("2006-01-02", a.cfg.Providers.Prices.End)
 		if err != nil {
@@ -387,7 +400,7 @@ func (a *app) collectPrices(ctx context.Context) error {
 
 func (a *app) collectFRED(ctx context.Context) error {
 	c := fred.NewClient(a.http)
-	m := metrics{Source: "fred", StartedAt: time.Now().UTC(), Cursor: map[string]any{}}
+	m := metrics{Source: "fred", StartedAt: a.nowUTC(), Cursor: map[string]any{}}
 	run, skip, err := a.start(ctx, &m)
 	if err != nil {
 		return err
@@ -444,7 +457,7 @@ func (a *app) collectBCB(ctx context.Context) error {
 	seriesCursor := map[string]any{}
 	m := metrics{
 		Source:    "bcb",
-		StartedAt: time.Now().UTC(),
+		StartedAt: a.nowUTC(),
 		Cursor: map[string]any{
 			"provider":         "bcb",
 			"series_total":     len(configuredSeries),
@@ -595,6 +608,7 @@ func (a *app) start(ctx context.Context, m *metrics) (metadata.Run, bool, error)
 	if a.metadata == nil {
 		return metadata.Run{}, false, errors.New("PostgreSQL metadata repository is required for canonical collection")
 	}
+	m.StartedAt = canonicalTime(m.StartedAt)
 	run, err := a.metadata.StartRun(ctx, m.Source, a.batchKey+"/"+m.Source, m.StartedAt)
 	if err != nil {
 		return metadata.Run{}, false, err
@@ -691,6 +705,7 @@ func stampEconomics(run metadata.Run, rawHash string, observations []model.Econo
 }
 
 func (a *app) finish(ctx context.Context, run metadata.Run, m metrics, err error, prices []model.PriceBar, macros []model.EconomicObservation) error {
+	m.StartedAt = canonicalTime(m.StartedAt)
 	m.Duration = time.Since(m.StartedAt)
 	status := "success"
 	if errors.Is(err, context.Canceled) {
@@ -709,7 +724,7 @@ func (a *app) finish(ctx context.Context, run metadata.Run, m metrics, err error
 		a.log.Error("publish raw run manifest failed", "source", m.Source, "error", manifestErr)
 		return manifestErr
 	}
-	if dbErr := a.metadata.FinalizeRun(finishCtx, run, time.Now().UTC(), metadata.Metrics{Received: int64(m.Received), Written: int64(m.OutputRows), Rejected: int64(m.Rejected), RawPayloads: int64(m.RawObjects), RawBytes: m.RawBytes, RawPayloadManifestHash: manifestHash, Cursor: m.Cursor, Err: err}, prices, macros); dbErr != nil {
+	if dbErr := a.metadata.FinalizeRun(finishCtx, run, a.nowUTC(), metadata.Metrics{Received: int64(m.Received), Written: int64(m.OutputRows), Rejected: int64(m.Rejected), RawPayloads: int64(m.RawObjects), RawBytes: m.RawBytes, RawPayloadManifestHash: manifestHash, Cursor: m.Cursor, Err: err}, prices, macros); dbErr != nil {
 		a.log.Error("persist collector run failed", "source", m.Source, "error", dbErr)
 		return dbErr
 	}

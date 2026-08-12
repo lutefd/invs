@@ -245,6 +245,8 @@ func (s *orderingNormalizedStore) WriteEconomics(_ string, observations []model.
 type collectorMetadataFake struct {
 	run           metadata.Run
 	onFinalize    func(metadata.Metrics, []model.PriceBar, []model.EconomicObservation)
+	onStart       func(time.Time)
+	onFinish      func(time.Time)
 	finalizeError error
 }
 
@@ -348,6 +350,9 @@ func (f collectorMetadataFake) EnrichSECIssuer(context.Context, model.Issuer, st
 }
 
 func (f collectorMetadataFake) StartRun(_ context.Context, source, runKey string, startedAt time.Time) (metadata.Run, error) {
+	if f.onStart != nil {
+		f.onStart(startedAt)
+	}
 	run := f.run
 	run.Source = source
 	run.RunKey = runKey
@@ -355,11 +360,55 @@ func (f collectorMetadataFake) StartRun(_ context.Context, source, runKey string
 	return run, nil
 }
 
-func (f collectorMetadataFake) FinalizeRun(_ context.Context, _ metadata.Run, _ time.Time, m metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) error {
+func (f collectorMetadataFake) FinalizeRun(_ context.Context, _ metadata.Run, finished time.Time, m metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) error {
+	if f.onFinish != nil {
+		f.onFinish(finished)
+	}
 	if f.onFinalize != nil {
 		f.onFinalize(m, prices, macros)
 	}
 	return f.finalizeError
+}
+
+func assertMicrosecondUTC(t *testing.T, name string, got time.Time) {
+	t.Helper()
+	if got.Location() != time.UTC || got.Nanosecond()%int(time.Microsecond) != 0 {
+		t.Fatalf("%s = %s, want UTC microsecond precision", name, got)
+	}
+}
+
+func TestCollectorUsesMicrosecondAlignedRunTimes(t *testing.T) {
+	payload := []byte("observation_date,DGS10\n2024-01-02,4.25\n")
+	receivedAt := time.Date(2026, 8, 12, 12, 0, 0, 987654321, time.FixedZone("BRT", -3*60*60))
+	want := receivedAt.UTC().Truncate(time.Microsecond)
+	run := testRun()
+	raw := &orderingRawStore{}
+	var startedAt, finishedAt time.Time
+	app := &app{
+		cfg: config.Config{Providers: config.Providers{FRED: config.FREDProvider{Enabled: true, Series: []string{"DGS10"}}}},
+		raw: raw,
+		normalized: &orderingNormalizedStore{
+			raw: raw, expectedRun: run, expectedHash: hashPayload(payload), expectedSource: "fred", locatorPrefix: "csv/date=",
+		},
+		http: collectorHTTPFake{responses: map[string][]byte{"fredgraph.csv": payload}},
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{
+			run:      run,
+			onStart:  func(got time.Time) { startedAt = got },
+			onFinish: func(got time.Time) { finishedAt = got },
+		},
+		batchKey: "timestamp-boundary-test",
+		now:      func() time.Time { return receivedAt },
+	}
+
+	if err := app.run(context.Background(), "fred"); err != nil {
+		t.Fatal(err)
+	}
+	assertMicrosecondUTC(t, "run started_at", startedAt)
+	assertMicrosecondUTC(t, "run finished_at", finishedAt)
+	if !startedAt.Equal(want) || !finishedAt.Equal(want) {
+		t.Fatalf("run times = started %s finished %s, want %s", startedAt, finishedAt, want)
+	}
 }
 
 func TestCollectorStoresRawBeforeCanonicalPublication(t *testing.T) {

@@ -84,7 +84,7 @@ func (c *Client) Collect(ctx context.Context, series Series) (Result, error) {
 	}
 
 	result := Result{Raw: b, SHA256: digest(b)}
-	ingested := c.now().UTC()
+	ingested := c.now().UTC().Truncate(time.Microsecond)
 	observations, received, rejected, missing, err := parseCSV(b, normalized, ingested)
 	result.Observations = observations
 	result.RecordsReceived = received
@@ -131,7 +131,7 @@ func parseCSV(b []byte, series Series, ingested time.Time) ([]model.EconomicObse
 	if err != nil {
 		return nil, 0, 0, 0, err
 	}
-	ingested = ingested.UTC()
+	ingested = ingested.UTC().Truncate(time.Microsecond)
 	if ingested.IsZero() {
 		return nil, 0, 0, 0, fmt.Errorf("BCB SGS ingestion time is required")
 	}

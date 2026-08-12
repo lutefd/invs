@@ -64,7 +64,7 @@ func (c *Client) Collect(ctx context.Context, req model.HistoricalPriceRequest) 
 		return Result{}, fmt.Errorf("Yahoo prices %s: %w", req.VendorSymbol, err)
 	}
 	result := Result{Raw: b, SHA256: digest(b)}
-	bars, received, rejected, err := parse(b, req.SecurityID, req.Currency, c.now().UTC())
+	bars, received, rejected, err := parse(b, req.SecurityID, req.Currency, c.now().UTC().Truncate(time.Microsecond))
 	result.Bars, result.RecordsReceived, result.RecordsRejected = bars, received, rejected
 	if err != nil {
 		return result, err
@@ -109,6 +109,7 @@ type quote struct {
 }
 
 func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.PriceBar, int, int, error) {
+	ingested = ingested.UTC().Truncate(time.Microsecond)
 	var raw response
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.UseNumber()

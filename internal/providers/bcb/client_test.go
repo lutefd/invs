@@ -38,6 +38,13 @@ func sha256Hex(b []byte) string {
 	return hex.EncodeToString(h[:])
 }
 
+func assertMicrosecondUTC(t *testing.T, name string, got time.Time) {
+	t.Helper()
+	if got.Location() != time.UTC || got.Nanosecond()%int(time.Microsecond) != 0 {
+		t.Fatalf("%s = %s, want UTC microsecond precision", name, got)
+	}
+}
+
 func TestCollectBuildsEncodedSGSURLAndPreservesRawHash(t *testing.T) {
 	body := []byte("\"data\";\"valor\"\r\n\"01/01/2024\";\"14,25\"\r\n")
 	fake := &fakeGetter{body: body}
@@ -71,6 +78,42 @@ func TestCollectBuildsEncodedSGSURLAndPreservesRawHash(t *testing.T) {
 	}
 	if !bytes.Equal(result.Raw, body) || result.SHA256 != sha256Hex(body) {
 		t.Fatalf("raw/hash not preserved: raw=%q hash=%q", result.Raw, result.SHA256)
+	}
+}
+
+func TestCollectTruncatesInjectedReceiptTime(t *testing.T) {
+	body := []byte("\"data\";\"valor\"\r\n\"01/01/2024\";\"14,25\"\r\n")
+	receivedAt := time.Date(2024, 2, 1, 12, 30, 0, 987654321, time.FixedZone("BRT", -3*60*60))
+	wantIngested := receivedAt.UTC().Truncate(time.Microsecond)
+	c := NewClient(&fakeGetter{body: body})
+	c.now = func() time.Time { return receivedAt }
+
+	result, err := c.Collect(context.Background(), testSeries())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Observations) != 1 {
+		t.Fatalf("observations=%d, want 1", len(result.Observations))
+	}
+	observation := result.Observations[0]
+	assertMicrosecondUTC(t, "temporal published_at", observation.Temporal.PublishedAt)
+	assertMicrosecondUTC(t, "temporal available_at", observation.Temporal.AvailableAt)
+	assertMicrosecondUTC(t, "temporal ingested_at", observation.Temporal.IngestedAt)
+	assertMicrosecondUTC(t, "provenance ingested_at", observation.Provenance.IngestedAt)
+	assertMicrosecondUTC(t, "vintage_at", *observation.VintageAt)
+	for name, got := range map[string]time.Time{
+		"temporal published_at":  observation.Temporal.PublishedAt,
+		"temporal available_at":  observation.Temporal.AvailableAt,
+		"temporal ingested_at":   observation.Temporal.IngestedAt,
+		"provenance ingested_at": observation.Provenance.IngestedAt,
+		"vintage_at":             *observation.VintageAt,
+	} {
+		if !got.Equal(wantIngested) {
+			t.Fatalf("%s = %s, want %s", name, got, wantIngested)
+		}
+	}
+	if !observation.Temporal.ObservedAt.Equal(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)) || observation.Temporal.ObservedPrecision != model.PrecisionDate || observation.Temporal.PublishedPrecision != model.PrecisionUnknown {
+		t.Fatalf("source observed timestamp/precision changed: %+v", observation.Temporal)
 	}
 }
 

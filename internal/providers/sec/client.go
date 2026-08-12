@@ -67,7 +67,7 @@ func (c *Client) CollectCompany(ctx context.Context, issuerID string, cik int64)
 		return CompanyResult{Raw: rawDocuments}, fmt.Errorf("SEC companyfacts CIK %d: %w", cik, err)
 	}
 	rawDocuments = append(rawDocuments, RawDocument{Kind: "companyfacts", Data: factBytes, SHA256: digest(factBytes)})
-	ingested := c.now().UTC()
+	ingested := c.now().UTC().Truncate(time.Microsecond)
 	issuer, filings, receivedFilings, rejectedFilings, err := parseSubmissions(subBytes, issuerID, cik, ingested)
 	if err != nil {
 		return CompanyResult{Raw: rawDocuments}, err
@@ -128,6 +128,7 @@ type recentFilings struct {
 }
 
 func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) (model.Issuer, []model.Filing, int, int, error) {
+	ingested = ingested.UTC().Truncate(time.Microsecond)
 	var raw submissions
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.UseNumber()
@@ -193,6 +194,7 @@ type fact struct {
 }
 
 func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested time.Time, acceptedByAccession map[string]time.Time) ([]model.FundamentalObservation, int, int, error) {
+	ingested = ingested.UTC().Truncate(time.Microsecond)
 	var raw companyFacts
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.UseNumber()
