@@ -600,6 +600,11 @@ func latestEconomic(rows []EconomicRow, r EconomicRow) (EconomicRow, bool) {
 	return best, ok
 }
 func samePrice(a, b PriceRow) bool {
+	if a.RawPayloadHash != b.RawPayloadHash {
+		return false
+	}
+	a.PublishedAt = b.PublishedAt
+	a.AvailableAt = b.AvailableAt
 	a.IngestionRunID = b.IngestionRunID
 	a.IngestedAt = b.IngestedAt
 	return a == b

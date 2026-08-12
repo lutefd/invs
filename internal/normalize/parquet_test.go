@@ -97,6 +97,36 @@ func TestPriceCorrectionAtSameNaturalKeyConflicts(t *testing.T) {
 	}
 }
 
+func TestPriceSameRawPayloadWithDifferentTimingIsNoOp(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	at := time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC)
+	original := price(at)
+	path, n, err := w.WritePrices(securityID, []model.PriceBar{original})
+	if err != nil || n != 1 {
+		t.Fatalf("initial n=%d err=%v", n, err)
+	}
+	want := rowsFromManifest[PriceRow](t, path)
+	if len(want) != 1 {
+		t.Fatalf("initial rows=%d", len(want))
+	}
+
+	retry := original
+	retry.Temporal.PublishedAt = at.Add(3 * time.Hour)
+	retry.Temporal.AvailableAt = at.Add(4 * time.Hour)
+	retry.Temporal.IngestedAt = at.Add(5 * time.Hour)
+	retry.Provenance.IngestionRunID = "b2468ace-1357-4bdf-9024-6e2f59b9527a"
+	retry.Provenance.IngestedAt = retry.Temporal.IngestedAt
+
+	gotPath, n, err := w.WritePrices(securityID, []model.PriceBar{retry})
+	if err != nil || n != 0 {
+		t.Fatalf("retry path=%q n=%d err=%v", gotPath, n, err)
+	}
+	got := rowsFromManifest[PriceRow](t, gotPath)
+	if len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("canonical row changed: got=%+v want=%+v", got, want)
+	}
+}
+
 func TestPriceChangedRawPayloadAtSameNaturalKeyConflicts(t *testing.T) {
 	w, _ := NewWriter(t.TempDir())
 	bar := price(time.Now().UTC().Add(-3 * time.Hour))
