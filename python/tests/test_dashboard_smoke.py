@@ -33,10 +33,29 @@ def test_market_dashboard_is_strict_json_with_latest_snapshot_queries() -> None:
     assert "macro_observation_snapshots" in sql
     assert "LEFT JOIN market_price_snapshots" in sql
     assert "LEFT JOIN macro_observation_snapshots" in sql
+    assert "source_kind = 'macro'" in sql
+    assert "ds.code AS source" in sql
     assert "::numeric" in sql
     assert "no snapshot published" in sql
+    assert "source disabled" in sql
+    assert "ingestion only" in sql
     assert smoke_sql([DASHBOARD]).startswith("BEGIN;")
     assert smoke_sql([DASHBOARD]).endswith("ROLLBACK;")
+
+
+def test_pipeline_dashboard_includes_macro_snapshot_state() -> None:
+    pipeline = DASHBOARD.parent / "pipeline-health.json"
+    document = load_dashboard(pipeline)
+    queries = dashboard_queries(document)
+    sql = "\n".join(queries)
+
+    assert len(queries) == 5
+    assert "macro_observation_snapshots" in sql
+    assert "source_kind IN ('market_data', 'macro')" in sql
+    assert "snapshot_state" in sql
+    assert "ingestion only" in sql
+    assert "no snapshot published" in sql
+    assert "source disabled" in sql
 
 
 @pytest.mark.parametrize(

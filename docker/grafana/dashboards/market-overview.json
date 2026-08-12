@@ -9,12 +9,12 @@
   "panels": [
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Coverage is configured active securities for enabled Yahoo plus one enabled-FRED source unit. PostgreSQL does not currently persist the configured FRED series list, so per-series expected coverage is not claimed.",
+      "description": "Coverage is configured active securities for enabled Yahoo plus one configured unit for each enabled macro source (currently FRED and BCB). PostgreSQL does not currently persist the configured macro series lists, so per-series expected coverage is not claimed.",
       "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "max": 100, "min": 0, "mappings": [{"options": {"match": "null", "result": {"color": "red", "text": "no enabled inputs"}}, "type": "special"}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 50}, {"color": "green", "value": 100}], "unit": "percent"}}, "overrides": []},
       "gridPos": {"h": 6, "w": 7, "x": 0, "y": 0},
       "id": 1,
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showPercentChange": false, "textMode": "auto", "wideLayout": true},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "WITH enabled AS (SELECT bool_or(code = 'yahoo' AND enabled) AS yahoo, bool_or(code = 'fred' AND enabled) AS fred FROM data_sources WHERE code IN ('yahoo', 'fred')), counts AS (SELECT (CASE WHEN enabled.yahoo THEN (SELECT count(*) FROM securities WHERE active_until IS NULL) ELSE 0 END + CASE WHEN enabled.fred THEN 1 ELSE 0 END)::numeric AS expected, (CASE WHEN enabled.yahoo THEN (SELECT count(DISTINCT s.id) FROM securities s JOIN data_sources ds ON ds.code = 'yahoo' AND ds.enabled JOIN market_price_snapshots p ON p.data_source_id = ds.id AND p.security_id = s.id WHERE s.active_until IS NULL) ELSE 0 END + CASE WHEN enabled.fred AND EXISTS (SELECT 1 FROM macro_observation_snapshots m JOIN data_sources ds ON ds.id = m.data_source_id WHERE ds.code = 'fred') THEN 1 ELSE 0 END)::numeric AS covered FROM enabled) SELECT round(100 * covered / NULLIF(expected, 0), 1)::double precision AS value FROM counts", "refId": "A"}],
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "WITH enabled AS (SELECT bool_or(code = 'yahoo' AND enabled) AS yahoo, count(*) FILTER (WHERE source_kind = 'macro' AND enabled) AS macro_sources FROM data_sources WHERE code = 'yahoo' OR source_kind = 'macro'), counts AS (SELECT (CASE WHEN enabled.yahoo THEN (SELECT count(*) FROM securities WHERE active_until IS NULL) ELSE 0 END + enabled.macro_sources)::numeric AS expected, (CASE WHEN enabled.yahoo THEN (SELECT count(DISTINCT s.id) FROM securities s JOIN data_sources ds ON ds.code = 'yahoo' AND ds.enabled JOIN market_price_snapshots p ON p.data_source_id = ds.id AND p.security_id = s.id WHERE s.active_until IS NULL) ELSE 0 END + (SELECT count(*) FROM data_sources ds WHERE ds.source_kind = 'macro' AND ds.enabled AND EXISTS (SELECT 1 FROM macro_observation_snapshots m WHERE m.data_source_id = ds.id)))::numeric AS covered FROM enabled) SELECT round(100 * covered / NULLIF(expected, 0), 1)::double precision AS value FROM counts", "refId": "A"}],
       "title": "Latest snapshot coverage",
       "type": "stat"
     },
@@ -31,23 +31,23 @@
     },
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Latest current-vintage FRED projections. If none have been published, the explicit no-snapshot row remains visible. Expected FRED series live only in YAML today, so this panel does not claim full configured-series coverage.",
+      "description": "Latest current-vintage observations for every configured macro source (currently FRED and BCB). The source column distinguishes providers. If a source has no published rows, the explicit no-snapshot row remains visible. Expected series lists live only in YAML today, so this panel does not claim full configured-series coverage.",
       "fieldConfig": {"defaults": {}, "overrides": []},
       "gridPos": {"h": 10, "w": 14, "x": 0, "y": 11},
       "id": 3,
       "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "series_id"}]},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT coalesce(m.series_id, '(no snapshot published)') AS series_id, ds.enabled AS source_enabled, m.value::numeric AS value, m.unit, m.frequency, m.seasonal_adjustment, m.observed_at, m.available_at, m.vintage_at, m.revision, round(extract(epoch FROM now() - m.available_at) / 86400.0, 1) AS days_since_available, CASE WHEN NOT ds.enabled THEN 'source disabled' WHEN m.series_id IS NULL THEN 'no snapshot published' WHEN m.available_at < now() - interval '45 days' THEN 'stale' ELSE 'current' END AS snapshot_state, ir.status::text AS run_status, m.schema_version, m.raw_payload_hash FROM data_sources ds LEFT JOIN macro_observation_snapshots m ON m.data_source_id = ds.id LEFT JOIN ingestion_runs ir ON ir.id = m.ingestion_run_id WHERE ds.code = 'fred' ORDER BY m.series_id NULLS FIRST", "refId": "A"}],
-      "title": "FRED latest observations",
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ds.code AS source, coalesce(m.series_id, '(no snapshot published)') AS series_id, ds.enabled AS source_enabled, m.value::numeric AS value, m.unit, m.frequency, m.seasonal_adjustment, m.observed_at, m.available_at, m.vintage_at, m.revision, round(extract(epoch FROM now() - m.available_at) / 86400.0, 1) AS days_since_available, CASE WHEN NOT ds.enabled THEN 'source disabled' WHEN m.series_id IS NULL THEN 'no snapshot published' WHEN m.available_at < now() - interval '45 days' THEN 'stale' ELSE 'current' END AS snapshot_state, ir.status::text AS run_status, m.schema_version, m.raw_payload_hash FROM data_sources ds LEFT JOIN macro_observation_snapshots m ON m.data_source_id = ds.id LEFT JOIN ingestion_runs ir ON ir.id = m.ingestion_run_id WHERE ds.source_kind = 'macro' ORDER BY ds.code, m.series_id NULLS FIRST", "refId": "A"}],
+      "title": "Macro latest observations",
       "type": "table"
     },
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Price and macro snapshot row counts distinguish successful ingestion from successful dashboard publication. SEC remains ingestion-only because migration 000002 defines no fundamental snapshot table.",
+      "description": "Price and macro snapshot row counts distinguish successful ingestion from successful dashboard publication. BCB is included as a macro source. SEC remains ingestion-only because the projection schema defines no fundamental snapshot table.",
       "fieldConfig": {"defaults": {}, "overrides": []},
       "gridPos": {"h": 10, "w": 10, "x": 14, "y": 11},
       "id": 4,
       "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "source"}]},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ds.code AS source, ds.enabled, max(ir.finished_at) FILTER (WHERE ir.status = 'succeeded') AS last_success, CASE ds.code WHEN 'yahoo' THEN (SELECT count(*) FROM market_price_snapshots p WHERE p.data_source_id = ds.id) WHEN 'fred' THEN (SELECT count(*) FROM macro_observation_snapshots m WHERE m.data_source_id = ds.id) ELSE NULL END AS snapshot_rows, CASE WHEN ds.code = 'sec' THEN 'ingestion only' WHEN ds.code IN ('yahoo', 'fred') AND CASE ds.code WHEN 'yahoo' THEN EXISTS (SELECT 1 FROM market_price_snapshots p WHERE p.data_source_id = ds.id) ELSE EXISTS (SELECT 1 FROM macro_observation_snapshots m WHERE m.data_source_id = ds.id) END THEN 'published' ELSE 'no snapshot published' END AS projection_state FROM data_sources ds LEFT JOIN ingestion_runs ir ON ir.data_source_id = ds.id WHERE ds.code IN ('yahoo', 'sec', 'fred') GROUP BY ds.id, ds.code, ds.enabled ORDER BY ds.code", "refId": "A"}],
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ds.code AS source, ds.enabled, max(ir.finished_at) FILTER (WHERE ir.status = 'succeeded') AS last_success, CASE ds.source_kind WHEN 'market_data' THEN (SELECT count(*) FROM market_price_snapshots p WHERE p.data_source_id = ds.id) WHEN 'macro' THEN (SELECT count(*) FROM macro_observation_snapshots m WHERE m.data_source_id = ds.id) ELSE NULL END AS snapshot_rows, CASE WHEN ds.code = 'sec' THEN 'ingestion only' WHEN NOT ds.enabled THEN 'source disabled' WHEN ds.source_kind IN ('market_data', 'macro') AND CASE ds.source_kind WHEN 'market_data' THEN EXISTS (SELECT 1 FROM market_price_snapshots p WHERE p.data_source_id = ds.id) WHEN 'macro' THEN EXISTS (SELECT 1 FROM macro_observation_snapshots m WHERE m.data_source_id = ds.id) ELSE false END THEN 'published' ELSE 'no snapshot published' END AS projection_state FROM data_sources ds LEFT JOIN ingestion_runs ir ON ir.data_source_id = ds.id WHERE ds.code = 'sec' OR ds.source_kind IN ('market_data', 'macro') GROUP BY ds.id, ds.code, ds.enabled, ds.source_kind ORDER BY ds.code", "refId": "A"}],
       "title": "Ingestion and projection state",
       "type": "table"
     }
@@ -61,5 +61,5 @@
   "timezone": "browser",
   "title": "Market data overview",
   "uid": "market-overview",
-  "version": 3
+  "version": 4
 }

@@ -1,6 +1,6 @@
 {
   "annotations": {"list": []},
-  "description": "Operational truth from PostgreSQL ingestion metadata. Empty panels mean no collector run has been registered.",
+  "description": "Operational truth from PostgreSQL ingestion metadata, including BCB macro runs and latest snapshot state. Empty panels mean no collector run has been registered; SEC remains ingestion-only.",
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -49,6 +49,17 @@
       "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ir.started_at, ir.finished_at, ds.code AS source, ir.status::text, ir.records_received, ir.records_written, ir.records_rejected, ir.raw_payload_count, ir.error_message FROM ingestion_runs ir JOIN data_sources ds ON ds.id = ir.data_source_id WHERE $__timeFilter(ir.started_at) ORDER BY ir.started_at DESC LIMIT 100", "refId": "A"}],
       "title": "Latest ingestion runs",
       "type": "table"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Latest operational snapshot state by configured source. BCB uses the macro snapshot projection. SEC remains ingestion-only because the projection schema defines no fundamental snapshot table; disabled sources and sources without a published snapshot remain explicit.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 20},
+      "id": 5,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "source"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ds.code AS source, ds.enabled, CASE ds.source_kind WHEN 'market_data' THEN (SELECT count(*) FROM market_price_snapshots p WHERE p.data_source_id = ds.id) WHEN 'macro' THEN (SELECT count(*) FROM macro_observation_snapshots m WHERE m.data_source_id = ds.id) ELSE NULL END AS snapshot_rows, CASE WHEN ds.code = 'sec' THEN 'ingestion only' WHEN NOT ds.enabled THEN 'source disabled' WHEN ds.source_kind IN ('market_data', 'macro') AND CASE ds.source_kind WHEN 'market_data' THEN EXISTS (SELECT 1 FROM market_price_snapshots p WHERE p.data_source_id = ds.id) WHEN 'macro' THEN EXISTS (SELECT 1 FROM macro_observation_snapshots m WHERE m.data_source_id = ds.id) ELSE false END THEN 'published' ELSE 'no snapshot published' END AS snapshot_state FROM data_sources ds WHERE ds.code = 'sec' OR ds.source_kind IN ('market_data', 'macro') ORDER BY ds.code", "refId": "A"}],
+      "title": "Latest snapshot state",
+      "type": "table"
     }
   ],
   "refresh": "1m",
@@ -60,5 +71,5 @@
   "timezone": "browser",
   "title": "Pipeline health",
   "uid": "pipeline-health",
-  "version": 2
+  "version": 3
 }
