@@ -23,6 +23,7 @@ type Run struct {
 type Metrics struct {
 	Received, Written, Rejected, RawPayloads int64
 	RawBytes                                 int64
+	RawPayloadManifestHash                   string
 	Cursor                                   map[string]any
 	Err                                      error
 }
@@ -119,8 +120,9 @@ SET status=$3::ingestion_run_status,
 	records_rejected=$7,
 	raw_payload_count=$8,
 	raw_bytes=$9,
-	error_message=$10,
-	cursor=$11::jsonb
+	raw_payload_manifest_hash=$10,
+	error_message=$11,
+	cursor=$12::jsonb
 WHERE id=$1 AND data_source_id=$2 AND status IN ('running','queued')`
 
 const cancelRunSQL = `
@@ -519,7 +521,7 @@ func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Tim
 	}
 
 	cursor, _ := json.Marshal(m.Cursor)
-	tag, err := tx.Exec(ctx, finishRunSQL, run.ID, run.DataSourceID, classify(m), finished.UTC(), m.Received, m.Written, m.Rejected, m.RawPayloads, m.RawBytes, runErrorMessage(m.Err), cursor)
+	tag, err := tx.Exec(ctx, finishRunSQL, run.ID, run.DataSourceID, classify(m), finished.UTC(), m.Received, m.Written, m.Rejected, m.RawPayloads, m.RawBytes, nullableManifestHash(m.RawPayloadManifestHash), runErrorMessage(m.Err), cursor)
 	if err != nil {
 		return err
 	}
@@ -527,6 +529,13 @@ func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Tim
 		return fmt.Errorf("run %s is no longer active", run.ID)
 	}
 	return tx.Commit(ctx)
+}
+
+func nullableManifestHash(hash string) any {
+	if hash == "" {
+		return nil
+	}
+	return hash
 }
 
 func (r *Repository) FinishRun(ctx context.Context, run Run, finished time.Time, m Metrics) error {

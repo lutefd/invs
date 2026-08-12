@@ -49,10 +49,20 @@ conflicting payloads are never overwritten.
 6. Verify schema, row counts, keys, hashes, temporal invariants, and raw provenance.
 7. Rename the file to its immutable content-named `part-<sha256>.parquet`, sync it, and
    atomically publish `manifest.json` referencing the complete part set.
-8. Before finalization SQL, validate every snapshot candidate's run lineage and reduce
+8. Publish the strict version-1 raw run manifest at the RawStore key
+   `runs/<source>/<ingestion-run-id>/manifest.json`. Its entries are sorted and contain
+   the logical key, RawStore object key, actual stored SHA-256, byte size, content type,
+   fetch time, and sorted replay attributes. Its persisted hash is the SHA-256 of the
+   exact UTF-8 JSON bytes including the trailing newline. An empty run publishes an empty
+   manifest. If this publication fails, the collector does not terminalize the PostgreSQL
+   run. There is no cross-store transaction: a successfully published manifest followed
+   by a failed finalization leaves the run active for reconciliation, while the immutable
+   raw evidence remains available for replay.
+9. Before finalization SQL, validate every snapshot candidate's run lineage and reduce
    the batch to one winning price per security or macro observation per series. In one
-   PostgreSQL transaction, upsert those accepted latest-only projections, store final
-   counters/cursor, and mark the run `succeeded`, `partial`, or another terminal state.
+   PostgreSQL transaction, upsert those accepted latest-only projections and mark the run
+   `succeeded`, `partial`, or another terminal state while storing final counters, the
+   raw manifest hash, cursor, and terminal error.
 
 Readers discover data only through committed `manifest.json` files. They verify the
 manifest and read only its content-named immutable parts; `data.parquet`, unlisted

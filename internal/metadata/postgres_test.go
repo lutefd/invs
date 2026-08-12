@@ -22,6 +22,18 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+func TestFinalizeRunSQLPersistsRawManifestHash(t *testing.T) {
+	if !strings.Contains(finishRunSQL, "raw_payload_manifest_hash=$10") {
+		t.Fatal("finishRunSQL does not persist raw_payload_manifest_hash")
+	}
+	if got := nullableManifestHash("abc"); got != "abc" {
+		t.Fatalf("nullableManifestHash(non-empty) = %#v", got)
+	}
+	if got := nullableManifestHash(""); got != nil {
+		t.Fatalf("nullableManifestHash(empty) = %#v, want nil", got)
+	}
+}
+
 func TestPriceSnapshotOrdering(t *testing.T) {
 	baseAt := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
 	base := model.PriceBar{

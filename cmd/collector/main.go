@@ -60,6 +60,7 @@ type metrics struct {
 	Received, OutputRows, Rejected int
 	RawObjects                     int
 	RawBytes                       int64
+	Manifest                       storage.RawManifest
 	Cursor                         map[string]any
 	RunKey                         string
 }
@@ -174,7 +175,7 @@ func (a *app) collectSEC(ctx context.Context) error {
 		if err != nil {
 			for _, d := range r.Raw {
 				key := rawKey("sec", d.Kind, fmt.Sprintf("cik-%010d", s.CIK), d.Data, m.StartedAt, "json")
-				if _, putErr := a.storeRaw(ctx, &m, key, d.Data, storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, "sec/"+d.Kind, d.SHA256); putErr != nil {
+				if _, putErr := a.storeRaw(ctx, &m, key, d.Data, storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, fmt.Sprintf("sec/%s/cik-%010d", d.Kind, s.CIK), "sec/"+d.Kind, d.SHA256); putErr != nil {
 					errs = append(errs, putErr)
 				}
 			}
@@ -187,7 +188,7 @@ func (a *app) collectSEC(ctx context.Context) error {
 		rawHashes := map[string]string{}
 		for _, d := range r.Raw {
 			key := rawKey("sec", d.Kind, fmt.Sprintf("cik-%010d", s.CIK), d.Data, m.StartedAt, "json")
-			storedHash, putErr := a.storeRaw(ctx, &m, key, d.Data, storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, "sec/"+d.Kind, d.SHA256)
+			storedHash, putErr := a.storeRaw(ctx, &m, key, d.Data, storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, fmt.Sprintf("sec/%s/cik-%010d", d.Kind, s.CIK), "sec/"+d.Kind, d.SHA256)
 			if putErr != nil {
 				errs = append(errs, putErr)
 				rawOK = false
@@ -254,7 +255,7 @@ func (a *app) collectPrices(ctx context.Context) error {
 		if err != nil {
 			if len(r.Raw) > 0 {
 				key := rawKey("marketdata", "yahoo", s.SecurityID, r.Raw, m.StartedAt, "json")
-				if _, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo", r.SHA256); putErr != nil {
+				if _, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo/price/security/"+s.SecurityID+"/vendor/"+s.YahooSymbol, "yahoo", r.SHA256); putErr != nil {
 					errs = append(errs, putErr)
 				}
 			}
@@ -264,7 +265,7 @@ func (a *app) collectPrices(ctx context.Context) error {
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
 		key := rawKey("marketdata", "yahoo", s.SecurityID, r.Raw, m.StartedAt, "json")
-		_, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo", r.SHA256)
+		_, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo/price/security/"+s.SecurityID+"/vendor/"+s.YahooSymbol, "yahoo", r.SHA256)
 		if putErr != nil {
 			errs = append(errs, putErr)
 			continue
@@ -307,7 +308,7 @@ func (a *app) collectFRED(ctx context.Context) error {
 		if err != nil {
 			if len(r.Raw) > 0 {
 				key := rawKey("fred", "series", series, r.Raw, m.StartedAt, "csv")
-				if _, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred", r.SHA256); putErr != nil {
+				if _, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred/series/"+series+"/vintage/current", "fred", r.SHA256); putErr != nil {
 					errs = append(errs, putErr)
 				}
 			}
@@ -317,7 +318,7 @@ func (a *app) collectFRED(ctx context.Context) error {
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
 		key := rawKey("fred", "series", series, r.Raw, m.StartedAt, "csv")
-		_, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred", r.SHA256)
+		_, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred/series/"+series+"/vintage/current", "fred", r.SHA256)
 		if putErr != nil {
 			errs = append(errs, putErr)
 			continue
@@ -358,6 +359,7 @@ func (a *app) start(ctx context.Context, m *metrics) (metadata.Run, bool, error)
 		a.log.Info("collector run already terminal; skipping", "source", m.Source, "run_key", run.RunKey, "status", run.Status)
 		return run, true, nil
 	}
+	m.Manifest = storage.NewRawManifest(m.Source, run.ID)
 	return run, false, nil
 }
 
@@ -381,13 +383,16 @@ func validateStoredHash(source, expected, stored string) error {
 	return nil
 }
 
-func (a *app) storeRaw(ctx context.Context, m *metrics, key string, data []byte, meta storage.RawMetadata, source, expectedHash string) (string, error) {
+func (a *app) storeRaw(ctx context.Context, m *metrics, key string, data []byte, meta storage.RawMetadata, logicalKey, source, expectedHash string) (string, error) {
 	stored, err := a.raw.Put(ctx, key, bytes.NewReader(data), meta)
 	if err != nil {
 		return "", err
 	}
 	m.RawObjects++
 	m.RawBytes += stored.Size
+	if err := m.Manifest.AddRawManifestEntry(logicalKey, key, stored); err != nil {
+		return "", err
+	}
 	if err := validateStoredHash(source, expectedHash, stored.SHA256); err != nil {
 		return "", err
 	}
@@ -452,11 +457,16 @@ func (a *app) finish(ctx context.Context, run metadata.Run, m metrics, err error
 	}
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	if dbErr := a.metadata.FinalizeRun(finishCtx, run, time.Now().UTC(), metadata.Metrics{Received: int64(m.Received), Written: int64(m.OutputRows), Rejected: int64(m.Rejected), RawPayloads: int64(m.RawObjects), RawBytes: m.RawBytes, Cursor: m.Cursor, Err: err}, prices, macros); dbErr != nil {
+	manifestHash, manifestKey, manifestErr := storage.PublishRawManifest(finishCtx, a.raw, m.Manifest, m.StartedAt)
+	if manifestErr != nil {
+		a.log.Error("publish raw run manifest failed", "source", m.Source, "error", manifestErr)
+		return manifestErr
+	}
+	if dbErr := a.metadata.FinalizeRun(finishCtx, run, time.Now().UTC(), metadata.Metrics{Received: int64(m.Received), Written: int64(m.OutputRows), Rejected: int64(m.Rejected), RawPayloads: int64(m.RawObjects), RawBytes: m.RawBytes, RawPayloadManifestHash: manifestHash, Cursor: m.Cursor, Err: err}, prices, macros); dbErr != nil {
 		a.log.Error("persist collector run failed", "source", m.Source, "error", dbErr)
 		return dbErr
 	}
-	a.log.Info("collector run", "source", m.Source, "status", status, "started_at", m.StartedAt, "duration_seconds", m.Duration.Seconds(), "records_received", m.Received, "output_rows_changed", m.OutputRows, "records_rejected", m.Rejected, "raw_objects", m.RawObjects)
+	a.log.Info("collector run", "source", m.Source, "status", status, "started_at", m.StartedAt, "duration_seconds", m.Duration.Seconds(), "records_received", m.Received, "output_rows_changed", m.OutputRows, "records_rejected", m.Rejected, "raw_objects", m.RawObjects, "raw_manifest_key", manifestKey, "raw_manifest_hash", manifestHash)
 	return nil
 }
 func rawKey(parts1, parts2, entity string, b []byte, at time.Time, ext string) string {

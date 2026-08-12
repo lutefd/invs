@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -113,12 +114,14 @@ func (f collectorHTTPFake) Get(ctx context.Context, requestURL string) ([]byte, 
 }
 
 type orderingRawStore struct {
-	events    []string
-	completed bool
-	payloads  [][]byte
+	events          []string
+	completed       bool
+	payloads        [][]byte
+	manifestPayload []byte
+	manifestErr     error
 }
 
-func (s *orderingRawStore) Put(ctx context.Context, _ string, data io.Reader, meta storage.RawMetadata) (storage.RawMetadata, error) {
+func (s *orderingRawStore) Put(ctx context.Context, key string, data io.Reader, meta storage.RawMetadata) (storage.RawMetadata, error) {
 	if err := ctx.Err(); err != nil {
 		return storage.RawMetadata{}, err
 	}
@@ -129,6 +132,13 @@ func (s *orderingRawStore) Put(ctx context.Context, _ string, data io.Reader, me
 	hash := sha256.Sum256(b)
 	meta.SHA256 = hex.EncodeToString(hash[:])
 	meta.Size = int64(len(b))
+	if strings.HasPrefix(key, "runs/") {
+		if s.manifestErr != nil {
+			return storage.RawMetadata{}, s.manifestErr
+		}
+		s.manifestPayload = append([]byte(nil), b...)
+		return meta, nil
+	}
 	s.completed = true
 	s.payloads = append(s.payloads, append([]byte(nil), b...))
 	s.events = append(s.events, "raw:put:complete")
@@ -229,8 +239,9 @@ func (s *orderingNormalizedStore) WriteEconomics(_ string, observations []model.
 }
 
 type collectorMetadataFake struct {
-	run        metadata.Run
-	onFinalize func(metadata.Metrics, []model.PriceBar, []model.EconomicObservation)
+	run           metadata.Run
+	onFinalize    func(metadata.Metrics, []model.PriceBar, []model.EconomicObservation)
+	finalizeError error
 }
 
 func (f collectorMetadataFake) EnrichSECIssuer(context.Context, model.Issuer, string) error {
@@ -249,7 +260,7 @@ func (f collectorMetadataFake) FinalizeRun(_ context.Context, _ metadata.Run, _ 
 	if f.onFinalize != nil {
 		f.onFinalize(m, prices, macros)
 	}
-	return nil
+	return f.finalizeError
 }
 
 func TestCollectorStoresRawBeforeCanonicalPublication(t *testing.T) {
@@ -274,6 +285,10 @@ func TestCollectorStoresRawBeforeCanonicalPublication(t *testing.T) {
 	}
 	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "canonical:prices:write"}) {
 		t.Fatalf("publication order = %v", raw.events)
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 1 || manifest.Entries[0].LogicalKey == "" || manifest.Entries[0].ObjectKey == "" {
+		t.Fatalf("successful raw manifest entries = %+v", manifest.Entries)
 	}
 }
 
@@ -463,6 +478,9 @@ func TestCollectorPartialRunFinalizesSuccessfulEntityCandidates(t *testing.T) {
 	if !reflect.DeepEqual(raw.events, wantEvents) {
 		t.Fatalf("publication order = %v, want %v", raw.events, wantEvents)
 	}
+	if got := len(decodeTestManifest(t, raw.manifestPayload).Entries); got != 2 {
+		t.Fatalf("partial raw manifest entries = %d, want 2", got)
+	}
 }
 
 func TestCollectorPersistsProviderRawOnParseErrorBeforeFinalization(t *testing.T) {
@@ -494,6 +512,9 @@ func TestCollectorPersistsProviderRawOnParseErrorBeforeFinalization(t *testing.T
 		if len(raw.payloads) != 1 || string(raw.payloads[0]) != string(payload) {
 			t.Fatalf("persisted Yahoo raw payload = %q, want %q", raw.payloads, payload)
 		}
+		if got := len(decodeTestManifest(t, raw.manifestPayload).Entries); got != 1 {
+			t.Fatalf("Yahoo parse-error manifest entries = %d, want 1", got)
+		}
 		if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "metadata:finalize"}) {
 			t.Fatalf("Yahoo publication order = %v", raw.events)
 		}
@@ -524,6 +545,9 @@ func TestCollectorPersistsProviderRawOnParseErrorBeforeFinalization(t *testing.T
 		if len(raw.payloads) != 1 || string(raw.payloads[0]) != string(payload) {
 			t.Fatalf("persisted FRED raw payload = %q, want %q", raw.payloads, payload)
 		}
+		if got := len(decodeTestManifest(t, raw.manifestPayload).Entries); got != 1 {
+			t.Fatalf("FRED parse-error manifest entries = %d, want 1", got)
+		}
 		if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "metadata:finalize"}) {
 			t.Fatalf("FRED publication order = %v", raw.events)
 		}
@@ -533,4 +557,61 @@ func TestCollectorPersistsProviderRawOnParseErrorBeforeFinalization(t *testing.T
 func hashPayload(payload []byte) string {
 	hash := sha256.Sum256(payload)
 	return hex.EncodeToString(hash[:])
+}
+
+func decodeTestManifest(t *testing.T, payload []byte) storage.RawManifest {
+	t.Helper()
+	if len(payload) == 0 {
+		t.Fatal("raw manifest was not published")
+	}
+	var manifest storage.RawManifest
+	if err := json.Unmarshal(payload, &manifest); err != nil {
+		t.Fatalf("decode raw manifest: %v", err)
+	}
+	return manifest
+}
+
+func TestCollectorPublishesEmptyManifestBeforeFinalization(t *testing.T) {
+	raw := &orderingRawStore{}
+	var finalized metadata.Metrics
+	run := testRun()
+	app := &app{
+		cfg: config.Config{Providers: config.Providers{Prices: config.PriceProvider{Enabled: true, Start: "2024-01-01", End: "2024-12-31"}}},
+		raw: raw, normalized: &orderingNormalizedStore{raw: raw, expectedRun: run},
+		log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, _ []model.PriceBar, _ []model.EconomicObservation) { finalized = m }},
+		batchKey: "empty-manifest-test",
+	}
+
+	if err := app.run(context.Background(), "prices"); err != nil {
+		t.Fatal(err)
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 0 {
+		t.Fatalf("empty manifest entries = %d", len(manifest.Entries))
+	}
+	if finalized.RawPayloadManifestHash != hashPayload(raw.manifestPayload) {
+		t.Fatalf("finalized manifest hash = %q, want %q", finalized.RawPayloadManifestHash, hashPayload(raw.manifestPayload))
+	}
+}
+
+func TestCollectorDoesNotFinalizeWhenManifestPublicationFails(t *testing.T) {
+	raw := &orderingRawStore{manifestErr: errors.New("manifest store unavailable")}
+	finalized := false
+	run := testRun()
+	app := &app{
+		cfg:        config.Config{Providers: config.Providers{Prices: config.PriceProvider{Enabled: true, Start: "2024-01-01", End: "2024-12-31"}}},
+		raw:        raw,
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run},
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata:   collectorMetadataFake{run: run, onFinalize: func(metadata.Metrics, []model.PriceBar, []model.EconomicObservation) { finalized = true }},
+		batchKey:   "manifest-failure-test",
+	}
+
+	if err := app.run(context.Background(), "prices"); err == nil {
+		t.Fatal("manifest publication failure returned nil")
+	}
+	if finalized {
+		t.Fatal("finalization ran after manifest publication failure")
+	}
 }

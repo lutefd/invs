@@ -89,15 +89,25 @@ knowledge cutoff.
 
 ```text
 data/raw/<source>/year=YYYY/month=MM/day=DD/<sha256>.<ext>
+data/raw/runs/<source>/<ingestion-run-id>/manifest.json
 data/normalized/<dataset>/source=<source>/<entity-key>=<value>/manifest.json
 data/normalized/<dataset>/source=<source>/<entity-key>=<value>/part-<sha256>.parquet
 ```
 
-The manifest carries schema/provenance metadata, partition identity, total row count,
-and the content hash and row count of every immutable part. A changed partition writes
-a new part and replaces the manifest pointer; an old or unlisted part is not committed
-data. Logical raw manifests map request/source context to content hashes. Physical keys
-are implementation-neutral so an S3-compatible RawStore can replace the filesystem.
+The normalized manifest carries schema/provenance metadata, partition identity, total
+row count, and the content hash and row count of every immutable part. A changed
+partition writes a new part and replaces the manifest pointer; an old or unlisted part
+is not committed data. Each ingestion run also publishes a strict version-1 logical raw
+manifest at the RawStore key
+`runs/<source>/<ingestion-run-id>/manifest.json`. It contains `version`, `source`,
+`ingestion_run_id`, and sorted `entries`. Each entry contains `logical_key`,
+`object_key` (a RawStore key, never a local path), the actual stored `sha256`, `size`,
+`content_type`, `fetched_at`, and sorted `attributes`. The manifest hash is the
+lowercase SHA-256 of the exact UTF-8 indented JSON bytes including its trailing newline;
+that value is stored in `ingestion_runs.raw_payload_manifest_hash`. Empty runs publish
+the same contract with an empty `entries` array. Replay loads this key and verifies each
+listed object's bytes and size through `RawStore.Get` before use. Physical keys are
+implementation-neutral so an S3-compatible RawStore can replace the filesystem.
 
 ## Operational guarantees
 
