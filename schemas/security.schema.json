@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/security.schema.json",
+  "title": "Security",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "issuer_id", "name", "security_type", "currency", "primary_listing", "observed_at", "published_at", "effective_at", "provenance"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "issuer_id": { "oneOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
+    "name": { "type": "string", "minLength": 1 },
+    "security_type": { "$ref": "common.schema.json#/$defs/slug" },
+    "exchange_mic": { "oneOf": [{ "$ref": "common.schema.json#/$defs/mic" }, { "type": "null" }] },
+    "exchange_name": { "type": ["string", "null"], "minLength": 1 },
+    "currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "primary_listing": { "type": "boolean" },
+    "observed_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Source snapshot time at which these listing attributes were asserted."
+    },
+    "published_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
+      "$comment": "Earliest public availability of this security metadata version."
+    },
+    "effective_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
+      "$comment": "When listing/status attributes became effective; identifier changes are separately versioned."
+    },
+    "provenance": { "$ref": "common.schema.json#/$defs/provenance" }
+  }
+}

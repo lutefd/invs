@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/issuer.schema.json",
+  "title": "Issuer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "legal_name", "country_code", "observed_at", "published_at", "effective_at", "provenance"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "legal_name": { "type": "string", "minLength": 1 },
+    "country_code": { "$ref": "common.schema.json#/$defs/countryCode" },
+    "sector": { "type": ["string", "null"], "minLength": 1 },
+    "industry": { "type": ["string", "null"], "minLength": 1 },
+    "cik": { "type": ["string", "null"], "pattern": "^[0-9]{10}$" },
+    "cvm_code": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._-]+$" },
+    "lei": { "type": ["string", "null"], "pattern": "^[A-Z0-9]{20}$" },
+    "observed_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Source snapshot time at which these issuer attributes were asserted."
+    },
+    "published_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
+      "$comment": "Earliest public availability of this metadata version; null means unknown and therefore unusable in point-in-time simulation."
+    },
+    "effective_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
+      "$comment": "When this metadata version legally/economically took effect, if supplied."
+    },
+    "provenance": { "$ref": "common.schema.json#/$defs/provenance" }
+  }
+}

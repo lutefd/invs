@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/common.schema.json",
+  "title": "Canonical common definitions",
+  "$comment": "All timestamps are UTC instants. observed_at is applicability, published_at is public availability, effective_at is legal/economic effect, and ingested_at is local receipt.",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "$comment": "RFC 3339 UTC instant with an explicit trailing Z; never a naive or source-local timestamp."
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "countryCode": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "mic": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]{4}$"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "decimal": {
+      "type": "string",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+      "$comment": "Base-10 value encoded as a string so JSON transports do not lose precision."
+    },
+    "nonNegativeDecimal": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_source_id",
+        "ingestion_run_id",
+        "raw_payload_hash",
+        "ingested_at"
+      ],
+      "properties": {
+        "data_source_id": { "$ref": "#/$defs/uuid" },
+        "ingestion_run_id": { "$ref": "#/$defs/uuid" },
+        "raw_payload_hash": { "$ref": "#/$defs/sha256" },
+        "raw_record_locator": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "$comment": "Stable pointer within the raw payload, such as JSON Pointer, accession item, or CSV row."
+        },
+        "ingested_at": {
+          "$ref": "#/$defs/utcTimestamp",
+          "$comment": "When this system durably received the referenced raw bytes; not a proxy for publication time."
+        },
+        "normalizer_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

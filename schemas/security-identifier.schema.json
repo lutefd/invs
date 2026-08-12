@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/security-identifier.schema.json",
+  "title": "SecurityIdentifier",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "security_id", "identifier_type", "value", "normalized_value", "identifier_scope", "valid_from", "valid_until", "is_primary", "data_source_id", "created_at"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "identifier_type": { "$ref": "common.schema.json#/$defs/slug" },
+    "value": { "type": "string", "minLength": 1 },
+    "normalized_value": { "type": "string", "minLength": 1 },
+    "identifier_scope": {
+      "type": "string",
+      "minLength": 1,
+      "$comment": "Namespace/MIC that makes values such as tickers unambiguous; use global only for globally unique identifier systems."
+    },
+    "valid_from": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Inclusive start of the identifier assignment."
+    },
+    "valid_until": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
+      "$comment": "Exclusive end of the identifier assignment; null means current."
+    },
+    "is_primary": { "type": "boolean" },
+    "data_source_id": { "oneOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "System receipt/audit time for this mapping, not its valid_from time."
+    }
+  }
+}

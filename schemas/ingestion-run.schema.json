@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/ingestion-run.schema.json",
+  "title": "IngestionRun",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "data_source_id", "run_key", "status", "started_at", "finished_at", "records_received", "records_written", "records_rejected", "raw_payload_count", "raw_bytes", "metadata", "created_at"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "data_source_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "run_key": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["queued", "running", "succeeded", "partial", "failed", "cancelled"] },
+    "started_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "finished_at": { "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }] },
+    "records_received": { "type": "integer", "minimum": 0 },
+    "records_written": { "type": "integer", "minimum": 0 },
+    "records_rejected": { "type": "integer", "minimum": 0 },
+    "raw_payload_count": { "type": "integer", "minimum": 0 },
+    "raw_bytes": { "type": "integer", "minimum": 0 },
+    "raw_payload_manifest_hash": { "oneOf": [{ "$ref": "common.schema.json#/$defs/sha256" }, { "type": "null" }] },
+    "error_message": { "type": ["string", "null"], "minLength": 1 },
+    "error_details": { "type": ["object", "null"] },
+    "cursor": { "type": ["object", "null"] },
+    "metadata": { "type": "object" },
+    "created_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "enum": ["queued", "running"] } }, "required": ["status"] },
+      "then": { "properties": { "finished_at": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["succeeded", "partial", "failed", "cancelled"] } }, "required": ["status"] },
+      "then": { "properties": { "finished_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "succeeded" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "records_rejected": { "const": 0 },
+          "error_message": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
+      "then": { "required": ["error_message"], "properties": { "error_message": { "type": "string", "minLength": 1 } } }
+    }
+  ]
+}

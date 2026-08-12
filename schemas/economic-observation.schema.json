@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/economic-observation.schema.json",
+  "title": "EconomicObservation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "series_id", "geography", "value", "unit", "frequency", "observed_at", "published_at", "revision", "provenance"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "series_id": { "type": "string", "minLength": 1 },
+    "geography": { "type": "string", "minLength": 1 },
+    "value": { "oneOf": [{ "$ref": "common.schema.json#/$defs/decimal" }, { "type": "null" }] },
+    "unit": { "type": "string", "minLength": 1 },
+    "frequency": { "enum": ["daily", "weekly", "monthly", "quarterly", "semiannual", "annual", "irregular"] },
+    "seasonal_adjustment": { "type": ["string", "null"], "minLength": 1 },
+    "observed_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Reference period/date to which the measurement applies."
+    },
+    "published_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Release time of this vintage, not the latest-vintage release time."
+    },
+    "revision": { "type": "integer", "minimum": 0 },
+    "provenance": { "$ref": "common.schema.json#/$defs/provenance" }
+  }
+}

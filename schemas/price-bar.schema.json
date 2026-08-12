@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/price-bar.schema.json",
+  "title": "PriceBar",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "security_id", "interval", "price_basis", "currency", "observed_at", "published_at", "open", "high", "low", "close", "volume", "provenance"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "interval": { "enum": ["1d"] },
+    "price_basis": { "enum": ["raw", "split_adjusted", "total_return_adjusted"] },
+    "currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "observed_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Exclusive close of the market interval represented by this bar."
+    },
+    "published_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
+      "$comment": "Earliest instant this exact bar/version was public; null bars are excluded from point-in-time backtests."
+    },
+    "open": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "high": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "low": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "close": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "volume": { "oneOf": [{ "$ref": "common.schema.json#/$defs/nonNegativeDecimal" }, { "type": "null" }] },
+    "vwap": { "oneOf": [{ "$ref": "common.schema.json#/$defs/nonNegativeDecimal" }, { "type": "null" }] },
+    "trade_count": { "type": ["integer", "null"], "minimum": 0 },
+    "adjustment_version": { "type": ["string", "null"], "minLength": 1 },
+    "provenance": { "$ref": "common.schema.json#/$defs/provenance" }
+  }
+}

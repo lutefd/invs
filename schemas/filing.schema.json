@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/filing.schema.json",
+  "title": "Filing",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "issuer_id", "form_type", "source_document_id", "filing_date", "period_end", "observed_at", "published_at", "effective_at", "document_url", "provenance"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "issuer_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "form_type": { "type": "string", "minLength": 1 },
+    "source_document_id": { "type": "string", "minLength": 1 },
+    "accession_number": { "type": ["string", "null"], "minLength": 1 },
+    "filing_date": { "$ref": "common.schema.json#/$defs/date" },
+    "period_end": { "oneOf": [{ "$ref": "common.schema.json#/$defs/date" }, { "type": "null" }] },
+    "observed_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
+      "$comment": "Report period end as an instant when meaningful; it does not control availability."
+    },
+    "published_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Regulator acceptance/publication instant for the exact filing."
+    },
+    "effective_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
+      "$comment": "Legal effective instant for forms where this is distinct from publication."
+    },
+    "document_url": { "type": "string", "format": "uri" },
+    "amends_source_document_id": { "type": ["string", "null"], "minLength": 1 },
+    "provenance": { "$ref": "common.schema.json#/$defs/provenance" }
+  }
+}

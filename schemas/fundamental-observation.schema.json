@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/fundamental-observation.schema.json",
+  "title": "FundamentalObservation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "issuer_id", "security_id", "concept", "value", "unit", "currency", "period_start", "period_end", "fiscal_period", "observed_at", "published_at", "revision", "provenance"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "issuer_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "security_id": { "oneOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
+    "concept": { "type": "string", "minLength": 1 },
+    "taxonomy": { "type": ["string", "null"], "minLength": 1 },
+    "value": { "oneOf": [{ "$ref": "common.schema.json#/$defs/decimal" }, { "type": "null" }] },
+    "unit": { "type": "string", "minLength": 1 },
+    "currency": { "oneOf": [{ "$ref": "common.schema.json#/$defs/currency" }, { "type": "null" }] },
+    "period_start": { "oneOf": [{ "$ref": "common.schema.json#/$defs/date" }, { "type": "null" }] },
+    "period_end": { "$ref": "common.schema.json#/$defs/date" },
+    "fiscal_period": { "enum": ["FY", "Q1", "Q2", "Q3", "Q4", "H1", "H2", "YTD", "instant", "other"] },
+    "observed_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Fiscal period end/instant to which the reported fact applies; never its availability time."
+    },
+    "published_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Earliest public release or filing acceptance time for this exact vintage."
+    },
+    "accession_number": { "type": ["string", "null"], "minLength": 1 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "provenance": { "$ref": "common.schema.json#/$defs/provenance" }
+  }
+}
