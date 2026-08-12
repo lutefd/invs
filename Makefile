@@ -7,7 +7,7 @@ SOURCE ?= all
 RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 
-.PHONY: setup config up health urls ingest rerun test notebook validate down clean
+.PHONY: setup config up migrate health urls ingest rerun test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -20,6 +20,13 @@ config:
 
 up: setup config
 	@$(COMPOSE) up -d --build postgres jupyter grafana
+
+migrate: setup config
+	@$(COMPOSE) up -d --wait --build postgres
+	@$(COMPOSE) exec -T postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT to_regclass('"'"'public.market_price_snapshots'"'"'), to_regclass('"'"'public.macro_observation_snapshots'"'"')"' | \
+		grep -qx 'market_price_snapshots|macro_observation_snapshots' || \
+		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000002_latest_observation_snapshots.up.sql
 
 health:
 	@$(COMPOSE) ps
@@ -43,14 +50,22 @@ test: config
 	@go test ./...
 	@go vet ./...
 	@python3 schemas/validate_schemas.py
-	@$(COMPOSE) run --rm --no-deps jupyter sh -c "pip install -q -e '.[dev]' && python -m pytest && python -m ruff check research tests"
+	@$(COMPOSE) run --rm --no-deps \
+		-v "$(CURDIR)/docker:/repo/docker:ro" \
+		-e INVS_DASHBOARD_PATH=/repo/docker/grafana/dashboards/market-overview.json \
+		jupyter sh -c "pip install -q -e '.[dev]' && python -m pytest && python -m ruff check research tests"
 
 notebook: config
 	@$(COMPOSE) run --rm --no-deps jupyter python -m jupyter nbconvert \
 		--to notebook --execute --ExecutePreprocessor.timeout=120 \
 		--output /tmp/vertical-slice.executed.ipynb notebooks/vertical_slice.ipynb
 
-validate: test notebook
+dashboard-smoke: migrate
+	@python3 python/research/dashboard_smoke.py docker/grafana/dashboards/market-overview.json >/dev/null
+	@python3 python/research/dashboard_smoke.py docker/grafana/dashboards/market-overview.json | \
+		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1'
+
+validate: test notebook dashboard-smoke
 	@$(COMPOSE) build postgres collector jupyter
 
 down:

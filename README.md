@@ -2,7 +2,7 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-The current vertical slice covers Yahoo daily prices, SEC company facts, and FRED macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Grafana currently presents ingestion/readiness metadata; actual market observations are queried from Parquet in DuckDB/Jupyter until a deliberate PostgreSQL dashboard projection is added.
+The current vertical slice covers Yahoo daily prices, SEC company facts, and FRED macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; in the current tree those panels remain explicitly empty until the collector-side snapshot publisher is completed.
 
 ## Requirements
 
@@ -31,6 +31,14 @@ make up
 make health
 make urls
 ```
+
+After pulling a version that adds a database migration, upgrade an existing PostgreSQL volume explicitly:
+
+```sh
+make migrate
+```
+
+Fresh volumes apply both metadata and latest-snapshot migrations automatically. `make migrate` checks for the v2 snapshot schema and applies `000002` only when it is absent, so rerunning it on an upgraded volume is a no-op.
 
 `make urls` prints the current tokenized Jupyter URL. Grafana is at `http://127.0.0.1:3000` by default. If port 3000 is occupied, set `GRAFANA_PORT=3300` in `.env` before startup.
 
@@ -70,6 +78,8 @@ make notebook
 
 The notebook loads the configured universe to map a price `security_id` to its SEC `issuer_id`; it never pairs independently selected identifiers. Its explicit decision timestamp produces an “as known then” snapshot: the latest price revision for each observed session and the latest eligible SEC/FRED observations whose conservative `available_at` is not later than that decision. Missing pre-ingestion datasets produce typed empty views and an explanatory no-data result.
 
+The DuckDB catalog accepts canonical Parquet schema `1.0.0` only. Its `prices_canonical`, `fundamentals_canonical`, and `macroeconomics_canonical` views preserve exact UTF-8 decimal values, presence flags, and collection provenance. The shorter `prices`, `fundamentals`, and `macroeconomics` research views add `DECIMAL(38,18)` and `DOUBLE` projections for analysis. The exact string columns remain available as `*_value` or `value_text`; use them whenever rounding is unacceptable. Legacy files without `schema_version`, numeric physical decimal columns, unsupported versions, and malformed decimal strings fail closed with actionable schema errors instead of being silently coerced.
+
 This does not claim a historical backtest. Yahoo and current FRED backfills are only known to this system when collected, so v0 cannot reconstruct what their provider data looked like on past trading dates. A backtest must vary decision timestamps and use sources with defensible historical availability/vintage data.
 
 Optional environment variables can pin a configured slice:
@@ -96,6 +106,14 @@ Run all of those checks and build every local image:
 make validate
 ```
 
+Validate the provisioned market dashboard as strict JSON and ask PostgreSQL to plan every dashboard query against the migrated schema:
+
+```sh
+make dashboard-smoke
+```
+
+The market dashboard shows configured securities even when their Yahoo snapshot is absent, exposes an explicit no-snapshot row for FRED, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED series still live only in YAML, so the dashboard deliberately reports FRED source-level presence rather than claiming per-series coverage.
+
 Stop containers while retaining PostgreSQL and Grafana volumes:
 
 ```sh
@@ -114,7 +132,7 @@ Runtime data under `data/` is bind-mounted and is not removed by either command.
 
 - `data/raw/`: preserved provider responses and fetch metadata.
 - `data/normalized/`: canonical Parquet queried recursively by DuckDB.
-- PostgreSQL: security/source metadata and ingestion-run observability, not bulk price history.
-- Grafana: operational readiness and pipeline health. Market values remain in Parquet and are researched through DuckDB/Jupyter.
+- PostgreSQL: security/source metadata, ingestion-run observability, and replaceable latest-only price/macro projections; never authoritative history.
+- Grafana: operational readiness, current snapshot values, coverage gaps, and pipeline health. Missing snapshots stay visible and are never replaced by synthetic observations.
 
 `observed_at`, `published_at`, `available_at`, and `ingested_at` are distinct. The research layer never substitutes a trading-date heuristic when `available_at` is absent; a populated incompatible dataset fails loudly instead.

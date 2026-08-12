@@ -1,6 +1,6 @@
 {
   "annotations": {"list": []},
-  "description": "Collection-backed readiness view for market, SEC, and FRED inputs. This dashboard never substitutes synthetic market observations when Parquet is empty.",
+  "description": "Current-value operational projections backed by canonical v1 Parquet. PostgreSQL holds replaceable latest snapshots only; historical research remains in DuckDB.",
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -9,46 +9,57 @@
   "panels": [
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "A source is ready only after a successful collection. Actual normalized observations remain in Parquet and are queried through DuckDB/Jupyter.",
-      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "max": 3, "min": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 1}, {"color": "green", "value": 3}]}}, "overrides": []},
-      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "description": "Coverage is configured active securities for enabled Yahoo plus one enabled-FRED source unit. PostgreSQL does not currently persist the configured FRED series list, so per-series expected coverage is not claimed.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "max": 100, "min": 0, "mappings": [{"options": {"match": "null", "result": {"color": "red", "text": "no enabled inputs"}}, "type": "special"}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 50}, {"color": "green", "value": 100}], "unit": "percent"}}, "overrides": []},
+      "gridPos": {"h": 6, "w": 7, "x": 0, "y": 0},
       "id": 1,
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showPercentChange": false, "textMode": "auto", "wideLayout": true},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*)::double precision AS value FROM data_sources ds WHERE ds.enabled AND ds.code IN ('yahoo', 'sec', 'fred') AND EXISTS (SELECT 1 FROM ingestion_runs ir WHERE ir.data_source_id = ds.id AND ir.status = 'succeeded')", "refId": "A"}],
-      "title": "Successful sources (of 3)",
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "WITH enabled AS (SELECT bool_or(code = 'yahoo' AND enabled) AS yahoo, bool_or(code = 'fred' AND enabled) AS fred FROM data_sources WHERE code IN ('yahoo', 'fred')), counts AS (SELECT (CASE WHEN enabled.yahoo THEN (SELECT count(*) FROM securities WHERE active_until IS NULL) ELSE 0 END + CASE WHEN enabled.fred THEN 1 ELSE 0 END)::numeric AS expected, (CASE WHEN enabled.yahoo THEN (SELECT count(DISTINCT s.id) FROM securities s JOIN data_sources ds ON ds.code = 'yahoo' AND ds.enabled JOIN market_price_snapshots p ON p.data_source_id = ds.id AND p.security_id = s.id WHERE s.active_until IS NULL) ELSE 0 END + CASE WHEN enabled.fred AND EXISTS (SELECT 1 FROM macro_observation_snapshots m JOIN data_sources ds ON ds.id = m.data_source_id WHERE ds.code = 'fred') THEN 1 ELSE 0 END)::numeric AS covered FROM enabled) SELECT round(100 * covered / NULLIF(expected, 0), 1)::double precision AS value FROM counts", "refId": "A"}],
+      "title": "Latest snapshot coverage",
       "type": "stat"
     },
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Last successful publication by source. Empty means that collector has not completed successfully.",
+      "description": "One row per configured active security. A missing snapshot remains visible instead of being dropped by an inner join.",
       "fieldConfig": {"defaults": {}, "overrides": []},
-      "gridPos": {"h": 9, "w": 16, "x": 8, "y": 0},
+      "gridPos": {"h": 11, "w": 17, "x": 7, "y": 0},
       "id": 2,
-      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": true, "displayName": "last_success"}]},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ds.code AS source, ds.name, max(ir.finished_at) FILTER (WHERE ir.status = 'succeeded') AS last_success, coalesce(sum(ir.records_written) FILTER (WHERE ir.status = 'succeeded' AND ir.finished_at >= now() - interval '30 days'), 0) AS records_written_30d FROM data_sources ds LEFT JOIN ingestion_runs ir ON ir.data_source_id = ds.id WHERE ds.code IN ('yahoo', 'sec', 'fred') GROUP BY ds.code, ds.name ORDER BY ds.code", "refId": "A"}],
-      "title": "Market-data input readiness (no synthetic fallback)",
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "ticker"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT coalesce(identifier.value, s.name) AS ticker, s.name, ds.enabled AS source_enabled, p.close_value::numeric AS close, p.currency, p.observed_at, p.available_at, round(extract(epoch FROM now() - p.available_at) / 3600.0, 1) AS hours_since_available, CASE WHEN NOT coalesce(ds.enabled, false) THEN 'source disabled' WHEN p.security_id IS NULL THEN 'no snapshot published' WHEN p.available_at < now() - interval '96 hours' THEN 'stale' ELSE 'current' END AS snapshot_state, ir.status::text AS run_status, p.schema_version, p.raw_payload_hash FROM securities s LEFT JOIN data_sources ds ON ds.code = 'yahoo' LEFT JOIN market_price_snapshots p ON p.data_source_id = ds.id AND p.security_id = s.id LEFT JOIN ingestion_runs ir ON ir.id = p.ingestion_run_id LEFT JOIN LATERAL (SELECT si.value FROM security_identifiers si WHERE si.security_id = s.id AND si.identifier_type = 'ticker' AND si.valid_from <= now() AND (si.valid_until IS NULL OR si.valid_until > now()) ORDER BY si.is_primary DESC, si.valid_from DESC, si.value LIMIT 1) identifier ON true WHERE s.active_until IS NULL ORDER BY ticker", "refId": "A"}],
+      "title": "Configured security latest prices",
       "type": "table"
     },
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Collector output volume is metadata, not a price or economic value.",
-      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "records", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "bars", "fillOpacity": 60, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
-      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 9},
+      "description": "Latest current-vintage FRED projections. If none have been published, the explicit no-snapshot row remains visible. Expected FRED series live only in YAML today, so this panel does not claim full configured-series coverage.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 10, "w": 14, "x": 0, "y": 11},
       "id": 3,
-      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "none"}},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "time_series", "rawQuery": true, "rawSql": "SELECT $__timeGroupAlias(ir.finished_at, '1d'), ds.code AS metric, sum(ir.records_written)::double precision AS value FROM ingestion_runs ir JOIN data_sources ds ON ds.id = ir.data_source_id WHERE $__timeFilter(ir.finished_at) AND ir.status = 'succeeded' GROUP BY 1, 2 ORDER BY 1", "refId": "A"}],
-      "title": "Normalized records written by collector",
-      "type": "timeseries"
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "series_id"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT coalesce(m.series_id, '(no snapshot published)') AS series_id, ds.enabled AS source_enabled, m.value::numeric AS value, m.unit, m.frequency, m.seasonal_adjustment, m.observed_at, m.available_at, m.vintage_at, m.revision, round(extract(epoch FROM now() - m.available_at) / 86400.0, 1) AS days_since_available, CASE WHEN NOT ds.enabled THEN 'source disabled' WHEN m.series_id IS NULL THEN 'no snapshot published' WHEN m.available_at < now() - interval '45 days' THEN 'stale' ELSE 'current' END AS snapshot_state, ir.status::text AS run_status, m.schema_version, m.raw_payload_hash FROM data_sources ds LEFT JOIN macro_observation_snapshots m ON m.data_source_id = ds.id LEFT JOIN ingestion_runs ir ON ir.id = m.ingestion_run_id WHERE ds.code = 'fred' ORDER BY m.series_id NULLS FIRST", "refId": "A"}],
+      "title": "FRED latest observations",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Price and macro snapshot row counts distinguish successful ingestion from successful dashboard publication. SEC remains ingestion-only because migration 000002 defines no fundamental snapshot table.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 10, "w": 10, "x": 14, "y": 11},
+      "id": 4,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "source"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ds.code AS source, ds.enabled, max(ir.finished_at) FILTER (WHERE ir.status = 'succeeded') AS last_success, CASE ds.code WHEN 'yahoo' THEN (SELECT count(*) FROM market_price_snapshots p WHERE p.data_source_id = ds.id) WHEN 'fred' THEN (SELECT count(*) FROM macro_observation_snapshots m WHERE m.data_source_id = ds.id) ELSE NULL END AS snapshot_rows, CASE WHEN ds.code = 'sec' THEN 'ingestion only' WHEN ds.code IN ('yahoo', 'fred') AND CASE ds.code WHEN 'yahoo' THEN EXISTS (SELECT 1 FROM market_price_snapshots p WHERE p.data_source_id = ds.id) ELSE EXISTS (SELECT 1 FROM macro_observation_snapshots m WHERE m.data_source_id = ds.id) END THEN 'published' ELSE 'no snapshot published' END AS projection_state FROM data_sources ds LEFT JOIN ingestion_runs ir ON ir.data_source_id = ds.id WHERE ds.code IN ('yahoo', 'sec', 'fred') GROUP BY ds.id, ds.code, ds.enabled ORDER BY ds.code", "refId": "A"}],
+      "title": "Ingestion and projection state",
+      "type": "table"
     }
   ],
   "refresh": "5m",
   "schemaVersion": 41,
-  "tags": ["research", "market-data", "no-synthetic-data"],
+  "tags": ["research", "market-data", "latest-snapshots", "no-synthetic-data"],
   "templating": {"list": []},
   "time": {"from": "now-30d", "to": "now"},
   "timepicker": {},
   "timezone": "browser",
   "title": "Market data overview",
   "uid": "market-overview",
-  "version": 2
+  "version": 3
 }
