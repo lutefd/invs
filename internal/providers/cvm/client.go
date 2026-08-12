@@ -581,7 +581,10 @@ func parseIPECSV(text string, year int, member string, ingested time.Time) ([]IP
 	reader := csv.NewReader(strings.NewReader(text))
 	reader.Comma = ';'
 	reader.FieldsPerRecord = -1
-	reader.LazyQuotes = false
+	// CVM's IPE export contains bare quotes inside otherwise unquoted fields.
+	// LazyQuotes preserves those quotes as field text; exact field-count and
+	// identity/date/URL validation below still gates whether the row is kept.
+	reader.LazyQuotes = true
 	header, err := reader.Read()
 	if err != nil {
 		return nil, ParseStats{}, fmt.Errorf("decode CSV header: %w", err)
@@ -602,11 +605,12 @@ func parseIPECSV(text string, year int, member string, ingested time.Time) ([]IP
 		if readErr == io.EOF {
 			break
 		}
-		if readErr != nil {
-			return rows, stats, fmt.Errorf("decode CSV row %d: %w", rowNumber+1, readErr)
-		}
 		rowNumber++
 		stats.RecordsReceived++
+		if readErr != nil {
+			stats.RecordsRejected++
+			continue
+		}
 		if len(row) != len(ipeHeader) {
 			stats.RecordsRejected++
 			continue

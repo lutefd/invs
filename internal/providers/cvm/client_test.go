@@ -199,6 +199,24 @@ func TestParseCADRejectsMalformedRows(t *testing.T) {
 	}
 }
 
+func TestParseIPECSVPreservesUnescapedQuotesWithOfficialFieldShape(t *testing.T) {
+	text := string(readFixture(t, "ipe_cia_aberta_2026_unescaped_quote.csv"))
+	rows, stats, err := parseIPECSV(text, 2026, "ipe_cia_aberta_2026.csv", time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || stats.RecordsReceived != 3 || stats.RecordsRejected != 1 || stats.Duplicates != 0 {
+		t.Fatalf("rows/stats = %d/%+v, want 2 rows and received=3 rejected=1 duplicates=0", len(rows), stats)
+	}
+	wantSubject := `Autorizar solicitação à Comissão de Valores Mobiliários ("CVM"), para alienação de ações em tesouraria.`
+	if rows[0].Subject != wantSubject || rows[0].RawFields[7] != wantSubject || len(rows[0].RawFields) != len(ipeHeader) {
+		t.Fatalf("subject/raw fields = %q/%q/%d, want literal quote and 13 fields", rows[0].Subject, rows[0].RawFields[7], len(rows[0].RawFields))
+	}
+	if rows[1].Protocol != "001023IPE290420260199594482-48" {
+		t.Fatalf("valid row after structural rejection = %+v", rows[1])
+	}
+}
+
 func TestParseIPERejectsUnsafeArchiveMembers(t *testing.T) {
 	archive := zipFixture(t, "../escape.csv", []byte(strings.Join(ipeHeader, ";")))
 	_, _, _, _, err := parseIPEArchive(archive, 2026, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
