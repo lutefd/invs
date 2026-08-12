@@ -1,0 +1,39 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/raw/**
+data/normalized/**
+data/features/**
+!data/raw/.gitkeep
+!data/normalized/.gitkeep
+!data/features/.gitkeep
+
+# PostgreSQL and Grafana state
+data/postgres/
+data/grafana/
+
+# Go
+bin/
+coverage.out
+
+# Python and notebooks
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.ipynb_checkpoints/
+
+# DuckDB scratch databases
+*.duckdb
+*.duckdb.wal
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+
