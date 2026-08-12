@@ -34,6 +34,27 @@ func TestFinalizeRunSQLPersistsRawManifestHash(t *testing.T) {
 	}
 }
 
+func TestSnapshotUpsertsPersistObservedPrecision(t *testing.T) {
+	cases := []struct {
+		name string
+		sql  string
+	}{
+		{name: "price", sql: upsertMarketPriceSnapshotSQL},
+		{name: "macro", sql: upsertMacroObservationSnapshotSQL},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if !strings.Contains(tc.sql, "observed_at, observed_precision, published_at") &&
+				!strings.Contains(tc.sql, "observed_at,\n\tobserved_precision, published_at") {
+				t.Fatalf("upsert does not insert observed_precision: %s", tc.sql)
+			}
+			if !strings.Contains(tc.sql, "observed_precision = EXCLUDED.observed_precision") {
+				t.Fatalf("upsert does not update observed_precision: %s", tc.sql)
+			}
+		})
+	}
+}
+
 func TestPriceSnapshotOrdering(t *testing.T) {
 	baseAt := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
 	base := model.PriceBar{

@@ -31,14 +31,14 @@ type Metrics struct {
 const upsertMarketPriceSnapshotSQL = `
 INSERT INTO market_price_snapshots (
 	data_source_id, security_id, ingestion_run_id, schema_version, interval,
-	price_basis, currency, observed_at, published_at, available_at, ingested_at,
-	published_precision, open_value, high_value, low_value, close_value,
+	price_basis, currency, observed_at, observed_precision, published_at, available_at,
+	ingested_at, published_precision, open_value, high_value, low_value, close_value,
 	volume_value, raw_payload_hash
 ) VALUES (
 	$1, $2, $3, $4, $5,
 	$6, $7, $8, $9, $10, $11,
-	$12, $13, $14, $15, $16,
-	$17, $18
+	$12, $13, $14, $15, $16, $17,
+	$18, $19
 )
 ON CONFLICT (data_source_id, security_id) DO UPDATE SET
 	ingestion_run_id = EXCLUDED.ingestion_run_id,
@@ -50,6 +50,7 @@ ON CONFLICT (data_source_id, security_id) DO UPDATE SET
 	published_at = EXCLUDED.published_at,
 	available_at = EXCLUDED.available_at,
 	ingested_at = EXCLUDED.ingested_at,
+	observed_precision = EXCLUDED.observed_precision,
 	published_precision = EXCLUDED.published_precision,
 	open_value = EXCLUDED.open_value,
 	high_value = EXCLUDED.high_value,
@@ -73,12 +74,14 @@ WHERE (
 const upsertMacroObservationSnapshotSQL = `
 INSERT INTO macro_observation_snapshots (
 	data_source_id, ingestion_run_id, schema_version, series_id, geography,
-	unit, frequency, seasonal_adjustment, observed_at, published_at, available_at,
-	ingested_at, published_precision, value, revision, vintage_at, raw_payload_hash
+	unit, frequency, seasonal_adjustment, observed_at, observed_precision, published_at,
+	available_at, ingested_at, published_precision, value, revision, vintage_at,
+	raw_payload_hash
 ) VALUES (
 	$1, $2, $3, $4, $5,
 	$6, $7, $8, $9, $10, $11,
-	$12, $13, $14, $15, $16, $17
+	$12, $13, $14, $15, $16, $17,
+	$18
 )
 ON CONFLICT (data_source_id, series_id) DO UPDATE SET
 	ingestion_run_id = EXCLUDED.ingestion_run_id,
@@ -91,6 +94,7 @@ ON CONFLICT (data_source_id, series_id) DO UPDATE SET
 	published_at = EXCLUDED.published_at,
 	available_at = EXCLUDED.available_at,
 	ingested_at = EXCLUDED.ingested_at,
+	observed_precision = EXCLUDED.observed_precision,
 	published_precision = EXCLUDED.published_precision,
 	value = EXCLUDED.value,
 	revision = EXCLUDED.revision,
@@ -517,6 +521,7 @@ func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Tim
 			candidate.PriceBasis,
 			candidate.Currency,
 			candidate.Temporal.ObservedAt.UTC(),
+			string(candidate.Temporal.ObservedPrecision),
 			candidate.Temporal.PublishedAt.UTC(),
 			candidate.Temporal.AvailableAt.UTC(),
 			candidate.Temporal.IngestedAt.UTC(),
@@ -552,6 +557,7 @@ func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Tim
 			candidate.Frequency,
 			seasonalAdjustment,
 			candidate.Temporal.ObservedAt.UTC(),
+			string(candidate.Temporal.ObservedPrecision),
 			candidate.Temporal.PublishedAt.UTC(),
 			candidate.Temporal.AvailableAt.UTC(),
 			candidate.Temporal.IngestedAt.UTC(),
