@@ -5,11 +5,15 @@ RUN apk add --no-cache ca-certificates git
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
+ARG INVS_GIT_COMMIT=unknown
+RUN printf '%s\n' "$INVS_GIT_COMMIT" | grep -Eq '^(unknown|[0-9a-f]{40})$'
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/collector ./cmd/collector
 
 FROM alpine:3.22
+ARG INVS_GIT_COMMIT=unknown
+ENV INVS_GIT_COMMIT=$INVS_GIT_COMMIT
 RUN apk add --no-cache ca-certificates tzdata && \
     addgroup -S collector && adduser -S -G collector collector
 COPY --from=build /out/collector /usr/local/bin/collector

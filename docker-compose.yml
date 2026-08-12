@@ -31,12 +31,15 @@ services:
     build:
       context: .
       dockerfile: docker/collector.Dockerfile
+      args:
+        INVS_GIT_COMMIT: ${INVS_GIT_COMMIT:-unknown}
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-market_research}:${POSTGRES_PASSWORD:-market_research_local}@postgres:5432/${POSTGRES_DB:-market_research}?sslmode=disable
       INVS_DATA_DIR: /data
       INVS_USER_AGENT: ${SEC_USER_AGENT:-personal-quant-research/0.1 contact@example.com}
       FRED_API_KEY: ${FRED_API_KEY:-}
       INVS_CONFIG: /tmp/invs-config.yaml
+      INVS_GIT_COMMIT: ${INVS_GIT_COMMIT:-unknown}
     volumes:
       - *data-mount
       - ${INVS_CONFIG_FILE:-./config/config.example.yaml}:/tmp/invs-config.yaml:ro

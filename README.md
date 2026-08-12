@@ -60,6 +60,14 @@ make ingest SOURCE=fred
 
 The collector is a batch container. Raw payloads land under `data/raw/`; normalized Parquet lands under `data/normalized/`. Each source result is registered in PostgreSQL so Grafana reports actual successful, failed, rejected, and no-change runs.
 
+`make` passes the current full lower-case repository commit into collector builds and runs. For direct Compose use, provide the same value explicitly. A missing value uses the validated `unknown` fallback; invalid or short values are rejected rather than baked into an image:
+
+```sh
+export INVS_GIT_COMMIT="$(git rev-parse --verify HEAD | tr '[:upper:]' '[:lower:]')"
+docker compose build collector
+docker compose --profile collect run --rm collector --source prices
+```
+
 Collectors are safe to retry with the same logical run key. This command executes one logical source run and immediately retries it with the identical generated key:
 
 ```sh
