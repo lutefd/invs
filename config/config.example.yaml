@@ -24,6 +24,12 @@ providers:
         frequency: daily
         seasonal_adjustment: not_adjusted
         start: 2020-01-01
+  cvm:
+    enabled: false
+    cad: true
+    # IPE archive years are explicit; document URLs are never discovered here.
+    ipe:
+      years: [2025, 2026]
 universe:
   - issuer_id: 1b3d88f5-55b8-4dc5-a6be-2f77e9e99201
     security_id: 469fc20f-7d4b-45bb-b827-05f8410e71aa

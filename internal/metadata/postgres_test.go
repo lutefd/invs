@@ -150,6 +150,34 @@ func TestCatalogIncludesBCBMacroSource(t *testing.T) {
 	t.Fatal("BCB source is missing from catalog")
 }
 
+func TestCatalogIncludesCVMFilingSource(t *testing.T) {
+	for _, candidate := range sources {
+		if candidate.code != "cvm" {
+			continue
+		}
+		if candidate.kind != "filings" {
+			t.Fatalf("CVM source kind = %q, want filings", candidate.kind)
+		}
+		if candidate.baseURL != "https://dados.cvm.gov.br/dados/" {
+			t.Fatalf("CVM base URL = %q", candidate.baseURL)
+		}
+		return
+	}
+	t.Fatal("CVM source is missing from catalog")
+}
+
+func TestIssuerUpsertPreservesExistingCVMCode(t *testing.T) {
+	for _, fragment := range []string{
+		"cvm_code",
+		"NULLIF($5,'')",
+		"cvm_code=COALESCE(excluded.cvm_code,issuers.cvm_code)",
+	} {
+		if !strings.Contains(upsertIssuerSQL, fragment) {
+			t.Fatalf("upsertIssuerSQL missing %q: %s", fragment, upsertIssuerSQL)
+		}
+	}
+}
+
 func TestPriceSnapshotOrdering(t *testing.T) {
 	baseAt := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
 	base := model.PriceBar{

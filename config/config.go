@@ -63,6 +63,7 @@ type Providers struct {
 	Prices PriceProvider   `yaml:"prices"`
 	FRED   FREDProvider    `yaml:"fred"`
 	BCB    BCBProvider     `yaml:"bcb"`
+	CVM    CVMProvider     `yaml:"cvm"`
 }
 
 type EnabledProvider struct {
@@ -90,6 +91,14 @@ type BCBSeries struct {
 	Start              string `yaml:"start"`
 	End                string `yaml:"end"`
 }
+type CVMProvider struct {
+	Enabled bool         `yaml:"enabled"`
+	CAD     bool         `yaml:"cad"`
+	IPE     CVMIPEConfig `yaml:"ipe"`
+}
+type CVMIPEConfig struct {
+	Years []int `yaml:"years"`
+}
 type Security struct {
 	IssuerID            string `yaml:"issuer_id"`
 	SecurityID          string `yaml:"security_id"`
@@ -98,6 +107,7 @@ type Security struct {
 	SecurityType        string `yaml:"security_type"`
 	PrimaryListing      bool   `yaml:"primary_listing"`
 	CIK                 int64  `yaml:"cik"`
+	CVMCode             string `yaml:"cvm_code"`
 	Ticker              string `yaml:"ticker"`
 	IdentifierValidFrom string `yaml:"identifier_valid_from"`
 	YahooSymbol         string `yaml:"yahoo_symbol"`
@@ -235,7 +245,23 @@ func (c Config) Validate() error {
 			}
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.BCB.Enabled {
+	if c.Providers.CVM.Enabled {
+		if !c.Providers.CVM.CAD && len(c.Providers.CVM.IPE.Years) == 0 {
+			errs = append(errs, errors.New("enabled CVM provider requires cad or at least one IPE year"))
+		}
+		seenYears := make(map[int]bool, len(c.Providers.CVM.IPE.Years))
+		currentYear := time.Now().UTC().Year()
+		for i, year := range c.Providers.CVM.IPE.Years {
+			if year < 2003 || year > currentYear {
+				errs = append(errs, fmt.Errorf("providers.cvm.ipe.years[%d] must be between 2003 and %d", i, currentYear))
+			}
+			if seenYears[year] {
+				errs = append(errs, fmt.Errorf("providers.cvm.ipe.years[%d] duplicates %d", i, year))
+			}
+			seenYears[year] = true
+		}
+	}
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -271,6 +297,9 @@ func (c Config) Validate() error {
 		} else if s.CIK > 9999999999 {
 			errs = append(errs, fmt.Errorf("%s: cik must contain at most 10 digits", pfx))
 		}
+		if s.CVMCode != "" && !validCVMCode(s.CVMCode) {
+			errs = append(errs, fmt.Errorf("%s: cvm_code must contain only letters, digits, '.', '_' or '-'", pfx))
+		}
 		if strings.TrimSpace(s.LegalName) == "" {
 			errs = append(errs, fmt.Errorf("%s: legal_name is required", pfx))
 		}
@@ -302,6 +331,18 @@ func validBCBCode(value string) bool {
 	}
 	for _, r := range value {
 		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func validCVMCode(value string) bool {
+	if strings.TrimSpace(value) != value || value == "" {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-') {
 			return false
 		}
 	}

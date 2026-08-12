@@ -261,12 +261,22 @@ FROM ingestion_runs r
 JOIN data_sources s ON s.id=r.data_source_id
 WHERE r.id=$1::uuid`
 
+const upsertIssuerSQL = `
+INSERT INTO issuers(id,legal_name,country_code,cik,cvm_code,metadata)
+VALUES($1,$2,$3,$4,NULLIF($5,''),'{}')
+ON CONFLICT(id) DO UPDATE SET
+    legal_name=excluded.legal_name,
+    country_code=excluded.country_code,
+    cik=excluded.cik,
+    cvm_code=COALESCE(excluded.cvm_code,issuers.cvm_code),
+    updated_at=now()`
+
 type source struct {
 	code, name, kind, baseURL string
 	enabled                   bool
 }
 
-var sources = []source{{"sec", "SEC EDGAR", "fundamentals", "https://data.sec.gov", true}, {"yahoo", "Yahoo Finance", "market_data", "https://query1.finance.yahoo.com", true}, {"fred", "Federal Reserve Economic Data", "macro", "https://fred.stlouisfed.org", true}, {"bcb", "Banco Central do Brasil SGS", "macro", "https://api.bcb.gov.br/dados/serie/", true}}
+var sources = []source{{"sec", "SEC EDGAR", "fundamentals", "https://data.sec.gov", true}, {"yahoo", "Yahoo Finance", "market_data", "https://query1.finance.yahoo.com", true}, {"fred", "Federal Reserve Economic Data", "macro", "https://fred.stlouisfed.org", true}, {"bcb", "Banco Central do Brasil SGS", "macro", "https://api.bcb.gov.br/dados/serie/", true}, {"cvm", "CVM Dados Abertos", "filings", "https://dados.cvm.gov.br/dados/", true}}
 
 func Open(ctx context.Context, databaseURL string) (*Repository, error) {
 	if strings.TrimSpace(databaseURL) == "" {
@@ -298,7 +308,7 @@ func (r *Repository) SyncCatalog(ctx context.Context, cfg config.Config) error {
 	}
 	defer tx.Rollback(ctx)
 	for _, s := range sources {
-		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled, "bcb": cfg.Providers.BCB.Enabled}[s.code]
+		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled, "bcb": cfg.Providers.BCB.Enabled, "cvm": cfg.Providers.CVM.Enabled}[s.code]
 		_, err = tx.Exec(ctx, `INSERT INTO data_sources(code,name,source_kind,base_url,enabled) VALUES($1,$2,$3,$4,$5) ON CONFLICT(code) DO UPDATE SET name=excluded.name,source_kind=excluded.source_kind,base_url=excluded.base_url,enabled=excluded.enabled,updated_at=now()`, s.code, s.name, s.kind, s.baseURL, enabled)
 		if err != nil {
 			return fmt.Errorf("upsert data source %s: %w", s.code, err)
@@ -310,7 +320,7 @@ func (r *Repository) SyncCatalog(ctx context.Context, cfg config.Config) error {
 			return fmt.Errorf("identifier valid_from %s: %w", s.SecurityID, parseErr)
 		}
 		cik := fmt.Sprintf("%010d", s.CIK)
-		_, err = tx.Exec(ctx, `INSERT INTO issuers(id,legal_name,country_code,cik,metadata) VALUES($1,$2,$3,$4,'{}') ON CONFLICT(id) DO UPDATE SET legal_name=excluded.legal_name,country_code=excluded.country_code,cik=excluded.cik,updated_at=now()`, s.IssuerID, s.LegalName, s.CountryCode, cik)
+		_, err = tx.Exec(ctx, upsertIssuerSQL, s.IssuerID, s.LegalName, s.CountryCode, cik, s.CVMCode)
 		if err != nil {
 			return fmt.Errorf("upsert issuer %s: %w", s.IssuerID, err)
 		}
