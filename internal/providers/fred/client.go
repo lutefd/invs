@@ -6,10 +6,8 @@ import (
 	"encoding/csv"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -82,14 +80,14 @@ func parseCSV(b []byte, seriesID string, ingested time.Time) ([]model.EconomicOb
 			continue
 		}
 		day, e1 := time.Parse("2006-01-02", row[0])
-		value, e2 := strconv.ParseFloat(row[1], 64)
-		if e1 != nil || e2 != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		value, decimalErr := model.CanonicalDecimal(row[1], false)
+		if e1 != nil || decimalErr != nil {
 			rejected++
 			continue
 		}
 		day = day.UTC()
 		vintage := ingested
-		unique[row[0]] = model.EconomicObservation{Source: "fred", SeriesID: seriesID, Unit: "unknown", Value: value, VintageAt: &vintage, RawPayloadHash: hash, Temporal: model.Temporal{ObservedAt: day, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
+		unique[row[0]] = model.EconomicObservation{Source: "fred", SeriesID: seriesID, Geography: "US", Unit: "unknown", Frequency: "irregular", Value: value, Revision: 0, VintageAt: &vintage, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, RawRecordLocator: "csv/date=" + row[0], IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion}, Temporal: model.Temporal{ObservedAt: day, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
 	}
 	result := make([]model.EconomicObservation, 0, len(unique))
 	for _, o := range unique {

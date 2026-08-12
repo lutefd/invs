@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"math"
+	"math/big"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,68 +13,100 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/luisdourado/invs/internal/model"
 	"github.com/parquet-go/parquet-go"
 )
 
+var ErrMigrationRequired = errors.New("normalized parquet migration required")
+var ErrNaturalKeyConflict = errors.New("canonical natural key conflict")
+
 type PriceRow struct {
-	Source             string  `parquet:"source"`
-	SecurityID         string  `parquet:"security_id"`
-	Currency           string  `parquet:"currency"`
-	ObservedAt         int64   `parquet:"observed_at,timestamp(microsecond:utc)"`
-	PublishedAt        int64   `parquet:"published_at,timestamp(microsecond:utc)"`
-	PublishedPrecision string  `parquet:"published_precision"`
-	AvailableAt        int64   `parquet:"available_at,timestamp(microsecond:utc)"`
-	IngestedAt         int64   `parquet:"ingested_at,timestamp(microsecond:utc)"`
-	Open               float64 `parquet:"open"`
-	High               float64 `parquet:"high"`
-	Low                float64 `parquet:"low"`
-	Close              float64 `parquet:"close"`
-	Volume             int64   `parquet:"volume"`
-	RawPayloadHash     string  `parquet:"raw_payload_hash"`
+	SchemaVersion      string `parquet:"schema_version"`
+	Source             string `parquet:"source"`
+	SecurityID         string `parquet:"security_id"`
+	Interval           string `parquet:"interval"`
+	PriceBasis         string `parquet:"price_basis"`
+	Currency           string `parquet:"currency"`
+	ObservedAt         int64  `parquet:"observed_at,timestamp(microsecond:utc)"`
+	PublishedAt        int64  `parquet:"published_at,timestamp(microsecond:utc)"`
+	HasPublishedAt     bool   `parquet:"has_published_at"`
+	PublishedPrecision string `parquet:"published_precision"`
+	AvailableAt        int64  `parquet:"available_at,timestamp(microsecond:utc)"`
+	IngestedAt         int64  `parquet:"ingested_at,timestamp(microsecond:utc)"`
+	Open               string `parquet:"open"`
+	High               string `parquet:"high"`
+	Low                string `parquet:"low"`
+	Close              string `parquet:"close"`
+	Volume             string `parquet:"volume"`
+	HasVolume          bool   `parquet:"has_volume"`
+	RawPayloadHash     string `parquet:"raw_payload_hash"`
+	DataSourceID       string `parquet:"data_source_id"`
+	IngestionRunID     string `parquet:"ingestion_run_id"`
+	RawRecordLocator   string `parquet:"raw_record_locator"`
+	NormalizerVersion  string `parquet:"normalizer_version"`
 }
 
 type FundamentalRow struct {
-	Source             string  `parquet:"source"`
-	IssuerID           string  `parquet:"issuer_id"`
-	Taxonomy           string  `parquet:"taxonomy"`
-	Concept            string  `parquet:"concept"`
-	Unit               string  `parquet:"unit"`
-	ObservedAt         int64   `parquet:"observed_at,timestamp(microsecond:utc)"`
-	PublishedAt        int64   `parquet:"published_at,timestamp(microsecond:utc)"`
-	PublishedPrecision string  `parquet:"published_precision"`
-	AvailableAt        int64   `parquet:"available_at,timestamp(microsecond:utc)"`
-	IngestedAt         int64   `parquet:"ingested_at,timestamp(microsecond:utc)"`
-	PeriodStart        int32   `parquet:"period_start,date"`
-	HasPeriodStart     bool    `parquet:"has_period_start"`
-	PeriodEnd          int32   `parquet:"period_end,date"`
-	Value              float64 `parquet:"value"`
-	AccessionNumber    string  `parquet:"accession_number"`
-	Form               string  `parquet:"form"`
-	FiscalYear         int32   `parquet:"fiscal_year"`
-	FiscalPeriod       string  `parquet:"fiscal_period"`
-	Frame              string  `parquet:"frame"`
-	RawPayloadHash     string  `parquet:"raw_payload_hash"`
+	SchemaVersion      string `parquet:"schema_version"`
+	Source             string `parquet:"source"`
+	IssuerID           string `parquet:"issuer_id"`
+	SecurityID         string `parquet:"security_id"`
+	HasSecurityID      bool   `parquet:"has_security_id"`
+	Taxonomy           string `parquet:"taxonomy"`
+	Concept            string `parquet:"concept"`
+	Unit               string `parquet:"unit"`
+	Currency           string `parquet:"currency"`
+	HasCurrency        bool   `parquet:"has_currency"`
+	ObservedAt         int64  `parquet:"observed_at,timestamp(microsecond:utc)"`
+	PublishedAt        int64  `parquet:"published_at,timestamp(microsecond:utc)"`
+	PublishedPrecision string `parquet:"published_precision"`
+	AvailableAt        int64  `parquet:"available_at,timestamp(microsecond:utc)"`
+	IngestedAt         int64  `parquet:"ingested_at,timestamp(microsecond:utc)"`
+	PeriodStart        int32  `parquet:"period_start,date"`
+	HasPeriodStart     bool   `parquet:"has_period_start"`
+	PeriodEnd          int32  `parquet:"period_end,date"`
+	Value              string `parquet:"value"`
+	HasValue           bool   `parquet:"has_value"`
+	Revision           int32  `parquet:"revision"`
+	AccessionNumber    string `parquet:"accession_number"`
+	Form               string `parquet:"form"`
+	FiscalYear         int32  `parquet:"fiscal_year"`
+	FiscalPeriod       string `parquet:"fiscal_period"`
+	Frame              string `parquet:"frame"`
+	RawPayloadHash     string `parquet:"raw_payload_hash"`
+	DataSourceID       string `parquet:"data_source_id"`
+	IngestionRunID     string `parquet:"ingestion_run_id"`
+	RawRecordLocator   string `parquet:"raw_record_locator"`
+	NormalizerVersion  string `parquet:"normalizer_version"`
 }
 
 type EconomicRow struct {
-	Source             string  `parquet:"source"`
-	SeriesID           string  `parquet:"series_id"`
-	Unit               string  `parquet:"unit"`
-	ObservedAt         int64   `parquet:"observed_at,timestamp(microsecond:utc)"`
-	PublishedAt        int64   `parquet:"published_at,timestamp(microsecond:utc)"`
-	PublishedPrecision string  `parquet:"published_precision"`
-	AvailableAt        int64   `parquet:"available_at,timestamp(microsecond:utc)"`
-	IngestedAt         int64   `parquet:"ingested_at,timestamp(microsecond:utc)"`
-	Value              float64 `parquet:"value"`
-	VintageAt          int64   `parquet:"vintage_at,timestamp(microsecond:utc)"`
-	HasVintageAt       bool    `parquet:"has_vintage_at"`
-	RawPayloadHash     string  `parquet:"raw_payload_hash"`
+	SchemaVersion         string `parquet:"schema_version"`
+	Source                string `parquet:"source"`
+	SeriesID              string `parquet:"series_id"`
+	Geography             string `parquet:"geography"`
+	Unit                  string `parquet:"unit"`
+	Frequency             string `parquet:"frequency"`
+	SeasonalAdjustment    string `parquet:"seasonal_adjustment"`
+	HasSeasonalAdjustment bool   `parquet:"has_seasonal_adjustment"`
+	ObservedAt            int64  `parquet:"observed_at,timestamp(microsecond:utc)"`
+	PublishedAt           int64  `parquet:"published_at,timestamp(microsecond:utc)"`
+	PublishedPrecision    string `parquet:"published_precision"`
+	AvailableAt           int64  `parquet:"available_at,timestamp(microsecond:utc)"`
+	IngestedAt            int64  `parquet:"ingested_at,timestamp(microsecond:utc)"`
+	Value                 string `parquet:"value"`
+	HasValue              bool   `parquet:"has_value"`
+	Revision              int32  `parquet:"revision"`
+	VintageAt             int64  `parquet:"vintage_at,timestamp(microsecond:utc)"`
+	HasVintageAt          bool   `parquet:"has_vintage_at"`
+	RawPayloadHash        string `parquet:"raw_payload_hash"`
+	DataSourceID          string `parquet:"data_source_id"`
+	IngestionRunID        string `parquet:"ingestion_run_id"`
+	RawRecordLocator      string `parquet:"raw_record_locator"`
+	NormalizerVersion     string `parquet:"normalizer_version"`
 }
 
-// PeriodStartTime and VintageTime expose the physical sentinel+flag encoding
-// as nullable logical values to Go consumers. DuckDB views should use
-// CASE WHEN has_period_start THEN period_start END and the equivalent vintage expression.
 func (r FundamentalRow) PeriodStartTime() *time.Time {
 	if !r.HasPeriodStart {
 		return nil
@@ -82,7 +114,6 @@ func (r FundamentalRow) PeriodStartTime() *time.Time {
 	v := time.Unix(int64(r.PeriodStart)*86400, 0).UTC()
 	return &v
 }
-
 func (r EconomicRow) VintageTime() *time.Time {
 	if !r.HasVintageAt {
 		return nil
@@ -101,156 +132,413 @@ func NewWriter(root string) (*Writer, error) {
 	if err = os.MkdirAll(abs, 0o750); err != nil {
 		return nil, err
 	}
-	return &Writer{root: abs}, nil
+	return &Writer{abs}, nil
 }
 
-func (w *Writer) WritePrices(securityID string, observations []model.PriceBar) (string, int, error) {
-	if !safeSegment(securityID) {
-		return "", 0, fmt.Errorf("unsafe security ID %q", securityID)
+func (w *Writer) WritePrices(securityID string, obs []model.PriceBar) (string, int, error) {
+	if _, err := uuid.Parse(securityID); err != nil {
+		return "", 0, fmt.Errorf("security ID must be UUID: %w", err)
 	}
-	source := "unknown"
-	if len(observations) > 0 {
-		source = observations[0].Source
-	}
-	if !safeSegment(source) {
-		return "", 0, fmt.Errorf("unsafe price source %q", source)
+	source := sourceOfPrices(obs)
+	for _, o := range obs {
+		if o.SecurityID != securityID || o.Source != source {
+			return "", 0, errors.New("price observation/path identity mismatch")
+		}
 	}
 	path, err := w.path("prices", "source="+source, "security_id="+securityID)
 	if err != nil {
 		return "", 0, err
 	}
-	incoming := make([]PriceRow, 0, len(observations))
-	for _, o := range observations {
-		if o.Volume < 0 || o.Open < 0 || o.High < 0 || o.Low < 0 || o.Close < 0 || math.IsNaN(o.Open) || math.IsNaN(o.High) || math.IsNaN(o.Low) || math.IsNaN(o.Close) || math.IsInf(o.Open, 0) || math.IsInf(o.High, 0) || math.IsInf(o.Low, 0) || math.IsInf(o.Close, 0) || o.Low > o.High || o.Open < o.Low || o.Open > o.High || o.Close < o.Low || o.Close > o.High {
-			return "", 0, fmt.Errorf("invalid price bar for %s at %s", o.SecurityID, o.Temporal.ObservedAt)
+	in := make([]PriceRow, 0, len(obs))
+	for _, o := range obs {
+		r, err := priceRow(o)
+		if err != nil {
+			return "", 0, err
 		}
-		incoming = append(incoming, priceRow(o))
+		in = append(in, r)
 	}
-	existing, err := readIfExists[PriceRow](path)
+	existing, err := readV1[PriceRow](path)
 	if err != nil {
 		return "", 0, fmt.Errorf("read existing prices: %w", err)
 	}
-	byKey := map[string]PriceRow{}
 	for _, r := range existing {
-		byKey[priceKey(r)] = r
-	}
-	for _, r := range incoming {
-		k := priceKey(r)
-		if old, ok := byKey[k]; ok && samePrice(old, r) {
-			continue
+		if r.Source != source || r.SecurityID != securityID {
+			return "", 0, fmt.Errorf("read existing prices: %w: partition identity mismatch", ErrMigrationRequired)
 		}
-		byKey[k] = r
 	}
-	rows := values(byKey)
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].SecurityID != rows[j].SecurityID {
-			return rows[i].SecurityID < rows[j].SecurityID
-		}
-		return rows[i].ObservedAt < rows[j].ObservedAt
-	})
-	if slices.Equal(existing, rows) {
-		return path, 0, nil
-	}
-	changed, err := writeAtomic(path, rows)
+	rows, err := merge(existing, in, priceKey, samePrice)
 	if err != nil {
 		return "", 0, err
 	}
-	if !changed {
-		return path, 0, nil
-	}
-	return path, len(rows), nil
+	sort.Slice(rows, func(i, j int) bool { return priceKey(rows[i]) < priceKey(rows[j]) })
+	return publish(path, existing, rows)
 }
-
-func (w *Writer) WriteFundamentals(issuerID string, observations []model.FundamentalObservation) (string, int, error) {
-	if !safeSegment(issuerID) {
-		return "", 0, fmt.Errorf("unsafe issuer ID %q", issuerID)
+func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObservation) (string, int, error) {
+	if _, err := uuid.Parse(issuerID); err != nil {
+		return "", 0, fmt.Errorf("issuer ID must be UUID: %w", err)
 	}
 	path, err := w.path("fundamentals", "source=sec", "issuer_id="+issuerID)
 	if err != nil {
 		return "", 0, err
 	}
-	incoming := make([]FundamentalRow, 0, len(observations))
-	for _, o := range observations {
-		if math.IsNaN(o.Value) || math.IsInf(o.Value, 0) {
-			return "", 0, fmt.Errorf("non-finite fundamental value")
+	for _, o := range obs {
+		if o.IssuerID != issuerID || o.Source != "sec" {
+			return "", 0, errors.New("fundamental observation/path identity mismatch")
 		}
-		incoming = append(incoming, fundamentalRow(o))
 	}
-	existing, err := readIfExists[FundamentalRow](path)
+	in := make([]FundamentalRow, 0, len(obs))
+	for _, o := range obs {
+		r, err := fundamentalRow(o)
+		if err != nil {
+			return "", 0, err
+		}
+		in = append(in, r)
+	}
+	existing, err := readV1[FundamentalRow](path)
 	if err != nil {
 		return "", 0, fmt.Errorf("read existing fundamentals: %w", err)
 	}
-	byKey := map[string]FundamentalRow{}
 	for _, r := range existing {
-		byKey[fundamentalKey(r)] = r
-	}
-	for _, r := range incoming {
-		k := fundamentalKey(r)
-		if old, ok := byKey[k]; ok && sameFundamental(old, r) {
-			continue
+		if r.Source != "sec" || r.IssuerID != issuerID {
+			return "", 0, fmt.Errorf("read existing fundamentals: %w: partition identity mismatch", ErrMigrationRequired)
 		}
-		byKey[k] = r
 	}
-	rows := values(byKey)
-	sort.Slice(rows, func(i, j int) bool {
-		return fundamentalKey(rows[i]) < fundamentalKey(rows[j])
-	})
-	if slices.Equal(existing, rows) {
-		return path, 0, nil
-	}
-	changed, err := writeAtomic(path, rows)
+	rows, err := merge(existing, in, fundamentalKey, sameFundamental)
 	if err != nil {
 		return "", 0, err
 	}
-	if !changed {
-		return path, 0, nil
-	}
-	return path, len(rows), nil
+	sort.Slice(rows, func(i, j int) bool { return fundamentalKey(rows[i]) < fundamentalKey(rows[j]) })
+	return publish(path, existing, rows)
 }
-
-func (w *Writer) WriteEconomics(seriesID string, observations []model.EconomicObservation) (string, int, error) {
-	if !safeSegment(seriesID) {
-		return "", 0, fmt.Errorf("unsafe series ID %q", seriesID)
-	}
+func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation) (string, int, error) {
 	path, err := w.path("macroeconomics", "source=fred", "series_id="+seriesID)
 	if err != nil {
 		return "", 0, err
 	}
-	incoming := make([]EconomicRow, 0, len(observations))
-	for _, o := range observations {
-		if math.IsNaN(o.Value) || math.IsInf(o.Value, 0) {
-			return "", 0, fmt.Errorf("non-finite economic value")
+	for _, o := range obs {
+		if o.SeriesID != seriesID || o.Source != "fred" {
+			return "", 0, errors.New("economic observation/path identity mismatch")
 		}
-		incoming = append(incoming, economicRow(o))
 	}
-	existing, err := readIfExists[EconomicRow](path)
+	existing, err := readV1[EconomicRow](path)
 	if err != nil {
 		return "", 0, fmt.Errorf("read existing macroeconomics: %w", err)
 	}
-	byKey := map[string]EconomicRow{}
 	for _, r := range existing {
-		byKey[economicKey(r)] = r
+		if r.Source != "fred" || r.SeriesID != seriesID {
+			return "", 0, fmt.Errorf("read existing macroeconomics: %w: partition identity mismatch", ErrMigrationRequired)
+		}
 	}
-	for _, r := range incoming {
-		k := economicKey(r)
-		if old, ok := byKey[k]; ok && sameEconomic(old, r) {
+	in := make([]EconomicRow, 0, len(obs))
+	for _, o := range obs {
+		r, err := economicRow(o)
+		if err != nil {
+			return "", 0, err
+		}
+		latest, found := latestEconomic(existing, r)
+		if found && latest.Value == r.Value {
+			if economicKey(latest) == economicKey(r) && !sameEconomic(latest, r) {
+				return "", 0, fmt.Errorf("%w: %s", ErrNaturalKeyConflict, economicKey(r))
+			}
 			continue
 		}
-		byKey[k] = r
+		if found && r.Revision <= latest.Revision {
+			r.Revision = latest.Revision + 1
+		}
+		in = append(in, r)
 	}
-	rows := values(byKey)
-	sort.Slice(rows, func(i, j int) bool { return rows[i].ObservedAt < rows[j].ObservedAt })
-	if slices.Equal(existing, rows) {
-		return path, 0, nil
-	}
-	changed, err := writeAtomic(path, rows)
+	rows, err := merge(existing, in, economicKey, sameEconomic)
 	if err != nil {
 		return "", 0, err
 	}
-	if !changed {
-		return path, 0, nil
+	sort.Slice(rows, func(i, j int) bool { return economicKey(rows[i]) < economicKey(rows[j]) })
+	return publish(path, existing, rows)
+}
+
+func priceRow(o model.PriceBar) (PriceRow, error) {
+	if err := validateTemporal(o.Temporal, !o.Temporal.PublishedAt.IsZero()); err != nil {
+		return PriceRow{}, err
 	}
-	return path, len(rows), nil
+	if err := validateProvenance(o.Provenance, o.RawPayloadHash); err != nil {
+		return PriceRow{}, err
+	}
+	if !o.Provenance.IngestedAt.Equal(o.Temporal.IngestedAt) {
+		return PriceRow{}, errors.New("provenance/temporal ingested_at mismatch")
+	}
+	if !isCurrency(o.Currency) {
+		return PriceRow{}, errors.New("invalid price currency")
+	}
+	if o.Source == "" {
+		return PriceRow{}, errors.New("price source required")
+	}
+	if o.Interval != "1d" || o.PriceBasis != "raw" {
+		return PriceRow{}, errors.New("price interval/basis must be 1d/raw")
+	}
+	if _, err := uuid.Parse(o.SecurityID); err != nil {
+		return PriceRow{}, errors.New("security_id must be UUID")
+	}
+	open, err := model.CanonicalDecimal(o.Open, true)
+	if err != nil {
+		return PriceRow{}, err
+	}
+	high, err := model.CanonicalDecimal(o.High, true)
+	if err != nil {
+		return PriceRow{}, err
+	}
+	low, err := model.CanonicalDecimal(o.Low, true)
+	if err != nil {
+		return PriceRow{}, err
+	}
+	closeValue, err := model.CanonicalDecimal(o.Close, true)
+	if err != nil {
+		return PriceRow{}, err
+	}
+	volume := ""
+	if o.Volume != "" {
+		volume, err = model.CanonicalDecimal(o.Volume, true)
+		if err != nil {
+			return PriceRow{}, err
+		}
+	}
+	if compareDecimal(low, high) > 0 || compareDecimal(open, low) < 0 || compareDecimal(open, high) > 0 || compareDecimal(closeValue, low) < 0 || compareDecimal(closeValue, high) > 0 {
+		return PriceRow{}, errors.New("invalid OHLC invariant")
+	}
+	r := PriceRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SecurityID: o.SecurityID, Interval: o.Interval, PriceBasis: o.PriceBasis, Currency: o.Currency, ObservedAt: micros(o.Temporal.ObservedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), Open: open, High: high, Low: low, Close: closeValue, Volume: volume, HasVolume: o.Volume != ""}
+	if !o.Temporal.PublishedAt.IsZero() {
+		r.PublishedAt = micros(o.Temporal.PublishedAt)
+		r.HasPublishedAt = true
+	}
+	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
+	return r, nil
+}
+func fundamentalRow(o model.FundamentalObservation) (FundamentalRow, error) {
+	if err := validateTemporal(o.Temporal, true); err != nil {
+		return FundamentalRow{}, err
+	}
+	if err := validateProvenance(o.Provenance, o.RawPayloadHash); err != nil {
+		return FundamentalRow{}, err
+	}
+	if !o.Provenance.IngestedAt.Equal(o.Temporal.IngestedAt) {
+		return FundamentalRow{}, errors.New("provenance/temporal ingested_at mismatch")
+	}
+	if _, err := uuid.Parse(o.IssuerID); err != nil {
+		return FundamentalRow{}, errors.New("issuer_id must be UUID")
+	}
+	if o.SecurityID != "" {
+		if _, err := uuid.Parse(o.SecurityID); err != nil {
+			return FundamentalRow{}, errors.New("security_id must be UUID")
+		}
+	}
+	if o.Currency != "" && !isCurrency(o.Currency) {
+		return FundamentalRow{}, errors.New("invalid fundamental currency")
+	}
+	if o.Source == "" || o.Taxonomy == "" || o.Concept == "" || o.Unit == "" || !validFiscalPeriod(o.FiscalPeriod) || o.Revision < 0 {
+		return FundamentalRow{}, errors.New("invalid fundamental domain fields")
+	}
+	if !sameUTCDay(o.PeriodEnd, o.Temporal.ObservedAt) || o.PeriodEnd.After(o.Temporal.PublishedAt) {
+		return FundamentalRow{}, errors.New("invalid fundamental period temporal semantics")
+	}
+	value, err := model.CanonicalDecimal(o.Value, false)
+	if err != nil {
+		return FundamentalRow{}, err
+	}
+	var start int32
+	hasStart := o.PeriodStart != nil
+	if hasStart {
+		start = days(*o.PeriodStart)
+		if start > days(o.PeriodEnd) {
+			return FundamentalRow{}, errors.New("period_start after period_end")
+		}
+	}
+	r := FundamentalRow{SchemaVersion: model.SchemaVersion, Source: o.Source, IssuerID: o.IssuerID, SecurityID: o.SecurityID, HasSecurityID: o.SecurityID != "", Taxonomy: o.Taxonomy, Concept: o.Concept, Unit: o.Unit, Currency: o.Currency, HasCurrency: o.Currency != "", ObservedAt: micros(o.Temporal.ObservedAt), PublishedAt: micros(o.Temporal.PublishedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), PeriodStart: start, HasPeriodStart: hasStart, PeriodEnd: days(o.PeriodEnd), Value: value, HasValue: o.Value != "", Revision: int32(o.Revision), AccessionNumber: o.AccessionNumber, Form: o.Form, FiscalYear: int32(o.FiscalYear), FiscalPeriod: o.FiscalPeriod, Frame: o.Frame}
+	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
+	return r, nil
+}
+func economicRow(o model.EconomicObservation) (EconomicRow, error) {
+	if err := validateTemporal(o.Temporal, true); err != nil {
+		return EconomicRow{}, err
+	}
+	if err := validateProvenance(o.Provenance, o.RawPayloadHash); err != nil {
+		return EconomicRow{}, err
+	}
+	if !o.Provenance.IngestedAt.Equal(o.Temporal.IngestedAt) {
+		return EconomicRow{}, errors.New("provenance/temporal ingested_at mismatch")
+	}
+	if o.Geography == "" || !validFrequency(o.Frequency) {
+		return EconomicRow{}, errors.New("invalid macro geography/frequency")
+	}
+	if o.Source == "" || o.SeriesID == "" || o.Unit == "" || o.Revision < 0 {
+		return EconomicRow{}, errors.New("invalid economic domain fields")
+	}
+	value, err := model.CanonicalDecimal(o.Value, false)
+	if err != nil {
+		return EconomicRow{}, err
+	}
+	r := EconomicRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SeriesID: o.SeriesID, Geography: o.Geography, Unit: o.Unit, Frequency: o.Frequency, SeasonalAdjustment: o.SeasonalAdjustment, HasSeasonalAdjustment: o.SeasonalAdjustment != "", ObservedAt: micros(o.Temporal.ObservedAt), PublishedAt: micros(o.Temporal.PublishedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), Value: value, HasValue: o.Value != "", Revision: int32(o.Revision)}
+	if o.VintageAt != nil {
+		r.VintageAt = micros(*o.VintageAt)
+		r.HasVintageAt = true
+	}
+	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
+	return r, nil
+}
+
+func stamp(hash, dataSource, run, locator, normalizer *string, p model.Provenance, legacyHash string) {
+	*hash = p.RawPayloadHash
+	if *hash == "" {
+		*hash = legacyHash
+	}
+	*dataSource = p.DataSourceID
+	*run = p.IngestionRunID
+	*locator = p.RawRecordLocator
+	*normalizer = p.NormalizerVersion
+}
+func validateProvenance(p model.Provenance, legacyHash string) error {
+	if legacyHash == "" || p.RawPayloadHash == "" || legacyHash != p.RawPayloadHash {
+		return errors.New("top-level/provenance raw payload hash mismatch")
+	}
+	hash := p.RawPayloadHash
+	if len(hash) != 64 {
+		return errors.New("provenance raw_payload_hash must be SHA-256")
+	}
+	for _, c := range hash {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return errors.New("provenance raw_payload_hash must be lowercase hex")
+		}
+	}
+	if _, err := uuid.Parse(p.DataSourceID); err != nil {
+		return errors.New("provenance data_source_id must be UUID")
+	}
+	if _, err := uuid.Parse(p.IngestionRunID); err != nil {
+		return errors.New("provenance ingestion_run_id must be UUID")
+	}
+	if p.IngestedAt.IsZero() {
+		return errors.New("provenance ingested_at required")
+	}
+	if p.NormalizerVersion == "" {
+		return errors.New("normalizer_version required")
+	}
+	return nil
+}
+func validateTemporal(t model.Temporal, publishedRequired bool) error {
+	if t.ObservedAt.IsZero() || t.AvailableAt.IsZero() || t.IngestedAt.IsZero() {
+		return errors.New("required temporal field is zero")
+	}
+	if publishedRequired && t.PublishedAt.IsZero() {
+		return errors.New("published_at required")
+	}
+	if !t.PublishedAt.IsZero() && t.ObservedAt.After(t.PublishedAt) {
+		return errors.New("observed_at after published_at")
+	}
+	if !t.PublishedAt.IsZero() && t.PublishedAt.After(t.AvailableAt) {
+		return errors.New("published_at after available_at")
+	}
+	if t.AvailableAt.After(t.IngestedAt) {
+		return errors.New("available_at after ingested_at")
+	}
+	return nil
+}
+func isCurrency(v string) bool {
+	if len(v) != 3 {
+		return false
+	}
+	for _, r := range v {
+		if r < 'A' || r > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+func validFrequency(v string) bool {
+	switch v {
+	case "daily", "weekly", "monthly", "quarterly", "semiannual", "annual", "irregular":
+		return true
+	}
+	return false
+}
+func validFiscalPeriod(v string) bool {
+	switch v {
+	case "FY", "Q1", "Q2", "Q3", "Q4", "H1", "H2", "YTD", "instant", "other":
+		return true
+	}
+	return false
+}
+func sameUTCDay(a, b time.Time) bool {
+	a = a.UTC()
+	b = b.UTC()
+	return a.Year() == b.Year() && a.YearDay() == b.YearDay()
+}
+func sourceOfPrices(obs []model.PriceBar) string {
+	if len(obs) == 0 {
+		return "unknown"
+	}
+	return obs[0].Source
+}
+func micros(t time.Time) int64 { return t.UTC().UnixMicro() }
+func days(t time.Time) int32   { return int32(t.UTC().Unix() / 86400) }
+func priceKey(r PriceRow) string {
+	return strings.Join([]string{r.Source, r.SecurityID, r.Interval, fmt.Sprint(r.ObservedAt), r.PriceBasis}, "\x1f")
+}
+func fundamentalKey(r FundamentalRow) string {
+	return strings.Join([]string{r.Source, r.IssuerID, r.SecurityID, r.Taxonomy, r.Concept, r.Unit, fmt.Sprint(r.HasPeriodStart), fmt.Sprint(r.PeriodStart), fmt.Sprint(r.PeriodEnd), fmt.Sprint(r.PublishedAt), fmt.Sprint(r.Revision)}, "\x1f")
+}
+func economicKey(r EconomicRow) string {
+	return strings.Join([]string{r.Source, r.SeriesID, fmt.Sprint(r.ObservedAt), fmt.Sprint(r.PublishedAt), fmt.Sprint(r.Revision)}, "\x1f")
+}
+func economicSeriesKey(r EconomicRow) string {
+	return strings.Join([]string{r.Source, r.SeriesID, fmt.Sprint(r.ObservedAt)}, "\x1f")
+}
+func latestEconomic(rows []EconomicRow, r EconomicRow) (EconomicRow, bool) {
+	var best EconomicRow
+	ok := false
+	for _, v := range rows {
+		if economicSeriesKey(v) == economicSeriesKey(r) && (!ok || v.Revision > best.Revision) {
+			best = v
+			ok = true
+		}
+	}
+	return best, ok
+}
+func samePrice(a, b PriceRow) bool {
+	a.IngestionRunID = b.IngestionRunID
+	a.IngestedAt = b.IngestedAt
+	return a == b
+}
+func sameFundamental(a, b FundamentalRow) bool {
+	a.IngestionRunID = b.IngestionRunID
+	a.IngestedAt = b.IngestedAt
+	return a == b
+}
+func sameEconomic(a, b EconomicRow) bool {
+	a.IngestionRunID = b.IngestionRunID
+	a.IngestedAt = b.IngestedAt
+	return a == b
+}
+func merge[T any](existing, in []T, key func(T) string, equal func(T, T) bool) ([]T, error) {
+	m := map[string]T{}
+	for _, r := range existing {
+		m[key(r)] = r
+	}
+	for _, r := range in {
+		k := key(r)
+		if old, ok := m[k]; ok {
+			if !equal(old, r) {
+				return nil, fmt.Errorf("%w: %s", ErrNaturalKeyConflict, k)
+			}
+			continue
+		}
+		m[k] = r
+	}
+	out := make([]T, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
+	}
+	return out, nil
+}
+func compareDecimal(a, b string) int {
+	ra, _ := new(big.Rat).SetString(a)
+	rb, _ := new(big.Rat).SetString(b)
+	return ra.Cmp(rb)
 }
 
 func (w *Writer) path(parts ...string) (string, error) {
@@ -261,73 +549,236 @@ func (w *Writer) path(parts ...string) (string, error) {
 	}
 	return filepath.Join(append([]string{w.root}, append(parts, "data.parquet")...)...), nil
 }
-func safeSegment(v string) bool {
-	if v == "" {
-		return false
-	}
-	for _, r := range v {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.') {
-			return false
-		}
-	}
-	return true
-}
-
-func micros(t time.Time) int64 { return t.UTC().UnixMicro() }
-func days(t time.Time) int32   { return int32(t.UTC().Unix() / 86400) }
-func priceRow(o model.PriceBar) PriceRow {
-	return PriceRow{Source: o.Source, SecurityID: o.SecurityID, Currency: o.Currency, ObservedAt: micros(o.Temporal.ObservedAt), PublishedAt: micros(o.Temporal.PublishedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), Open: o.Open, High: o.High, Low: o.Low, Close: o.Close, Volume: o.Volume, RawPayloadHash: o.RawPayloadHash}
-}
-func fundamentalRow(o model.FundamentalObservation) FundamentalRow {
-	var start int32
-	hasStart := false
-	if o.PeriodStart != nil {
-		start = days(*o.PeriodStart)
-		hasStart = true
-	}
-	return FundamentalRow{Source: o.Source, IssuerID: o.IssuerID, Taxonomy: o.Taxonomy, Concept: o.Concept, Unit: o.Unit, ObservedAt: micros(o.Temporal.ObservedAt), PublishedAt: micros(o.Temporal.PublishedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), PeriodStart: start, HasPeriodStart: hasStart, PeriodEnd: days(o.PeriodEnd), Value: o.Value, AccessionNumber: o.AccessionNumber, Form: o.Form, FiscalYear: int32(o.FiscalYear), FiscalPeriod: o.FiscalPeriod, Frame: o.Frame, RawPayloadHash: o.RawPayloadHash}
-}
-func economicRow(o model.EconomicObservation) EconomicRow {
-	var vintage int64
-	hasVintage := false
-	if o.VintageAt != nil {
-		vintage = micros(*o.VintageAt)
-		hasVintage = true
-	}
-	return EconomicRow{Source: o.Source, SeriesID: o.SeriesID, Unit: o.Unit, ObservedAt: micros(o.Temporal.ObservedAt), PublishedAt: micros(o.Temporal.PublishedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), Value: o.Value, VintageAt: vintage, HasVintageAt: hasVintage, RawPayloadHash: o.RawPayloadHash}
-}
-
-func priceKey(r PriceRow) string {
-	return fmt.Sprintf("%s\x1f%s\x1f%d\x1f%d", r.Source, r.SecurityID, r.ObservedAt, r.PublishedAt)
-}
-func fundamentalKey(r FundamentalRow) string {
-	return strings.Join([]string{r.Source, r.IssuerID, r.Taxonomy, r.Concept, r.Unit, r.AccessionNumber, fmt.Sprint(r.HasPeriodStart), fmt.Sprint(r.PeriodStart), fmt.Sprint(r.PeriodEnd), r.Frame, fmt.Sprint(r.PublishedAt)}, "\x1f")
-}
-func economicKey(r EconomicRow) string {
-	return fmt.Sprintf("%s\x1f%s\x1f%d\x1f%d\x1f%d\x1f%.17g", r.Source, r.SeriesID, r.ObservedAt, r.PublishedAt, r.VintageAt, r.Value)
-}
-func samePrice(a, b PriceRow) bool {
-	return a.Source == b.Source && a.SecurityID == b.SecurityID && a.Currency == b.Currency && a.ObservedAt == b.ObservedAt && a.PublishedAt == b.PublishedAt && a.Open == b.Open && a.High == b.High && a.Low == b.Low && a.Close == b.Close && a.Volume == b.Volume
-}
-func sameFundamental(a, b FundamentalRow) bool {
-	return a.Source == b.Source && a.IssuerID == b.IssuerID && a.Taxonomy == b.Taxonomy && a.Concept == b.Concept && a.Unit == b.Unit && a.ObservedAt == b.ObservedAt && a.PublishedAt == b.PublishedAt && a.AvailableAt == b.AvailableAt && a.PeriodStart == b.PeriodStart && a.HasPeriodStart == b.HasPeriodStart && a.PeriodEnd == b.PeriodEnd && a.Value == b.Value && a.AccessionNumber == b.AccessionNumber && a.Form == b.Form && a.FiscalYear == b.FiscalYear && a.FiscalPeriod == b.FiscalPeriod && a.Frame == b.Frame
-}
-func sameEconomic(a, b EconomicRow) bool {
-	return a.Source == b.Source && a.SeriesID == b.SeriesID && a.Unit == b.Unit && a.ObservedAt == b.ObservedAt && a.Value == b.Value
-}
-func values[K comparable, V any](m map[K]V) []V {
-	r := make([]V, 0, len(m))
-	for _, v := range m {
-		r = append(r, v)
-	}
-	return r
-}
-func readIfExists[T any](path string) ([]T, error) {
-	rows, err := parquet.ReadFile[T](path)
+func readV1[T any](path string) ([]T, error) {
+	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
-	return rows, err
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	pf, err := parquet.OpenFile(f, st.Size())
+	if err != nil {
+		return nil, err
+	}
+	physical := make(map[string]struct{})
+	for _, c := range pf.Schema().Columns() {
+		if len(c) == 1 {
+			physical[c[0]] = struct{}{}
+		}
+	}
+	for _, c := range parquet.SchemaOf(new(T)).Columns() {
+		if len(c) != 1 {
+			continue
+		}
+		if _, ok := physical[c[0]]; !ok {
+			return nil, fmt.Errorf("%w: %s has no %s column", ErrMigrationRequired, path, c[0])
+		}
+	}
+	rows, err := parquet.Read[T](f, st.Size())
+	if err != nil {
+		return nil, fmt.Errorf("%w: cannot decode %s: %v", ErrMigrationRequired, path, err)
+	}
+	seen := make(map[string]struct{}, len(rows))
+	for _, r := range rows {
+		key, err := validateExistingRow(r)
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid row in %s: %v", ErrMigrationRequired, path, err)
+		}
+		if _, ok := seen[key]; ok {
+			return nil, fmt.Errorf("%w: duplicate natural key in %s: %s", ErrMigrationRequired, path, key)
+		}
+		seen[key] = struct{}{}
+	}
+	return rows, nil
+}
+
+func validateExistingRow[T any](row T) (string, error) {
+	switch r := any(row).(type) {
+	case PriceRow:
+		return priceKey(r), validateStoredPrice(r)
+	case FundamentalRow:
+		return fundamentalKey(r), validateStoredFundamental(r)
+	case EconomicRow:
+		return economicKey(r), validateStoredEconomic(r)
+	default:
+		return "", errors.New("unsupported normalized row type")
+	}
+}
+
+func validateStoredPrice(r PriceRow) error {
+	if err := validateStoredCommon(r.SchemaVersion, r.Source, r.RawPayloadHash, r.DataSourceID, r.IngestionRunID, r.NormalizerVersion); err != nil {
+		return err
+	}
+	if _, err := uuid.Parse(r.SecurityID); err != nil {
+		return errors.New("security_id must be UUID")
+	}
+	if r.Interval != "1d" || r.PriceBasis != "raw" || !isCurrency(r.Currency) {
+		return errors.New("invalid price domain fields")
+	}
+	if r.HasPublishedAt != (r.PublishedAt != 0) {
+		return errors.New("published_at presence mismatch")
+	}
+	temporal := storedTemporal(r.ObservedAt, r.PublishedAt, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, r.HasPublishedAt)
+	if err := validateTemporal(temporal, false); err != nil {
+		return err
+	}
+	if r.HasVolume != (r.Volume != "") {
+		return errors.New("volume presence mismatch")
+	}
+	for _, v := range []string{r.Open, r.High, r.Low, r.Close} {
+		if err := validateCanonicalDecimal(v, true); err != nil {
+			return err
+		}
+	}
+	if r.HasVolume {
+		if err := validateCanonicalDecimal(r.Volume, true); err != nil {
+			return err
+		}
+	}
+	if compareDecimal(r.Low, r.High) > 0 || compareDecimal(r.Open, r.Low) < 0 || compareDecimal(r.Open, r.High) > 0 || compareDecimal(r.Close, r.Low) < 0 || compareDecimal(r.Close, r.High) > 0 {
+		return errors.New("invalid OHLC invariant")
+	}
+	return nil
+}
+
+func validateStoredFundamental(r FundamentalRow) error {
+	if err := validateStoredCommon(r.SchemaVersion, r.Source, r.RawPayloadHash, r.DataSourceID, r.IngestionRunID, r.NormalizerVersion); err != nil {
+		return err
+	}
+	if _, err := uuid.Parse(r.IssuerID); err != nil {
+		return errors.New("issuer_id must be UUID")
+	}
+	if r.HasSecurityID != (r.SecurityID != "") {
+		return errors.New("security_id presence mismatch")
+	}
+	if r.HasSecurityID {
+		if _, err := uuid.Parse(r.SecurityID); err != nil {
+			return errors.New("security_id must be UUID")
+		}
+	}
+	if r.Taxonomy == "" || r.Concept == "" || r.Unit == "" || !validFiscalPeriod(r.FiscalPeriod) || r.Revision < 0 {
+		return errors.New("invalid fundamental domain fields")
+	}
+	if r.HasCurrency != (r.Currency != "") || r.HasCurrency && !isCurrency(r.Currency) {
+		return errors.New("invalid fundamental currency presence")
+	}
+	if r.HasValue != (r.Value != "") {
+		return errors.New("fundamental value presence mismatch")
+	}
+	if r.HasValue {
+		if err := validateCanonicalDecimal(r.Value, false); err != nil {
+			return err
+		}
+	}
+	if !r.HasPeriodStart && r.PeriodStart != 0 {
+		return errors.New("period_start presence mismatch")
+	}
+	if r.HasPeriodStart && r.PeriodStart > r.PeriodEnd {
+		return errors.New("period_start after period_end")
+	}
+	temporal := storedTemporal(r.ObservedAt, r.PublishedAt, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, true)
+	if err := validateTemporal(temporal, true); err != nil {
+		return err
+	}
+	periodEnd := time.Unix(int64(r.PeriodEnd)*86400, 0).UTC()
+	if !sameUTCDay(periodEnd, temporal.ObservedAt) || periodEnd.After(temporal.PublishedAt) {
+		return errors.New("invalid fundamental period temporal semantics")
+	}
+	return nil
+}
+
+func validateStoredEconomic(r EconomicRow) error {
+	if err := validateStoredCommon(r.SchemaVersion, r.Source, r.RawPayloadHash, r.DataSourceID, r.IngestionRunID, r.NormalizerVersion); err != nil {
+		return err
+	}
+	if r.SeriesID == "" || r.Geography == "" || r.Unit == "" || !validFrequency(r.Frequency) || r.Revision < 0 {
+		return errors.New("invalid economic domain fields")
+	}
+	if r.HasSeasonalAdjustment != (r.SeasonalAdjustment != "") {
+		return errors.New("seasonal_adjustment presence mismatch")
+	}
+	if r.HasValue != (r.Value != "") {
+		return errors.New("economic value presence mismatch")
+	}
+	if r.HasValue {
+		if err := validateCanonicalDecimal(r.Value, false); err != nil {
+			return err
+		}
+	}
+	if r.HasVintageAt != (r.VintageAt != 0) {
+		return errors.New("vintage_at presence mismatch")
+	}
+	return validateTemporal(storedTemporal(r.ObservedAt, r.PublishedAt, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, true), true)
+}
+
+func validateStoredCommon(schemaVersion, source, hash, dataSourceID, runID, normalizerVersion string) error {
+	if schemaVersion != model.SchemaVersion {
+		return fmt.Errorf("unsupported schema_version %q", schemaVersion)
+	}
+	if source == "" {
+		return errors.New("source required")
+	}
+	if len(hash) != 64 {
+		return errors.New("raw_payload_hash must be SHA-256")
+	}
+	for _, c := range hash {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return errors.New("raw_payload_hash must be lowercase hex")
+		}
+	}
+	if _, err := uuid.Parse(dataSourceID); err != nil {
+		return errors.New("data_source_id must be UUID")
+	}
+	if _, err := uuid.Parse(runID); err != nil {
+		return errors.New("ingestion_run_id must be UUID")
+	}
+	if normalizerVersion == "" {
+		return errors.New("normalizer_version required")
+	}
+	return nil
+}
+
+func validateCanonicalDecimal(v string, nonNegative bool) error {
+	canonical, err := model.CanonicalDecimal(v, nonNegative)
+	if err != nil {
+		return err
+	}
+	if canonical != v {
+		return fmt.Errorf("non-canonical decimal %q", v)
+	}
+	return nil
+}
+
+func storedTemporal(observed, published int64, precision string, available, ingested int64, hasPublished bool) model.Temporal {
+	t := model.Temporal{
+		ObservedAt:         time.UnixMicro(observed).UTC(),
+		PublishedPrecision: model.TimePrecision(precision),
+		AvailableAt:        time.UnixMicro(available).UTC(),
+		IngestedAt:         time.UnixMicro(ingested).UTC(),
+	}
+	if hasPublished {
+		t.PublishedAt = time.UnixMicro(published).UTC()
+	}
+	return t
+}
+func publish[T comparable](path string, existing, rows []T) (string, int, error) {
+	if slices.Equal(existing, rows) {
+		return path, 0, nil
+	}
+	changed, err := writeAtomic(path, rows)
+	if err != nil {
+		return "", 0, err
+	}
+	if !changed {
+		return path, 0, nil
+	}
+	return path, len(rows), nil
 }
 func writeAtomic[T any](path string, rows []T) (bool, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
@@ -341,25 +792,13 @@ func writeAtomic[T any](path string, rows []T) (bool, error) {
 	tmp.Close()
 	defer os.Remove(name)
 	if err := parquet.WriteFile(name, rows, parquet.Compression(&parquet.Snappy)); err != nil {
-		return false, fmt.Errorf("write parquet: %w", err)
+		return false, err
 	}
-	f, err := os.OpenFile(name, os.O_RDWR, 0)
+	b, err := os.ReadFile(name)
 	if err != nil {
 		return false, err
 	}
-	err = f.Sync()
-	closeErr := f.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return false, err
-	}
-	newBytes, err := os.ReadFile(name)
-	if err != nil {
-		return false, err
-	}
-	if oldBytes, readErr := os.ReadFile(path); readErr == nil && sha256.Sum256(oldBytes) == sha256.Sum256(newBytes) && bytes.Equal(oldBytes, newBytes) {
+	if old, e := os.ReadFile(path); e == nil && sha256.Sum256(old) == sha256.Sum256(b) && bytes.Equal(old, b) {
 		return false, nil
 	}
 	if err := os.Chmod(name, 0o640); err != nil {
@@ -368,5 +807,10 @@ func writeAtomic[T any](path string, rows []T) (bool, error) {
 	if err := os.Rename(name, path); err != nil {
 		return false, err
 	}
-	return true, nil
+	d, err := os.Open(filepath.Dir(path))
+	if err == nil {
+		err = d.Sync()
+		d.Close()
+	}
+	return true, err
 }

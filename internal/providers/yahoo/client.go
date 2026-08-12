@@ -6,10 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math"
+	"math/big"
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/luisdourado/invs/internal/model"
@@ -98,16 +99,18 @@ type chartResult struct {
 	} `json:"indicators"`
 }
 type quote struct {
-	Open   []*float64 `json:"open"`
-	High   []*float64 `json:"high"`
-	Low    []*float64 `json:"low"`
-	Close  []*float64 `json:"close"`
-	Volume []*int64   `json:"volume"`
+	Open   []*json.Number `json:"open"`
+	High   []*json.Number `json:"high"`
+	Low    []*json.Number `json:"low"`
+	Close  []*json.Number `json:"close"`
+	Volume []*json.Number `json:"volume"`
 }
 
 func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.PriceBar, int, int, error) {
 	var raw response
-	if err := json.Unmarshal(b, &raw); err != nil {
+	dec := json.NewDecoder(strings.NewReader(string(b)))
+	dec.UseNumber()
+	if err := dec.Decode(&raw); err != nil {
 		return nil, 0, 0, fmt.Errorf("decode Yahoo response: %w", err)
 	}
 	if raw.Chart.Error != nil {
@@ -133,8 +136,12 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 			rejected++
 			continue
 		}
-		open, high, low, closeValue, volume := *q.Open[i], *q.High[i], *q.Low[i], *q.Close[i], *q.Volume[i]
-		if volume < 0 || open < 0 || high < 0 || low < 0 || closeValue < 0 || math.IsNaN(open) || math.IsNaN(high) || math.IsNaN(low) || math.IsNaN(closeValue) || math.IsInf(open, 0) || math.IsInf(high, 0) || math.IsInf(low, 0) || math.IsInf(closeValue, 0) || low > high || open < low || open > high || closeValue < low || closeValue > high {
+		open, e0 := model.CanonicalDecimal(q.Open[i].String(), true)
+		high, e1 := model.CanonicalDecimal(q.High[i].String(), true)
+		low, e2 := model.CanonicalDecimal(q.Low[i].String(), true)
+		closeValue, e3 := model.CanonicalDecimal(q.Close[i].String(), true)
+		volume, e4 := model.CanonicalDecimal(q.Volume[i].String(), true)
+		if e0 != nil || e1 != nil || e2 != nil || e3 != nil || e4 != nil || compareDecimal(low, high) > 0 || compareDecimal(open, low) < 0 || compareDecimal(open, high) > 0 || compareDecimal(closeValue, low) < 0 || compareDecimal(closeValue, high) > 0 {
 			rejected++
 			continue
 		}
@@ -147,7 +154,7 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 		if _, ok := unique[key]; ok {
 			continue
 		}
-		unique[key] = model.PriceBar{Source: "yahoo", SecurityID: securityID, Currency: currency, Open: open, High: high, Low: low, Close: closeValue, Volume: volume, RawPayloadHash: hash, Temporal: model.Temporal{ObservedAt: closeAt, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
+		unique[key] = model.PriceBar{Source: "yahoo", SecurityID: securityID, Currency: currency, Interval: "1d", PriceBasis: "raw", Open: open, High: high, Low: low, Close: closeValue, Volume: volume, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, RawRecordLocator: "chart/date=" + key, IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion}, Temporal: model.Temporal{ObservedAt: closeAt, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
 	}
 	bars := make([]model.PriceBar, 0, len(unique))
 	for _, v := range unique {
@@ -157,3 +164,8 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 	return bars, received, rejected, nil
 }
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+func compareDecimal(a, b string) int {
+	x, _ := new(big.Rat).SetString(a)
+	y, _ := new(big.Rat).SetString(b)
+	return x.Cmp(y)
+}

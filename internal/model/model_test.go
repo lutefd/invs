@@ -28,3 +28,21 @@ func TestTemporalSemanticsAreDistinct(t *testing.T) {
 		t.Fatalf("unexpected temporal ordering: %+v", tm)
 	}
 }
+
+func TestCanonicalDecimalIsLosslessAndSchemaCompatible(t *testing.T) {
+	cases := map[string]string{"001.2300": "1.23", ".5": "0.5", "1.": "1", "-0.00": "0", "12345678901234567890.12345678901234567890": "12345678901234567890.1234567890123456789"}
+	for in, want := range cases {
+		got, err := CanonicalDecimal(in, false)
+		if err != nil || got != want {
+			t.Fatalf("%q => %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"", "1e3", "1/2", "+1", "NaN"} {
+		if _, err := CanonicalDecimal(bad, false); err == nil {
+			t.Fatalf("accepted %q", bad)
+		}
+	}
+	if _, err := CanonicalDecimal("-1", true); err == nil {
+		t.Fatal("accepted negative nonnegative decimal")
+	}
+}

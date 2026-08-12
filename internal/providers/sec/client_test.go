@@ -34,7 +34,7 @@ func TestCollectCompanyNormalizesAndDeduplicates(t *testing.T) {
 	if f.Temporal.PublishedPrecision != "second" || !f.Temporal.AvailableAt.Equal(time.Date(2024, 2, 2, 21, 3, 4, 0, time.UTC)) {
 		t.Fatalf("unsafe availability: %+v", f.Temporal)
 	}
-	if f.Value != 123.5 || f.IssuerID != "issuer-1" || f.RawPayloadHash == "" {
+	if f.Value != "123.5" || f.IssuerID != "issuer-1" || f.RawPayloadHash == "" {
 		t.Fatalf("bad fact: %+v", f)
 	}
 }

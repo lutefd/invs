@@ -3,6 +3,9 @@ package model
 
 import (
 	"context"
+	"errors"
+	"math/big"
+	"strings"
 	"time"
 )
 
@@ -26,6 +29,51 @@ type Temporal struct {
 	IngestedAt         time.Time
 }
 
+const SchemaVersion = "1.0.0"
+const NormalizerVersion = "go-v1"
+
+// CanonicalDecimal converts a base-10 provider lexeme to the lossless canonical
+// JSON-schema form. Scientific notation is intentionally rejected.
+func CanonicalDecimal(v string, nonNegative bool) (string, error) {
+	if strings.ContainsAny(v, "eE+/ ") || v == "" {
+		return "", errors.New("invalid decimal")
+	}
+	r, ok := new(big.Rat).SetString(v)
+	if !ok || (nonNegative && r.Sign() < 0) {
+		return "", errors.New("invalid decimal")
+	}
+	if strings.Contains(v, ".") {
+		v = strings.TrimRight(strings.TrimRight(v, "0"), ".")
+	}
+	negative := strings.HasPrefix(v, "-")
+	if negative {
+		v = v[1:]
+	}
+	parts := strings.SplitN(v, ".", 2)
+	integer := strings.TrimLeft(parts[0], "0")
+	if integer == "" {
+		integer = "0"
+	}
+	result := integer
+	if len(parts) == 2 && parts[1] != "" {
+		result += "." + parts[1]
+	}
+	if negative && result != "0" {
+		result = "-" + result
+	}
+	return result, nil
+}
+
+// Provenance is source evidence carried with every canonical observation.
+// DataSourceID and IngestionRunID are stamped by collector orchestration once
+// PostgreSQL identities are known. RawRecordLocator is adapter-owned.
+type Provenance struct {
+	DataSourceID, IngestionRunID     string
+	RawPayloadHash, RawRecordLocator string
+	IngestedAt                       time.Time
+	NormalizerVersion                string
+}
+
 type Issuer struct {
 	ID, LegalName, Country, Sector, Industry string
 	CIK                                      int64
@@ -45,29 +93,37 @@ type SecurityIdentifier struct {
 
 type PriceBar struct {
 	Source, SecurityID, Currency string
+	Interval, PriceBasis         string
 	Temporal                     Temporal
-	Open, High, Low, Close       float64
-	Volume                       int64
+	Open, High, Low, Close       string
+	Volume                       string
 	RawPayloadHash               string
+	Provenance                   Provenance
 }
 
 type FundamentalObservation struct {
-	Source, IssuerID, Taxonomy, Concept, Unit  string
-	Temporal                                   Temporal
-	PeriodStart                                *time.Time
-	PeriodEnd                                  time.Time
-	Value                                      float64
-	AccessionNumber, Form, FiscalPeriod, Frame string
-	FiscalYear                                 int
-	RawPayloadHash                             string
+	Source, IssuerID, SecurityID, Taxonomy, Concept, Unit string
+	Temporal                                              Temporal
+	PeriodStart                                           *time.Time
+	PeriodEnd                                             time.Time
+	Value                                                 string
+	Currency                                              string
+	Revision                                              int
+	AccessionNumber, Form, FiscalPeriod, Frame            string
+	FiscalYear                                            int
+	RawPayloadHash                                        string
+	Provenance                                            Provenance
 }
 
 type EconomicObservation struct {
-	Source, SeriesID, Unit string
-	Temporal               Temporal
-	Value                  float64
-	VintageAt              *time.Time
-	RawPayloadHash         string
+	Source, SeriesID, Unit                   string
+	Geography, Frequency, SeasonalAdjustment string
+	Temporal                                 Temporal
+	Value                                    string
+	Revision                                 int
+	VintageAt                                *time.Time
+	RawPayloadHash                           string
+	Provenance                               Provenance
 }
 
 type Filing struct {

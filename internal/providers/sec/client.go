@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/url"
 	"sort"
 	"strconv"
@@ -209,8 +208,8 @@ func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested ti
 					received++
 					end, endErr := time.Parse("2006-01-02", f.End)
 					filed, filedErr := time.Parse("2006-01-02", f.Filed)
-					value, valueErr := strconv.ParseFloat(f.Val.String(), 64)
-					if endErr != nil || filedErr != nil || valueErr != nil || math.IsNaN(value) || math.IsInf(value, 0) || f.Accn == "" {
+					value, decimalErr := model.CanonicalDecimal(f.Val.String(), false)
+					if endErr != nil || filedErr != nil || decimalErr != nil || f.Accn == "" {
 						rejected++
 						continue
 					}
@@ -230,10 +229,15 @@ func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested ti
 					if accepted, ok := acceptedByAccession[f.Accn]; ok {
 						published, available, precision = accepted.UTC(), accepted.UTC(), model.PrecisionSecond
 					}
+					currency := ""
+					if isISOCurrency(unit) {
+						currency = unit
+					}
 					o := model.FundamentalObservation{
 						Source: "sec", IssuerID: issuerID, Taxonomy: taxonomy, Concept: concept, Unit: unit, Value: value,
+						Currency: currency, Revision: 0,
 						Temporal:    model.Temporal{ObservedAt: end.UTC(), PublishedAt: published, PublishedPrecision: precision, AvailableAt: available, IngestedAt: ingested},
-						PeriodStart: start, PeriodEnd: end.UTC(), AccessionNumber: f.Accn, Form: f.Form, FiscalYear: fy, FiscalPeriod: f.FP, Frame: f.Frame, RawPayloadHash: hash,
+						PeriodStart: start, PeriodEnd: end.UTC(), AccessionNumber: f.Accn, Form: f.Form, FiscalYear: fy, FiscalPeriod: fiscalPeriod(f.FP, start), Frame: f.Frame, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion},
 					}
 					key := strings.Join([]string{issuerID, taxonomy, concept, unit, f.Accn, f.Start, f.End, f.Frame}, "\x1f")
 					unique[key] = o
@@ -262,3 +266,24 @@ func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested ti
 }
 
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+func isISOCurrency(v string) bool {
+	if len(v) != 3 {
+		return false
+	}
+	for _, r := range v {
+		if r < 'A' || r > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+func fiscalPeriod(v string, start *time.Time) string {
+	switch v {
+	case "FY", "Q1", "Q2", "Q3", "Q4", "H1", "H2", "YTD":
+		return v
+	}
+	if start == nil {
+		return "instant"
+	}
+	return "other"
+}
