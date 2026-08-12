@@ -1,0 +1,15 @@
+-----------------------
+Campo: Assunto
+-----------------------
+   Descrição : Assunto
+   Domínio   : Alfanumérico
+   Tipo Dados: nvarchar
+   Tamanho   : -1
+
+-----------------------
+Campo: Data_Entrega
+-----------------------
+   Descrição : Data de entrega
+   Domínio   : Data
+   Tipo Dados: date
+   Tamanho   : 10

@@ -1,0 +1,6 @@
+CNPJ_Companhia;Nome_Companhia;Codigo_CVM;Data_Referencia;Categoria;Tipo;Especie;Assunto;Data_Entrega;Tipo_Apresentacao;Protocolo_Entrega;Versao;Link_Download
+12.345.678/0001-90;AÇÚCAR S.A.;000123;2025-12-31;FRE;Comunicado;Comunicado ao mercado;Distribuição;2026-01-05;AP;0000000000000001;01;https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&numProtocolo=1
+12.345.678/0001-90;AÇÚCAR S.A.;000123;2025-12-31;FRE;Comunicado;Comunicado ao mercado;Distribuição;2026-01-05;AP;0000000000000001;01;https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&numProtocolo=1
+12.345.678/0001-90;AÇÚCAR S.A.;000123;2025-12-31;FRE;Comunicado;Comunicado ao mercado;Retificação;2026-01-06;AP;0000000000000001;02;https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&numProtocolo=1
+12.345.678/0001-90;AÇÚCAR S.A.;000123;2025-12-31;FRE;Comunicado;Comunicado ao mercado;Sem entrega; ;AP;0000000000000002;01;https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&numProtocolo=2
+12.345.678/0001-90;AÇÚCAR S.A.;000123;2025-12-31;FRE;Comunicado;Comunicado ao mercado;URL inválida;2026-01-07;AP;0000000000000003;01;javascript:download(3)
