@@ -94,6 +94,7 @@ _SCHEMA_VERSION: Final = "1.0.0"
 _MANIFEST_VERSION: Final = 1
 _MANIFEST_FILENAME: Final = "manifest.json"
 _DECIMAL_TYPE: Final = "DECIMAL(38, 18)"
+_OBSERVED_PRECISIONS: Final = ("date", "second", "unknown")
 _SHA256_PATTERN: Final = re.compile(r"^[0-9a-f]{64}$")
 _GIT_COMMIT_PATTERN: Final = re.compile(r"^[0-9a-f]{40}$")
 _MANIFEST_FIELDS: Final = frozenset(
@@ -125,6 +126,7 @@ _PRICE_FIELDS = (
     _Field("price_basis", "VARCHAR"),
     _Field("currency", "VARCHAR"),
     _Field("observed_at", "TIMESTAMPTZ"),
+    _Field("observed_precision", "VARCHAR"),
     _Field("published_at", "TIMESTAMPTZ"),
     _Field("has_published_at", "BOOLEAN"),
     _Field("published_precision", "VARCHAR"),
@@ -155,6 +157,7 @@ _FUNDAMENTAL_FIELDS = (
     _Field("currency", "VARCHAR"),
     _Field("has_currency", "BOOLEAN"),
     _Field("observed_at", "TIMESTAMPTZ"),
+    _Field("observed_precision", "VARCHAR"),
     _Field("published_at", "TIMESTAMPTZ"),
     _Field("published_precision", "VARCHAR"),
     _Field("available_at", "TIMESTAMPTZ"),
@@ -187,6 +190,7 @@ _MACRO_FIELDS = (
     _Field("seasonal_adjustment", "VARCHAR"),
     _Field("has_seasonal_adjustment", "BOOLEAN"),
     _Field("observed_at", "TIMESTAMPTZ"),
+    _Field("observed_precision", "VARCHAR"),
     _Field("published_at", "TIMESTAMPTZ"),
     _Field("published_precision", "VARCHAR"),
     _Field("available_at", "TIMESTAMPTZ"),
@@ -675,13 +679,17 @@ class ResearchCatalog:
             for part_path in self._verify_manifest_parts(manifest)
         ]
         expected_row_count = sum(manifest.row_count for manifest in manifests)
-        self._validate_file_schemas(name, verified_parts, dataset)
+        observed_precision_by_path = self._validate_file_schemas(name, verified_parts, dataset)
         physical_view = f"_{name}_physical"
-        part_literals = ", ".join(_quote_literal(str(path)) for path in verified_parts)
+        part_projections = [
+            self._part_compatibility_projection(
+                path, dataset, observed_precision_by_path[path]
+            )
+            for path in verified_parts
+        ]
         self.connection.execute(
             f"CREATE OR REPLACE VIEW {_quote_identifier(physical_view)} AS "
-            f"SELECT * FROM read_parquet([{part_literals}], "
-            "union_by_name=true, hive_partitioning=false)"
+            + " UNION ALL ".join(part_projections)
         )
         versions = self.connection.execute(
             f"SELECT DISTINCT schema_version FROM {_quote_identifier(physical_view)} "
@@ -692,6 +700,17 @@ class ResearchCatalog:
             raise DatasetSchemaError(
                 f"{name} Parquet requires canonical schema_version {_SCHEMA_VERSION}; "
                 f"found {found or 'no rows'}. Normalized Parquet migration required."
+            )
+        invalid_observed_precision = self.connection.execute(
+            f"SELECT count(*) FROM {_quote_identifier(physical_view)} "
+            "WHERE observed_precision IS NULL OR observed_precision NOT IN ("
+            + ", ".join(_quote_literal(value) for value in _OBSERVED_PRECISIONS)
+            + ")"
+        ).fetchone()[0]
+        if invalid_observed_precision:
+            raise DatasetSchemaError(
+                f"{name} Parquet contains {invalid_observed_precision} invalid "
+                "observed_precision value(s); allowed values are date, second, unknown."
             )
         self._validate_decimal_strings(name, physical_view, dataset)
         projections = self._canonical_projections(name, dataset.fields)
@@ -785,9 +804,13 @@ class ResearchCatalog:
 
     def _validate_file_schemas(
         self, name: str, files: list[Path], dataset: _Dataset
-    ) -> None:
-        required = {field.name for field in dataset.fields}
+    ) -> dict[Path, bool]:
+        optional_compatibility_fields = {"observed_precision"}
+        required = {
+            field.name for field in dataset.fields if field.name not in optional_compatibility_fields
+        }
         string_decimals = {field[0] for field in dataset.decimal_fields}
+        observed_precision_by_path: dict[Path, bool] = {}
         for path in files:
             try:
                 rows = self.connection.execute(
@@ -806,6 +829,12 @@ class ResearchCatalog:
                     f"{name} file {path} is legacy or incompatible; missing canonical v1 "
                     f"field(s): {', '.join(missing)}. Normalized Parquet migration required."
                 )
+            if "observed_precision" in columns and columns["observed_precision"] != "VARCHAR":
+                raise DatasetSchemaError(
+                    f"{name} file {path} stores observed_precision with physical type "
+                    f"{columns['observed_precision']}, expected VARCHAR. "
+                    "Normalized Parquet migration required."
+                )
             wrong_decimal_types = sorted(
                 field for field in string_decimals if columns[field] != "VARCHAR"
             )
@@ -814,6 +843,29 @@ class ResearchCatalog:
                     f"{name} file {path} stores canonical decimal field(s) as non-UTF8: "
                     f"{', '.join(wrong_decimal_types)}. Normalized Parquet migration required."
                 )
+            observed_precision_by_path[path] = "observed_precision" in columns
+        return observed_precision_by_path
+
+    @staticmethod
+    def _part_compatibility_projection(
+        path: Path, dataset: _Dataset, has_observed_precision: bool
+    ) -> str:
+        expressions = []
+        for field in dataset.fields:
+            source = _quote_identifier(field.name)
+            expression = (
+                "CAST('unknown' AS VARCHAR)"
+                if field.name == "observed_precision" and not has_observed_precision
+                else source
+            )
+            expressions.append(f"{expression} AS {source}")
+        return (
+            "SELECT "
+            + ", ".join(expressions)
+            + " FROM read_parquet("
+            + _quote_literal(str(path))
+            + ", hive_partitioning=false)"
+        )
 
     def _validate_decimal_strings(
         self, name: str, physical_view: str, dataset: _Dataset
@@ -869,7 +921,7 @@ class ResearchCatalog:
                 SELECT
                     schema_version, source, security_id, interval, price_basis, currency,
                     observed_at, CAST(observed_at AS DATE) AS trading_date,
-                    published_at, has_published_at, published_precision,
+                    observed_precision, published_at, has_published_at, published_precision,
                     available_at, ingested_at,
                     open AS open_value, TRY_CAST(open AS {_DECIMAL_TYPE}) AS open_decimal,
                     TRY_CAST(open AS DOUBLE) AS open,
@@ -890,7 +942,8 @@ class ResearchCatalog:
                 SELECT
                     schema_version, source, issuer_id, security_id, has_security_id,
                     taxonomy, concept, unit, currency, has_currency,
-                    observed_at, published_at, published_precision, available_at, ingested_at,
+                    observed_at, observed_precision, published_at, published_precision,
+                    available_at, ingested_at,
                     period_start, has_period_start, period_end,
                     value AS value_text, TRY_CAST(value AS {_DECIMAL_TYPE}) AS value_decimal,
                     TRY_CAST(value AS DOUBLE) AS value, has_value, revision,
@@ -905,7 +958,7 @@ class ResearchCatalog:
                     schema_version, source, series_id, geography, unit, frequency,
                     seasonal_adjustment, has_seasonal_adjustment,
                     observed_at, CAST(observed_at AS DATE) AS observation_date,
-                    published_at, published_precision, available_at, ingested_at,
+                    observed_precision, published_at, published_precision, available_at, ingested_at,
                     value AS value_text, TRY_CAST(value AS {_DECIMAL_TYPE}) AS value_decimal,
                     TRY_CAST(value AS DOUBLE) AS value, has_value, revision,
                     vintage_at, has_vintage_at, raw_payload_hash,

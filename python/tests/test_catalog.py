@@ -80,13 +80,20 @@ def _price_select(
     available: str = "2025-01-11 00:00:00Z",
     close: str = "100.123456789012345678",
     schema_version: str = "1.0.0",
+    observed_precision: str | None = None,
 ) -> str:
+    observed_precision_column = (
+        f"'{observed_precision}'::VARCHAR AS observed_precision,"
+        if observed_precision is not None
+        else ""
+    )
     return f"""
         SELECT
           '{schema_version}'::VARCHAR AS schema_version, 'yahoo'::VARCHAR AS source,
           '{SECURITY_ID}'::VARCHAR AS security_id, '1d'::VARCHAR AS interval,
           'raw'::VARCHAR AS price_basis, 'USD'::VARCHAR AS currency,
           TIMESTAMPTZ '{observed}' AS observed_at,
+          {observed_precision_column}
           TIMESTAMPTZ '{observed}' AS published_at, true AS has_published_at,
           'second'::VARCHAR AS published_precision,
           TIMESTAMPTZ '{available}' AS available_at,
@@ -100,6 +107,23 @@ def _price_select(
           'chart/result[0]'::VARCHAR AS raw_record_locator,
           'go-v1'::VARCHAR AS normalizer_version
     """
+
+
+def _write_price_parts(root: Path, queries: list[str]) -> Path:
+    directory = root / "prices" / "source=yahoo" / f"security_id={SECURITY_ID}"
+    paths = []
+    for index, query in enumerate(queries):
+        path = directory / f"prices-{index}.parquet"
+        _write_parquet(path, query)
+        paths.append(path)
+    return _write_manifest(
+        directory / "manifest.json",
+        paths,
+        dataset="prices",
+        source="yahoo",
+        partition_key="security_id",
+        partition_value=SECURITY_ID,
+    )
 
 
 def _write_prices(root: Path) -> Path:
@@ -125,13 +149,17 @@ def _write_prices(root: Path) -> Path:
     )
 
 
-def _write_fundamentals(root: Path, *, sentinel: bool = False) -> Path:
+def _fundamental_select(
+    *, sentinel: bool = False, observed_precision: str | None = None
+) -> str:
     period_start = "DATE '1970-01-01'" if sentinel else "DATE '2024-10-01'"
     has_period_start = "false" if sentinel else "true"
-    directory = root / "fundamentals" / "source=sec" / f"issuer_id={ISSUER_ID}"
-    _write_parquet(
-        directory / "fundamentals.parquet",
-        f"""
+    observed_precision_column = (
+        f"'{observed_precision}'::VARCHAR AS observed_precision,"
+        if observed_precision is not None
+        else ""
+    )
+    return f"""
         SELECT
           '1.0.0'::VARCHAR AS schema_version, 'sec'::VARCHAR AS source,
           '{ISSUER_ID}'::VARCHAR AS issuer_id, ''::VARCHAR AS security_id,
@@ -139,6 +167,7 @@ def _write_fundamentals(root: Path, *, sentinel: bool = False) -> Path:
           'Revenue'::VARCHAR AS concept, 'USD'::VARCHAR AS unit,
           'USD'::VARCHAR AS currency, true AS has_currency,
           TIMESTAMPTZ '2024-12-31 00:00:00Z' AS observed_at,
+          {observed_precision_column}
           TIMESTAMPTZ '2025-01-20 12:00:00Z' AS published_at,
           'second'::VARCHAR AS published_precision,
           TIMESTAMPTZ '2025-01-20 12:00:00Z' AS available_at,
@@ -153,15 +182,32 @@ def _write_fundamentals(root: Path, *, sentinel: bool = False) -> Path:
           '{RUN_ID}'::VARCHAR AS ingestion_run_id,
           'companyfacts/facts/0'::VARCHAR AS raw_record_locator,
           'go-v1'::VARCHAR AS normalizer_version
-        """,
-    )
+        """
+
+
+def _write_fundamental_parts(root: Path, queries: list[str]) -> Path:
+    directory = root / "fundamentals" / "source=sec" / f"issuer_id={ISSUER_ID}"
+    paths = []
+    for index, query in enumerate(queries):
+        path = directory / f"fundamentals-{index}.parquet"
+        _write_parquet(path, query)
+        paths.append(path)
     return _write_manifest(
         directory / "manifest.json",
-        [directory / "fundamentals.parquet"],
+        paths,
         dataset="fundamentals",
         source="sec",
         partition_key="issuer_id",
         partition_value=ISSUER_ID,
+    )
+
+
+def _write_fundamentals(
+    root: Path, *, sentinel: bool = False, observed_precision: str | None = None
+) -> Path:
+    return _write_fundamental_parts(
+        root,
+        [_fundamental_select(sentinel=sentinel, observed_precision=observed_precision)],
     )
 
 
@@ -176,11 +222,17 @@ def _macro_select(
     raw_hash: str = "c" * 64,
     vintage_at: str = "2025-01-15 13:00:00Z",
     has_vintage: bool = True,
+    observed_precision: str | None = None,
 ) -> str:
     physical_vintage = (
         f"TIMESTAMPTZ '{vintage_at}'"
         if has_vintage
         else "TIMESTAMPTZ '1970-01-01 00:00:00Z'"
+    )
+    observed_precision_column = (
+        f"'{observed_precision}'::VARCHAR AS observed_precision,"
+        if observed_precision is not None
+        else ""
     )
     return f"""
         SELECT
@@ -189,6 +241,7 @@ def _macro_select(
           'Index'::VARCHAR AS unit, 'quarterly'::VARCHAR AS frequency,
           ''::VARCHAR AS seasonal_adjustment, false AS has_seasonal_adjustment,
           TIMESTAMPTZ '{observed}' AS observed_at,
+          {observed_precision_column}
           TIMESTAMPTZ '{published}' AS published_at,
           'second'::VARCHAR AS published_precision,
           TIMESTAMPTZ '{available}' AS available_at,
@@ -204,20 +257,25 @@ def _macro_select(
     """
 
 
-def _write_macro_rows(root: Path, queries: list[str]) -> Path:
+def _write_macro_parts(root: Path, queries: list[str]) -> Path:
     directory = root / "macroeconomics" / "source=fred" / "series_id=GDP"
-    _write_parquet(
-        directory / "macroeconomics.parquet",
-        "\nUNION ALL\n".join(queries),
-    )
+    paths = []
+    for index, query in enumerate(queries):
+        path = directory / f"macroeconomics-{index}.parquet"
+        _write_parquet(path, query)
+        paths.append(path)
     return _write_manifest(
         directory / "manifest.json",
-        [directory / "macroeconomics.parquet"],
+        paths,
         dataset="macroeconomics",
         source="fred",
         partition_key="series_id",
         partition_value="GDP",
     )
+
+
+def _write_macro_rows(root: Path, queries: list[str]) -> Path:
+    return _write_macro_parts(root, ["\nUNION ALL\n".join(queries)])
 
 
 def _write_macro(root: Path, *, sentinel: bool = False) -> Path:
@@ -317,7 +375,7 @@ def test_canonical_v1_preserves_strings_provenance_and_adds_numeric_views(
 
     catalog = ResearchCatalog(tmp_path).register()
     canonical = catalog.connection.execute(
-        "SELECT close, data_source_id, ingestion_run_id, raw_record_locator, "
+        "SELECT close, observed_precision, data_source_id, ingestion_run_id, raw_record_locator, "
         "normalizer_version FROM prices_canonical ORDER BY observed_at LIMIT 1"
     ).fetchone()
     numeric = catalog.connection.execute(
@@ -327,6 +385,7 @@ def test_canonical_v1_preserves_strings_provenance_and_adds_numeric_views(
 
     assert canonical == (
         "100.123456789012345678",
+        "unknown",
         SOURCE_ID,
         RUN_ID,
         "chart/result[0]",
@@ -338,6 +397,128 @@ def test_canonical_v1_preserves_strings_provenance_and_adds_numeric_views(
     assert numeric[3] == "1000.25"
     assert str(numeric[4]) == "1000.250000000000000000"
     assert [item.file_count for item in catalog.status()] == [1, 1, 1]
+
+
+def test_new_observed_precision_is_preserved_in_canonical_and_research_views(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "normalized"
+    _write_price_parts(root, [_price_select(observed_precision="second")])
+    _write_fundamentals(root, observed_precision="date")
+    _write_macro_rows(root, [_macro_select(observed_precision="date")])
+
+    catalog = ResearchCatalog(tmp_path).register()
+
+    assert catalog.connection.execute(
+        "SELECT observed_precision FROM prices_canonical"
+    ).fetchone() == ("second",)
+    assert catalog.connection.execute(
+        "SELECT observed_precision FROM fundamentals_canonical"
+    ).fetchone() == ("date",)
+    assert catalog.connection.execute(
+        "SELECT observed_precision FROM macroeconomics_canonical"
+    ).fetchone() == ("date",)
+    assert catalog.connection.execute(
+        "SELECT observed_precision FROM prices"
+    ).fetchone() == ("second",)
+    assert catalog.connection.execute(
+        "SELECT observed_precision FROM fundamentals"
+    ).fetchone() == ("date",)
+    assert catalog.connection.execute(
+        "SELECT observed_precision FROM macroeconomics"
+    ).fetchone() == ("date",)
+
+
+def test_mixed_old_and_new_observed_precision_parts_are_compatible(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "normalized"
+    _write_price_parts(
+        root,
+        [
+            _price_select(close="100"),
+            _price_select(
+                observed="2025-02-10 21:00:00Z",
+                available="2025-02-11 00:00:00Z",
+                close="110",
+                observed_precision="second",
+            ),
+        ],
+    )
+    _write_fundamental_parts(
+        root,
+        [
+            _fundamental_select(),
+            _fundamental_select(observed_precision="date"),
+        ],
+    )
+    _write_macro_parts(
+        root,
+        [
+            _macro_select(),
+            _macro_select(observed="2025-02-01 00:00:00Z", observed_precision="date"),
+        ],
+    )
+
+    catalog = ResearchCatalog(tmp_path).register()
+
+    assert catalog.connection.execute(
+        "SELECT observed_precision FROM prices_canonical ORDER BY observed_at"
+    ).fetchall() == [("unknown",), ("second",)]
+    assert catalog.connection.execute(
+        "SELECT observed_precision FROM fundamentals_canonical ORDER BY observed_precision"
+    ).fetchall() == [("date",), ("unknown",)]
+    assert catalog.connection.execute(
+        "SELECT observed_precision FROM macroeconomics_canonical ORDER BY observed_at"
+    ).fetchall() == [("unknown",), ("date",)]
+
+
+@pytest.mark.parametrize("dataset", ["prices", "fundamentals", "macroeconomics"])
+def test_invalid_observed_precision_is_rejected(tmp_path: Path, dataset: str) -> None:
+    root = tmp_path / "normalized"
+    if dataset == "prices":
+        _write_price_parts(root, [_price_select(observed_precision="millisecond")])
+    elif dataset == "fundamentals":
+        _write_fundamentals(root, observed_precision="millisecond")
+    else:
+        _write_macro_rows(root, [_macro_select(observed_precision="millisecond")])
+
+    with pytest.raises(DatasetSchemaError, match="invalid observed_precision"):
+        ResearchCatalog(tmp_path).register()
+
+
+@pytest.mark.parametrize("dataset", ["prices", "fundamentals", "macroeconomics"])
+def test_wrong_observed_precision_physical_type_is_rejected(
+    tmp_path: Path, dataset: str
+) -> None:
+    root = tmp_path / "normalized"
+    if dataset == "prices":
+        query = _price_select(observed_precision="second").replace(
+            "'second'::VARCHAR AS observed_precision", "1::INTEGER AS observed_precision"
+        )
+        _write_price_parts(root, [query])
+    elif dataset == "fundamentals":
+        query = _fundamental_select(observed_precision="second").replace(
+            "'second'::VARCHAR AS observed_precision", "1::INTEGER AS observed_precision"
+        )
+        _write_fundamental_parts(root, [query])
+    else:
+        query = _macro_select(observed_precision="second").replace(
+            "'second'::VARCHAR AS observed_precision", "1::INTEGER AS observed_precision"
+        )
+        _write_macro_parts(root, [query])
+
+    with pytest.raises(DatasetSchemaError, match="observed_precision.*physical type"):
+        ResearchCatalog(tmp_path).register()
+
+
+def test_missing_non_observed_precision_field_is_still_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "normalized"
+    query = _price_select().replace("'yahoo'::VARCHAR AS source,", "")
+    _write_price_parts(root, [query])
+
+    with pytest.raises(DatasetSchemaError, match=r"missing canonical v1 field\(s\): source"):
+        ResearchCatalog(tmp_path).register()
 
 
 def test_deterministic_point_in_time_snapshot_excludes_future_observations(
