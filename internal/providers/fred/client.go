@@ -38,7 +38,8 @@ type Result struct {
 
 // Collect downloads FRED's current-vintage public CSV. Because it contains neither
 // release timestamps nor vintages, PublishedAt and AvailableAt are conservatively set
-// to IngestedAt. Historical point-in-time research must use an ALFRED adapter later.
+// to IngestedAt and publication precision remains unknown. Historical point-in-time
+// research must use an ALFRED adapter later.
 func (c *Client) Collect(ctx context.Context, seriesID string) (Result, error) {
 	seriesID = strings.TrimSpace(seriesID)
 	if seriesID == "" {
@@ -89,7 +90,7 @@ func parseCSV(b []byte, seriesID string, ingested time.Time) ([]model.EconomicOb
 		}
 		day = day.UTC()
 		vintage := ingested
-		unique[row[0]] = model.EconomicObservation{Source: "fred", SeriesID: seriesID, Geography: "US", Unit: "unknown", Frequency: "irregular", Value: value, Revision: 0, VintageAt: &vintage, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, RawRecordLocator: "csv/date=" + row[0], IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion}, Temporal: model.Temporal{ObservedAt: day, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
+		unique[row[0]] = model.EconomicObservation{Source: "fred", SeriesID: seriesID, Geography: "US", Unit: "unknown", Frequency: "irregular", Value: value, Revision: 0, VintageAt: &vintage, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, RawRecordLocator: "csv/date=" + row[0], IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion}, Temporal: model.Temporal{ObservedAt: day, PublishedAt: ingested, PublishedPrecision: model.PrecisionUnknown, AvailableAt: ingested, IngestedAt: ingested}}
 	}
 	result := make([]model.EconomicObservation, 0, len(unique))
 	for _, o := range unique {
