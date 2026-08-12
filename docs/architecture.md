@@ -17,24 +17,27 @@ archives.
 
 ## CVM and B3 rollout boundary
 
-CVM is the next staged source, not part of the accepted vertical slice yet. Its
-configuration, PostgreSQL source-catalog support, and canonical filing-metadata
-contract/writer are present. The CVM provider/collector path and Python research-catalog
-exposure are still incomplete, so there has been no CVM acceptance run and no CVM
-operational output should be treated as available.
+CVM is integrated as a source boundary, but is not part of the accepted vertical slice
+yet. Its configuration, PostgreSQL source-catalog support, provider/collector path,
+canonical filing-metadata writer, and Python research-catalog exposure are present.
+There has been no fresh live CVM acceptance run, so live CVM output remains pending
+operational verification.
 
 CVM IPE metadata uses the source delivery date as `filing_date`; that date does not
-establish a public publication instant. IPE rows therefore retain
+establish a public publication instant. The integrated collector stores the source
+resources raw, maps IPE rows only through exact configured CVM codes, and publishes
+canonical filings under `source=cvm_ipe`. IPE rows therefore retain
 `published_at = null` with `published_precision = unknown`, and receive an explicit
 conservative `available_at` equal to durable receipt time. This supports a
-"known-to-this-installation" live replay once the source is integrated, not a claim
-about historical public availability. A filing's reference date may populate
+"known-to-this-installation" live replay after collection, not a claim about historical
+public availability. A filing's reference date may populate
 `period_end`/`observed_at`, but never determines `available_at`.
 
-CVM CAD is a current issuer snapshot, not versioned filing history. It is excluded
-from historical filing claims and must not be joined into an as-of research snapshot.
-The notebook will gain a separate optional filings-inspection cell only after the
-provider/collector and Python catalog work is complete; filings will not be joined
+CVM CAD is a current issuer snapshot, not versioned filing history. It is retained as
+raw ingestion-only evidence, excluded from historical filing claims, and must not be
+joined into an as-of research snapshot. The Python catalog exposes dedicated
+`filings_canonical`, `filings`, and `filings_as_of(...)` interfaces. The notebook still
+needs a separate optional filings-inspection cell; filings will not be joined
 one-to-many into the existing price/fundamental/macro snapshot.
 
 B3 remains deferred. No B3 source, instrument mapping, or historical-availability
@@ -42,7 +45,7 @@ claim is part of this foundation until unattended access, a captured fixture, an
 the required market-data policy boundary are established.
 
 ```text
-SEC / FRED / BCB / price provider
+SEC / FRED / BCB / Yahoo / CVM provider
             |
             v
  collector + source adapter -----> PostgreSQL
@@ -173,7 +176,8 @@ implementation-neutral so an S3-compatible RawStore can replace the filesystem.
 - Latest-only PostgreSQL snapshots are replaceable operational projections, never
   authoritative history.
 - Grafana exposes latest-only price and macro projections; SEC remains ingestion-only
-  because there is no fundamental snapshot table.
+  because there is no fundamental snapshot table. CVM CAD is raw ingestion-only, while
+  CVM IPE is available through the canonical filing dataset and Python filing catalog.
 - Unmanaged pre-contract or pre-manifest normalized data that lacks the required
   schema, provenance, or manifest contract fails closed and requires a recoverable
   archive/reset before reingestion; raw evidence is retained. Earlier valid v1

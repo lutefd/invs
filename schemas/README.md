@@ -52,19 +52,21 @@ source normalizer; readers must not substitute `observed_at`, `period_end`, or a
 delivery date as a publication instant. Numeric fundamentals, macro vintages, and
 corporate actions retain their stricter source-specific publication requirements.
 
-The v1 contract includes a canonical filing-metadata dataset, and its writer is
-present. CVM provider/collector integration and Python research-catalog exposure are
-still staged, however, so no CVM acceptance is claimed. A CVM IPE delivery date is
-retained as `filing_date` and may populate `period_end`/`observed_at` when the source
-supplies a reference date, but it does not establish `published_at`. CVM IPE rows
+The v1 contract includes a canonical filing-metadata dataset, and its writer,
+CVM provider/collector integration, and Python research-catalog exposure are present.
+A fresh live CVM acceptance is still pending, so no CVM acceptance is claimed. A CVM
+IPE delivery date is retained as `filing_date` and may populate
+`period_end`/`observed_at` when the source supplies a reference date, but it does not
+establish `published_at`. CVM IPE rows
 therefore use `published_at: null` and `published_precision: "unknown"`; `available_at`
 is explicit (normally durable receipt time), never derived from `period_end`, and
 supports only known-to-this-installation live replay rather than historical public-
 availability claims. The filing natural key is `(source, source_document_id)`, so a
 source version must be part of `source_document_id` when it changes document identity.
 
-CVM CAD is a current issuer snapshot, not versioned filing history. It is excluded
-from historical filing claims and must not be joined into an as-of research snapshot.
+CVM CAD is a current issuer snapshot, not versioned filing history. The collector
+retains it as raw ingestion-only evidence; it is excluded from historical filing
+claims and must not be joined into an as-of research snapshot.
 
 All timestamps are UTC RFC 3339 values ending in `Z`. Financial decimals are strings
 so Go, Python, JSON, and Parquet conversions do not silently round them.
