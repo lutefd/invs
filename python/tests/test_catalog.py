@@ -285,12 +285,102 @@ def _write_macro(root: Path, *, sentinel: bool = False) -> Path:
     )
 
 
+def _sql_string(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _filing_select(
+    *,
+    filing_id: str = "3b3d88f5-55b8-4dc5-a6be-2f77e9e99201",
+    source: str = "cvm",
+    source_document_id: str = "cvm-ipe:1023:12345:v1",
+    form_type: str = "cvm_ipe",
+    accession_number: str = "12345",
+    category: str = "Categoria 'exata'; ação",
+    document_type: str = "Tipo exato",
+    species: str = "Espécie exata",
+    subject: str = "Assunto exato",
+    presentation_type: str = "Tipo_Apresentacao exato",
+    primary_document: str = "not-downloaded",
+    amends_source_document_id: str = "",
+    filing_date: str = "2026-01-07",
+    period_end: str = "2020-12-31",
+    has_period_end: bool = True,
+    observed: str = "2020-12-31 00:00:00Z",
+    has_observed: bool = True,
+    observed_precision: str = "date",
+    published: str = "1970-01-01 00:00:00Z",
+    has_published: bool = False,
+    published_precision: str = "unknown",
+    available: str = "2026-01-08 00:00:00Z",
+    effective: str = "1970-01-01 00:00:00Z",
+    has_effective: bool = False,
+    ingested: str = "2026-01-08 00:00:00Z",
+    raw_hash: str = "d" * 64,
+    locator: str = "zip=2026/member=ipe.csv/row=7",
+) -> str:
+    period_sql = f"DATE {_sql_string(period_end if has_period_end else '1970-01-01')}"
+    observed_sql = f"TIMESTAMPTZ {_sql_string(observed if has_observed else '1970-01-01 00:00:00Z')}"
+    published_sql = f"TIMESTAMPTZ {_sql_string(published if has_published else '1970-01-01 00:00:00Z')}"
+    effective_sql = f"TIMESTAMPTZ {_sql_string(effective if has_effective else '1970-01-01 00:00:00Z')}"
+    return f"""
+        SELECT
+          '1.0.0'::VARCHAR AS schema_version,
+          {_sql_string(filing_id)}::VARCHAR AS id,
+          {_sql_string(source)}::VARCHAR AS source,
+          '{ISSUER_ID}'::VARCHAR AS issuer_id,
+          {_sql_string(source_document_id)}::VARCHAR AS source_document_id,
+          'https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/IPE/DADOS/ipe_2026.zip'::VARCHAR AS document_url,
+          {_sql_string(accession_number)}::VARCHAR AS accession_number,
+          {_sql_string(form_type)}::VARCHAR AS form_type,
+          {_sql_string(category)}::VARCHAR AS category,
+          {_sql_string(document_type)}::VARCHAR AS document_type,
+          {_sql_string(species)}::VARCHAR AS species,
+          {_sql_string(subject)}::VARCHAR AS subject,
+          {_sql_string(presentation_type)}::VARCHAR AS presentation_type,
+          {_sql_string(primary_document)}::VARCHAR AS primary_document,
+          {_sql_string(amends_source_document_id)}::VARCHAR AS amends_source_document_id,
+          DATE {_sql_string(filing_date)} AS filing_date,
+          {period_sql} AS period_end, {'true' if has_period_end else 'false'} AS has_period_end,
+          {observed_sql} AS observed_at, {'true' if has_observed else 'false'} AS has_observed_at,
+          {_sql_string(observed_precision)}::VARCHAR AS observed_precision,
+          {published_sql} AS published_at, {'true' if has_published else 'false'} AS has_published_at,
+          {_sql_string(published_precision)}::VARCHAR AS published_precision,
+          TIMESTAMPTZ {_sql_string(available)} AS available_at,
+          {effective_sql} AS effective_at, {'true' if has_effective else 'false'} AS has_effective_at,
+          TIMESTAMPTZ {_sql_string(ingested)} AS ingested_at,
+          {_sql_string(raw_hash)}::VARCHAR AS raw_payload_hash,
+          '{SOURCE_ID}'::VARCHAR AS data_source_id,
+          '{RUN_ID}'::VARCHAR AS ingestion_run_id,
+          {_sql_string(locator)}::VARCHAR AS raw_record_locator,
+          'go-v1'::VARCHAR AS normalizer_version
+    """
+
+
+def _write_filing_parts(root: Path, queries: list[str]) -> Path:
+    directory = root / "filings" / "source=cvm" / f"issuer_id={ISSUER_ID}"
+    paths = []
+    for index, query in enumerate(queries):
+        path = directory / f"filings-{index}.parquet"
+        _write_parquet(path, query)
+        paths.append(path)
+    return _write_manifest(
+        directory / "manifest.json",
+        paths,
+        dataset="filings",
+        source="cvm",
+        partition_key="issuer_id",
+        partition_value=ISSUER_ID,
+    )
+
+
 def test_fresh_data_root_registers_typed_empty_views(tmp_path: Path) -> None:
     catalog = ResearchCatalog(tmp_path).register()
     mapping = SecurityMapping("missing", "missing")
 
-    assert catalog.missing() == ("prices", "fundamentals", "macroeconomics")
+    assert catalog.missing() == ("prices", "fundamentals", "macroeconomics", "filings")
     assert catalog.connection.execute("select count(*) from prices_canonical").fetchone() == (0,)
+    assert catalog.connection.execute("select count(*) from filings_canonical").fetchone() == (0,)
     assert catalog.research_snapshot(
         decision_at="2025-03-01T00:00:00Z",
         mapping=mapping,
@@ -326,7 +416,7 @@ def test_legacy_data_parquet_is_ignored_without_a_manifest(tmp_path: Path) -> No
 
     catalog = ResearchCatalog(tmp_path).register()
 
-    assert catalog.missing() == ("prices", "fundamentals", "macroeconomics")
+    assert catalog.missing() == ("prices", "fundamentals", "macroeconomics", "filings")
     assert catalog.connection.execute("SELECT count(*) FROM prices_canonical").fetchone() == (0,)
 
 
@@ -396,7 +486,7 @@ def test_canonical_v1_preserves_strings_provenance_and_adds_numeric_views(
     assert numeric[2] == pytest.approx(100.12345678901235)
     assert numeric[3] == "1000.25"
     assert str(numeric[4]) == "1000.250000000000000000"
-    assert [item.file_count for item in catalog.status()] == [1, 1, 1]
+    assert [item.file_count for item in catalog.status()] == [1, 1, 1, 0]
 
 
 def test_new_observed_precision_is_preserved_in_canonical_and_research_views(
@@ -755,6 +845,255 @@ def test_physical_sentinels_are_exposed_as_sql_null(tmp_path: Path) -> None:
     assert catalog.connection.execute(
         "SELECT seasonal_adjustment, vintage_at FROM macroeconomics_canonical"
     ).fetchone() == (None, None)
+
+
+def test_filings_register_exact_physical_contract_and_metadata(tmp_path: Path) -> None:
+    manifest_path = _write_filing_parts(tmp_path / "normalized", [_filing_select()])
+    catalog = ResearchCatalog(tmp_path).register()
+
+    columns = catalog.connection.execute(
+        "DESCRIBE SELECT * FROM filings_canonical"
+    ).fetchall()
+    assert [row[0] for row in columns] == [
+        "schema_version",
+        "id",
+        "source",
+        "issuer_id",
+        "source_document_id",
+        "document_url",
+        "accession_number",
+        "form_type",
+        "category",
+        "document_type",
+        "species",
+        "subject",
+        "presentation_type",
+        "primary_document",
+        "amends_source_document_id",
+        "filing_date",
+        "period_end",
+        "has_period_end",
+        "observed_at",
+        "has_observed_at",
+        "observed_precision",
+        "published_at",
+        "has_published_at",
+        "published_precision",
+        "available_at",
+        "effective_at",
+        "has_effective_at",
+        "ingested_at",
+        "raw_payload_hash",
+        "data_source_id",
+        "ingestion_run_id",
+        "raw_record_locator",
+        "normalizer_version",
+    ]
+    canonical = catalog.connection.execute(
+        """
+        SELECT source_document_id, accession_number, category, document_type, species,
+               subject, presentation_type, primary_document, amends_source_document_id,
+               observed_precision, published_at, published_precision, available_at,
+               raw_payload_hash, data_source_id, ingestion_run_id, raw_record_locator
+        FROM filings_canonical
+        """
+    ).fetchone()
+    assert canonical == (
+        "cvm-ipe:1023:12345:v1",
+        "12345",
+        "Categoria 'exata'; ação",
+        "Tipo exato",
+        "Espécie exata",
+        "Assunto exato",
+        "Tipo_Apresentacao exato",
+        "not-downloaded",
+        None,
+        "date",
+        None,
+        "unknown",
+        canonical[12],
+        "d" * 64,
+        SOURCE_ID,
+        RUN_ID,
+        "zip=2026/member=ipe.csv/row=7",
+    )
+    assert canonical[12] is not None
+    assert catalog.status()[-1].row_count == 1
+    assert manifest_path.exists()
+
+
+def test_filings_manifest_part_is_verified(tmp_path: Path) -> None:
+    manifest_path = _write_filing_parts(tmp_path / "normalized", [_filing_select()])
+    part_path = manifest_path.parent / json.loads(
+        manifest_path.read_text(encoding="utf-8")
+    )["parts"][0]["path"]
+    part_path.write_bytes(part_path.read_bytes() + b"tampered")
+
+    with pytest.raises(DatasetSchemaError, match="SHA-256 mismatch"):
+        ResearchCatalog(tmp_path).register()
+
+
+def test_filing_null_timestamps_and_optional_strings_do_not_leak_epoch(
+    tmp_path: Path,
+) -> None:
+    _write_filing_parts(
+        tmp_path / "normalized",
+        [
+            _filing_select(
+                accession_number="",
+                category="",
+                document_type="",
+                species="",
+                subject="",
+                presentation_type="",
+                primary_document="",
+                amends_source_document_id="",
+                has_period_end=False,
+                has_observed=False,
+                observed_precision="unknown",
+                has_published=False,
+                published_precision="unknown",
+                has_effective=False,
+            )
+        ],
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+
+    canonical = catalog.connection.execute(
+        """
+        SELECT accession_number, category, document_type, species, subject,
+               presentation_type, primary_document, amends_source_document_id,
+               period_end, observed_at, published_at, effective_at,
+               available_at
+        FROM filings_canonical
+        """
+    ).fetchone()
+    research = catalog.connection.execute(
+        "SELECT period_end, observed_at, published_at, effective_at FROM filings"
+    ).fetchone()
+    assert canonical[:12] == (None,) * 12
+    assert research == (None, None, None, None)
+    assert canonical[12] is not None
+
+
+def test_filings_as_of_uses_availability_and_observed_cutoffs(tmp_path: Path) -> None:
+    _write_filing_parts(
+        tmp_path / "normalized",
+        [
+            "\nUNION ALL\n".join(
+                [
+                    _filing_select(
+                        source_document_id="cvm-ipe:1023:base:v1",
+                        available="2026-01-08 00:00:00Z",
+                        ingested="2026-01-08 00:00:00Z",
+                        raw_hash="e" * 64,
+                    ),
+                    _filing_select(
+                        source_document_id="cvm-ipe:1023:old-period:v1",
+                        period_end="2000-12-31",
+                        observed="2000-12-31 00:00:00Z",
+                        available="2026-02-01 00:00:00Z",
+                        ingested="2026-02-01 00:00:00Z",
+                        raw_hash="f" * 64,
+                    ),
+                    _filing_select(
+                        source_document_id="cvm-ipe:1023:future-observed:v1",
+                        observed="2027-01-01 00:00:00Z",
+                        available="2026-01-08 00:00:00Z",
+                        ingested="2026-01-08 00:00:00Z",
+                        raw_hash="1" * 64,
+                    ),
+                ]
+            )
+        ],
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+
+    before_late = catalog.filings_as_of(
+        decision_at="2026-01-15T00:00:00Z", issuer_id=ISSUER_ID
+    )
+    after_late = catalog.filings_as_of(
+        decision_at="2026-03-01T00:00:00Z", issuer_id=ISSUER_ID
+    )
+
+    assert before_late["source_document_id"].tolist() == ["cvm-ipe:1023:base:v1"]
+    assert after_late["source_document_id"].tolist() == [
+        "cvm-ipe:1023:base:v1",
+        "cvm-ipe:1023:old-period:v1",
+    ]
+    assert after_late["published_at"].isna().all()
+    assert "future-observed" not in after_late["source_document_id"].tolist()
+
+
+def test_filings_as_of_excludes_current_cad_only_in_historical_mode(
+    tmp_path: Path,
+) -> None:
+    _write_filing_parts(
+        tmp_path / "normalized",
+        [
+            "\nUNION ALL\n".join(
+                [
+                    _filing_select(
+                        source_document_id="cvm-ipe:1023:historical:v1",
+                        raw_hash="2" * 64,
+                    ),
+                    _filing_select(
+                        source_document_id="cvm-cad:1023:2026-01-08",
+                        form_type="cvm_cad",
+                        has_observed=False,
+                        observed_precision="unknown",
+                        raw_hash="3" * 64,
+                    ),
+                ]
+            )
+        ],
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+
+    historical = catalog.filings_as_of(
+        decision_at="2026-01-15T00:00:00Z", issuer_id=ISSUER_ID
+    )
+    replay = catalog.filings_as_of(
+        decision_at="2026-01-15T00:00:00Z",
+        mode="installation_replay",
+        issuer_id=ISSUER_ID,
+    )
+
+    assert historical["source_document_id"].tolist() == ["cvm-ipe:1023:historical:v1"]
+    assert replay["source_document_id"].tolist() == [
+        "cvm-cad:1023:2026-01-08",
+        "cvm-ipe:1023:historical:v1",
+    ]
+
+
+def test_filings_keep_versioned_source_document_identity(tmp_path: Path) -> None:
+    _write_filing_parts(
+        tmp_path / "normalized",
+        [
+            "\nUNION ALL\n".join(
+                [
+                    _filing_select(
+                        source_document_id="cvm-ipe:1023:12345:v1",
+                        raw_hash="4" * 64,
+                    ),
+                    _filing_select(
+                        filing_id="4c3d88f5-55b8-4dc5-a6be-2f77e9e99201",
+                        source_document_id="cvm-ipe:1023:12345:v2",
+                        category="Categoria versão 2",
+                        raw_hash="5" * 64,
+                    ),
+                ]
+            )
+        ],
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+
+    assert catalog.connection.execute(
+        "SELECT source_document_id, category FROM filings ORDER BY source_document_id"
+    ).fetchall() == [
+        ("cvm-ipe:1023:12345:v1", "Categoria 'exata'; ação"),
+        ("cvm-ipe:1023:12345:v2", "Categoria versão 2"),
+    ]
 
 
 def test_current_yaml_mapping_is_loaded_without_historical_resolution(

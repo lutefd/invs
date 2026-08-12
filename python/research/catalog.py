@@ -116,6 +116,7 @@ _PARTITION_KEYS: Final[dict[str, str]] = {
     "prices": "security_id",
     "fundamentals": "issuer_id",
     "macroeconomics": "series_id",
+    "filings": "issuer_id",
 }
 
 _PRICE_FIELDS = (
@@ -207,6 +208,42 @@ _MACRO_FIELDS = (
     _Field("normalizer_version", "VARCHAR"),
 )
 
+_FILING_FIELDS = (
+    _Field("schema_version", "VARCHAR"),
+    _Field("id", "VARCHAR"),
+    _Field("source", "VARCHAR"),
+    _Field("issuer_id", "VARCHAR"),
+    _Field("source_document_id", "VARCHAR"),
+    _Field("document_url", "VARCHAR"),
+    _Field("accession_number", "VARCHAR"),
+    _Field("form_type", "VARCHAR"),
+    _Field("category", "VARCHAR"),
+    _Field("document_type", "VARCHAR"),
+    _Field("species", "VARCHAR"),
+    _Field("subject", "VARCHAR"),
+    _Field("presentation_type", "VARCHAR"),
+    _Field("primary_document", "VARCHAR"),
+    _Field("amends_source_document_id", "VARCHAR"),
+    _Field("filing_date", "DATE"),
+    _Field("period_end", "DATE"),
+    _Field("has_period_end", "BOOLEAN"),
+    _Field("observed_at", "TIMESTAMPTZ"),
+    _Field("has_observed_at", "BOOLEAN"),
+    _Field("observed_precision", "VARCHAR"),
+    _Field("published_at", "TIMESTAMPTZ"),
+    _Field("has_published_at", "BOOLEAN"),
+    _Field("published_precision", "VARCHAR"),
+    _Field("available_at", "TIMESTAMPTZ"),
+    _Field("effective_at", "TIMESTAMPTZ"),
+    _Field("has_effective_at", "BOOLEAN"),
+    _Field("ingested_at", "TIMESTAMPTZ"),
+    _Field("raw_payload_hash", "VARCHAR"),
+    _Field("data_source_id", "VARCHAR"),
+    _Field("ingestion_run_id", "VARCHAR"),
+    _Field("raw_record_locator", "VARCHAR"),
+    _Field("normalizer_version", "VARCHAR"),
+)
+
 _DATASETS: Final[dict[str, _Dataset]] = {
     "prices": _Dataset(
         "prices/**/manifest.json",
@@ -220,7 +257,27 @@ _DATASETS: Final[dict[str, _Dataset]] = {
     "macroeconomics": _Dataset(
         "macroeconomics/**/manifest.json", _MACRO_FIELDS, (("value", False, True),)
     ),
+    "filings": _Dataset("filings/**/manifest.json", _FILING_FIELDS, ()),
 }
+
+_FILING_NULLABLE_STRING_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "accession_number",
+        "category",
+        "document_type",
+        "species",
+        "subject",
+        "presentation_type",
+        "primary_document",
+        "amends_source_document_id",
+    }
+)
+_FILING_CAD_IDENTITIES: Final[frozenset[str]] = frozenset(
+    {"cad", "cvm_cad", "cvm-cad"}
+)
+_FILING_AS_OF_MODES: Final[frozenset[str]] = frozenset(
+    {"historical", "installation_replay", "known_at_installation"}
+)
 
 
 def _quote_literal(value: str) -> str:
@@ -644,6 +701,64 @@ class ResearchCatalog:
             raise TypeError("point_in_time_frame requires an explicit decision_at")
         return self.research_snapshot(**kwargs)
 
+    def filings_as_of(
+        self,
+        *,
+        decision_at: str,
+        mode: str = "historical",
+        issuer_id: str | None = None,
+        source: str | None = None,
+        form_type: str | None = None,
+    ):
+        """Return filing metadata known by ``decision_at``.
+
+        Availability is an explicit knowledge cutoff. This query never derives
+        it from ``filing_date``, ``period_end``, or ``published_at``. Rows with
+        an observed timestamp additionally require ``observed_at`` to be no
+        later than the decision timestamp.
+
+        ``historical`` is the default research policy and excludes the CVM CAD
+        current snapshot by source/form identity. ``installation_replay`` and
+        ``known_at_installation`` are explicit local-replay policies that may
+        include CAD; neither mode turns CAD into historical issuer state.
+        """
+        if mode not in _FILING_AS_OF_MODES:
+            allowed = ", ".join(sorted(_FILING_AS_OF_MODES))
+            raise ValueError(f"unsupported filings_as_of mode {mode!r}; use one of {allowed}")
+
+        parameters: dict[str, object] = {"decision_at": decision_at}
+        clauses = [
+            "available_at <= CAST($decision_at AS TIMESTAMPTZ)",
+            "(NOT has_observed_at OR observed_at <= CAST($decision_at AS TIMESTAMPTZ))",
+        ]
+        if mode == "historical":
+            cad_identities = ", ".join(
+                _quote_literal(identity) for identity in sorted(_FILING_CAD_IDENTITIES)
+            )
+            clauses.append(
+                "NOT ("
+                f"lower(coalesce(source, '')) IN ({cad_identities}) OR "
+                f"lower(coalesce(form_type, '')) IN ({cad_identities})"
+                ")"
+            )
+        for field, value in (
+            ("issuer_id", issuer_id),
+            ("source", source),
+            ("form_type", form_type),
+        ):
+            if value is not None:
+                parameter_name = f"filing_{field}"
+                clauses.append(f"{field} = ${parameter_name}")
+                parameters[parameter_name] = value
+
+        sql = f"""
+            SELECT *
+            FROM filings
+            WHERE {' AND '.join(clauses)}
+            ORDER BY filing_date, source, source_document_id, available_at, ingested_at
+        """
+        return self.connection.execute(sql, parameters).fetchdf()
+
     def _register_dataset(self, name: str, dataset: _Dataset) -> None:
         absolute_pattern = self.normalized_root / dataset.pattern
         manifest_paths = sorted(
@@ -904,6 +1019,12 @@ class ResearchCatalog:
                 "value": "has_value",
                 "vintage_at": "has_vintage_at",
             },
+            "filings": {
+                "period_end": "has_period_end",
+                "observed_at": "has_observed_at",
+                "published_at": "has_published_at",
+                "effective_at": "has_effective_at",
+            },
         }[name]
         projections = []
         for field in fields:
@@ -911,6 +1032,8 @@ class ResearchCatalog:
             cast = f"CAST({source} AS {field.sql_type})"
             if presence := nullable_values.get(field.name):
                 cast = f"CASE WHEN {_quote_identifier(presence)} THEN {cast} END"
+            elif name == "filings" and field.name in _FILING_NULLABLE_STRING_FIELDS:
+                cast = f"NULLIF({cast}, '')"
             projections.append(f"{cast} AS {source}")
         return projections
 
@@ -948,6 +1071,20 @@ class ResearchCatalog:
                     value AS value_text, TRY_CAST(value AS {_DECIMAL_TYPE}) AS value_decimal,
                     TRY_CAST(value AS DOUBLE) AS value, has_value, revision,
                     accession_number, form, fiscal_year, fiscal_period, frame,
+                    raw_payload_hash, data_source_id, ingestion_run_id,
+                    raw_record_locator, normalizer_version
+                FROM {canonical}
+            """
+        elif name == "filings":
+            sql = f"""
+                SELECT
+                    schema_version, id, source, issuer_id, source_document_id, document_url,
+                    accession_number, form_type, category, document_type, species, subject,
+                    presentation_type, primary_document, amends_source_document_id,
+                    filing_date, period_end, has_period_end,
+                    observed_at, has_observed_at, observed_precision,
+                    published_at, has_published_at, published_precision,
+                    available_at, effective_at, has_effective_at, ingested_at,
                     raw_payload_hash, data_source_id, ingestion_run_id,
                     raw_record_locator, normalizer_version
                 FROM {canonical}
