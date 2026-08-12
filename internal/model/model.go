@@ -16,7 +16,8 @@ const (
 
 // Temporal records the distinct event, publication, availability and ingestion times.
 // AvailableAt is the earliest safe point for point-in-time research. For SEC facts where
-// only a filed date is supplied, it is conservatively the start of the following UTC day.
+// only a filed date is supplied, adapters must choose a conservative fallback later than
+// any plausible acceptance time on that date (SEC currently uses filed date plus 48 hours).
 type Temporal struct {
 	ObservedAt         time.Time
 	PublishedAt        time.Time

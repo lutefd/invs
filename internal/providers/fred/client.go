@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net/url"
 	"sort"
 	"strconv"
@@ -73,18 +74,22 @@ func parseCSV(b []byte, seriesID string, ingested time.Time) ([]model.EconomicOb
 	hash := digest(b)
 	unique := map[string]model.EconomicObservation{}
 	for _, row := range rows[1:] {
-		if len(row) != 2 || row[1] == "." || row[1] == "" {
+		if len(row) != 2 {
 			rejected++
+			continue
+		}
+		if row[1] == "." || row[1] == "" {
 			continue
 		}
 		day, e1 := time.Parse("2006-01-02", row[0])
 		value, e2 := strconv.ParseFloat(row[1], 64)
-		if e1 != nil || e2 != nil {
+		if e1 != nil || e2 != nil || math.IsNaN(value) || math.IsInf(value, 0) {
 			rejected++
 			continue
 		}
 		day = day.UTC()
-		unique[row[0]] = model.EconomicObservation{Source: "fred", SeriesID: seriesID, Unit: "unknown", Value: value, RawPayloadHash: hash, Temporal: model.Temporal{ObservedAt: day, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
+		vintage := ingested
+		unique[row[0]] = model.EconomicObservation{Source: "fred", SeriesID: seriesID, Unit: "unknown", Value: value, VintageAt: &vintage, RawPayloadHash: hash, Temporal: model.Temporal{ObservedAt: day, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
 	}
 	result := make([]model.EconomicObservation, 0, len(unique))
 	for _, o := range unique {

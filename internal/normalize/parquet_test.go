@@ -2,6 +2,7 @@ package normalize
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -29,6 +30,27 @@ func TestWritePricesIsIdempotentAndQueryable(t *testing.T) {
 	rows, err := parquet.ReadFile[PriceRow](path)
 	if err != nil || len(rows) != 1 || rows[0].SecurityID != "security-1" || rows[0].ObservedAt != at.UnixMicro() {
 		t.Fatalf("rows=%+v err=%v", rows, err)
+	}
+}
+
+func TestCorruptExistingParquetIsNeverOverwritten(t *testing.T) {
+	root := t.TempDir()
+	w, _ := NewWriter(root)
+	id := "00000000-0000-4000-8000-000000000002"
+	path := filepath.Join(root, "prices", "source=yahoo", "security_id="+id, "data.parquet")
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("corrupt"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := w.WritePrices(id, []model.PriceBar{{Source: "yahoo", SecurityID: id}})
+	if err == nil {
+		t.Fatal("expected corrupt parquet error")
+	}
+	b, _ := os.ReadFile(path)
+	if string(b) != "corrupt" {
+		t.Fatal("corrupt input was overwritten")
 	}
 }
 
@@ -63,5 +85,31 @@ func TestPhysicalSentinelsExposeLogicalNulls(t *testing.T) {
 	gotVintage := (EconomicRow{VintageAt: want.UnixMicro(), HasVintageAt: true}).VintageTime()
 	if gotDate == nil || !gotDate.Equal(want) || gotVintage == nil || !gotVintage.Equal(want) {
 		t.Fatalf("date=%v vintage=%v", gotDate, gotVintage)
+	}
+}
+
+func TestRevisionKeysPreserveCorrectionsWithoutSnapshotDuplication(t *testing.T) {
+	base := PriceRow{Source: "yahoo", SecurityID: "s", ObservedAt: 1, PublishedAt: 2}
+	corrected := base
+	corrected.PublishedAt = 3
+	if priceKey(base) == priceKey(corrected) {
+		t.Fatal("price correction was not versioned")
+	}
+	f := FundamentalRow{Source: "sec", IssuerID: "i", Concept: "Revenue", AccessionNumber: "a", PublishedAt: 2, RawPayloadHash: "old"}
+	snapshot := f
+	snapshot.RawPayloadHash = "new"
+	if fundamentalKey(f) != fundamentalKey(snapshot) {
+		t.Fatal("unchanged fact duplicated by snapshot hash")
+	}
+	e := EconomicRow{Source: "fred", SeriesID: "x", ObservedAt: 1, Value: 10, PublishedAt: 2}
+	newSnapshot := e
+	newSnapshot.PublishedAt = 3
+	if economicKey(e) == economicKey(newSnapshot) {
+		t.Fatal("repeated value at a later publication lost its vintage")
+	}
+	revised := newSnapshot
+	revised.Value = 11
+	if economicKey(e) == economicKey(revised) {
+		t.Fatal("macro revision overwritten")
 	}
 }

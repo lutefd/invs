@@ -76,6 +76,11 @@ func (s *FileRawStore) Put(ctx context.Context, key string, data io.Reader, meta
 	metadata.FetchedAt = metadata.FetchedAt.UTC()
 
 	if current, statErr := readMetadata(path + ".metadata.json"); statErr == nil {
+		if _, dataErr := os.Stat(path); errors.Is(dataErr, os.ErrNotExist) {
+			return RawMetadata{}, fmt.Errorf("raw metadata exists without data for %s", key)
+		} else if dataErr != nil {
+			return RawMetadata{}, dataErr
+		}
 		if current.SHA256 != metadata.SHA256 {
 			return RawMetadata{}, fmt.Errorf("%w: %s", ErrImmutableConflict, key)
 		}
@@ -84,7 +89,17 @@ func (s *FileRawStore) Put(ctx context.Context, key string, data io.Reader, meta
 		return RawMetadata{}, statErr
 	}
 	if _, statErr := os.Stat(path); statErr == nil {
-		return RawMetadata{}, fmt.Errorf("%w: data exists without metadata for %s", ErrImmutableConflict, key)
+		existingHash, existingSize, hashErr := hashFile(path)
+		if hashErr != nil {
+			return RawMetadata{}, hashErr
+		}
+		if existingHash != metadata.SHA256 || existingSize != metadata.Size {
+			return RawMetadata{}, fmt.Errorf("%w: data exists without metadata for %s", ErrImmutableConflict, key)
+		}
+		if err := atomicJSON(path+".metadata.json", metadata); err != nil {
+			return RawMetadata{}, err
+		}
+		return metadata, nil
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		return RawMetadata{}, statErr
 	}
@@ -94,6 +109,9 @@ func (s *FileRawStore) Put(ctx context.Context, key string, data io.Reader, meta
 	}
 	if err := os.Rename(tmpName, path); err != nil {
 		return RawMetadata{}, fmt.Errorf("publish raw object: %w", err)
+	}
+	if err := syncDir(filepath.Dir(path)); err != nil {
+		return RawMetadata{}, err
 	}
 	if err := atomicJSON(path+".metadata.json", metadata); err != nil {
 		return RawMetadata{}, err
@@ -116,6 +134,15 @@ func (s *FileRawStore) Get(ctx context.Context, key string) (io.ReadCloser, RawM
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, RawMetadata{}, fmt.Errorf("open raw object: %w", err)
+	}
+	hash, size, err := hashFile(path)
+	if err != nil {
+		f.Close()
+		return nil, RawMetadata{}, err
+	}
+	if hash != meta.SHA256 || size != meta.Size {
+		f.Close()
+		return nil, RawMetadata{}, fmt.Errorf("raw object integrity mismatch for %s", key)
 	}
 	return f, meta, nil
 }
@@ -182,7 +209,32 @@ func atomicJSON(path string, value any) error {
 	if err := os.Chmod(name, 0o640); err != nil {
 		return err
 	}
-	return os.Rename(name, path)
+	if err := os.Rename(name, path); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(path))
+}
+
+func hashFile(path string) (string, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer f.Close()
+	h := sha256.New()
+	n, err := io.Copy(h, f)
+	if err != nil {
+		return "", 0, err
+	}
+	return hex.EncodeToString(h.Sum(nil)), n, nil
+}
+func syncDir(path string) error {
+	d, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
 
 func readMetadata(path string) (RawMetadata, error) {

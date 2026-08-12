@@ -8,7 +8,7 @@ http:
   initial_backoff: 500ms
 providers:
   sec:
-    enabled: true
+    enabled: false
   prices:
     enabled: true
     start: 2020-01-01
@@ -16,11 +16,15 @@ providers:
     enabled: true
     series: [DGS10, CPIAUCSL]
 universe:
-  - issuer_id: issuer-apple
-    security_id: security-aapl-us
+  - issuer_id: 1b3d88f5-55b8-4dc5-a6be-2f77e9e99201
+    security_id: 469fc20f-7d4b-45bb-b827-05f8410e71aa
     legal_name: Apple Inc.
+    country_code: US
+    security_type: common_stock
+    primary_listing: true
     cik: 320193
     ticker: AAPL
+    identifier_valid_from: 1980-12-12
     yahoo_symbol: AAPL
     exchange: NASDAQ
     mic: XNAS

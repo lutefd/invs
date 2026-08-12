@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -120,9 +121,15 @@ func (w *Writer) WritePrices(securityID string, observations []model.PriceBar) (
 	}
 	incoming := make([]PriceRow, 0, len(observations))
 	for _, o := range observations {
+		if o.Volume < 0 || o.Open < 0 || o.High < 0 || o.Low < 0 || o.Close < 0 || math.IsNaN(o.Open) || math.IsNaN(o.High) || math.IsNaN(o.Low) || math.IsNaN(o.Close) || math.IsInf(o.Open, 0) || math.IsInf(o.High, 0) || math.IsInf(o.Low, 0) || math.IsInf(o.Close, 0) || o.Low > o.High || o.Open < o.Low || o.Open > o.High || o.Close < o.Low || o.Close > o.High {
+			return "", 0, fmt.Errorf("invalid price bar for %s at %s", o.SecurityID, o.Temporal.ObservedAt)
+		}
 		incoming = append(incoming, priceRow(o))
 	}
-	existing, _ := readIfExists[PriceRow](path)
+	existing, err := readIfExists[PriceRow](path)
+	if err != nil {
+		return "", 0, fmt.Errorf("read existing prices: %w", err)
+	}
 	byKey := map[string]PriceRow{}
 	for _, r := range existing {
 		byKey[priceKey(r)] = r
@@ -164,9 +171,15 @@ func (w *Writer) WriteFundamentals(issuerID string, observations []model.Fundame
 	}
 	incoming := make([]FundamentalRow, 0, len(observations))
 	for _, o := range observations {
+		if math.IsNaN(o.Value) || math.IsInf(o.Value, 0) {
+			return "", 0, fmt.Errorf("non-finite fundamental value")
+		}
 		incoming = append(incoming, fundamentalRow(o))
 	}
-	existing, _ := readIfExists[FundamentalRow](path)
+	existing, err := readIfExists[FundamentalRow](path)
+	if err != nil {
+		return "", 0, fmt.Errorf("read existing fundamentals: %w", err)
+	}
 	byKey := map[string]FundamentalRow{}
 	for _, r := range existing {
 		byKey[fundamentalKey(r)] = r
@@ -205,9 +218,15 @@ func (w *Writer) WriteEconomics(seriesID string, observations []model.EconomicOb
 	}
 	incoming := make([]EconomicRow, 0, len(observations))
 	for _, o := range observations {
+		if math.IsNaN(o.Value) || math.IsInf(o.Value, 0) {
+			return "", 0, fmt.Errorf("non-finite economic value")
+		}
 		incoming = append(incoming, economicRow(o))
 	}
-	existing, _ := readIfExists[EconomicRow](path)
+	existing, err := readIfExists[EconomicRow](path)
+	if err != nil {
+		return "", 0, fmt.Errorf("read existing macroeconomics: %w", err)
+	}
 	byKey := map[string]EconomicRow{}
 	for _, r := range existing {
 		byKey[economicKey(r)] = r
@@ -278,11 +297,15 @@ func economicRow(o model.EconomicObservation) EconomicRow {
 	return EconomicRow{Source: o.Source, SeriesID: o.SeriesID, Unit: o.Unit, ObservedAt: micros(o.Temporal.ObservedAt), PublishedAt: micros(o.Temporal.PublishedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), Value: o.Value, VintageAt: vintage, HasVintageAt: hasVintage, RawPayloadHash: o.RawPayloadHash}
 }
 
-func priceKey(r PriceRow) string { return fmt.Sprintf("%s\x1f%d", r.SecurityID, r.ObservedAt) }
-func fundamentalKey(r FundamentalRow) string {
-	return strings.Join([]string{r.IssuerID, r.Taxonomy, r.Concept, r.Unit, r.AccessionNumber, fmt.Sprint(r.HasPeriodStart), fmt.Sprint(r.PeriodStart), fmt.Sprint(r.PeriodEnd), r.Frame}, "\x1f")
+func priceKey(r PriceRow) string {
+	return fmt.Sprintf("%s\x1f%s\x1f%d\x1f%d", r.Source, r.SecurityID, r.ObservedAt, r.PublishedAt)
 }
-func economicKey(r EconomicRow) string { return fmt.Sprintf("%s\x1f%d", r.SeriesID, r.ObservedAt) }
+func fundamentalKey(r FundamentalRow) string {
+	return strings.Join([]string{r.Source, r.IssuerID, r.Taxonomy, r.Concept, r.Unit, r.AccessionNumber, fmt.Sprint(r.HasPeriodStart), fmt.Sprint(r.PeriodStart), fmt.Sprint(r.PeriodEnd), r.Frame, fmt.Sprint(r.PublishedAt)}, "\x1f")
+}
+func economicKey(r EconomicRow) string {
+	return fmt.Sprintf("%s\x1f%s\x1f%d\x1f%d\x1f%d\x1f%.17g", r.Source, r.SeriesID, r.ObservedAt, r.PublishedAt, r.VintageAt, r.Value)
+}
 func samePrice(a, b PriceRow) bool {
 	return a.Source == b.Source && a.SecurityID == b.SecurityID && a.Currency == b.Currency && a.ObservedAt == b.ObservedAt && a.PublishedAt == b.PublishedAt && a.Open == b.Open && a.High == b.High && a.Low == b.Low && a.Close == b.Close && a.Volume == b.Volume
 }

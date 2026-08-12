@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"sort"
 	"strconv"
@@ -38,6 +39,7 @@ type RawDocument struct {
 }
 type CompanyResult struct {
 	Issuer                           model.Issuer
+	StateOfIncorporation             string
 	Filings                          []model.Filing
 	Facts                            []model.FundamentalObservation
 	Raw                              []RawDocument
@@ -67,24 +69,57 @@ func (c *Client) CollectCompany(ctx context.Context, issuerID string, cik int64)
 	if err != nil {
 		return CompanyResult{}, err
 	}
-	facts, receivedFacts, rejectedFacts, err := parseCompanyFacts(factBytes, issuerID, ingested)
+	acceptedByAccession := make(map[string]time.Time, len(filings))
+	for _, filing := range filings {
+		if filing.AcceptedAt != nil {
+			acceptedByAccession[filing.AccessionNumber] = *filing.AcceptedAt
+		}
+	}
+	facts, receivedFacts, rejectedFacts, err := parseCompanyFacts(factBytes, issuerID, cik, ingested, acceptedByAccession)
 	if err != nil {
 		return CompanyResult{}, err
 	}
 	return CompanyResult{
-		Issuer: issuer, Filings: filings, Facts: facts,
+		Issuer: issuer, StateOfIncorporation: submissionState(subBytes), Filings: filings, Facts: facts,
 		Raw:             []RawDocument{{Kind: "submissions", Data: subBytes, SHA256: digest(subBytes)}, {Kind: "companyfacts", Data: factBytes, SHA256: digest(factBytes)}},
 		RecordsReceived: receivedFilings + receivedFacts, RecordsRejected: rejectedFilings + rejectedFacts,
 	}, nil
 }
 
+func submissionState(b []byte) string {
+	var raw struct {
+		State string `json:"stateOfIncorporation"`
+	}
+	_ = json.Unmarshal(b, &raw)
+	return raw.State
+}
+
 type submissions struct {
 	Name, StateOfIncorporation, SICDescription string
-	SIC                                        json.Number `json:"sic"`
+	CIK                                        flexibleNumber `json:"cik"`
+	SIC                                        flexibleNumber `json:"sic"`
 	Filings                                    struct {
 		Recent recentFilings `json:"recent"`
 	} `json:"filings"`
 }
+type flexibleNumber string
+
+func (n *flexibleNumber) UnmarshalJSON(b []byte) error {
+	var s string
+	if len(b) > 0 && b[0] == '"' {
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+	} else {
+		s = string(b)
+	}
+	if _, err := strconv.ParseInt(s, 10, 64); err != nil {
+		return fmt.Errorf("invalid numeric value %q", s)
+	}
+	*n = flexibleNumber(s)
+	return nil
+}
+
 type recentFilings struct {
 	AccessionNumber, FilingDate, AcceptanceDateTime, Form, PrimaryDocument []string
 }
@@ -96,7 +131,15 @@ func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) 
 	if err := dec.Decode(&raw); err != nil {
 		return model.Issuer{}, nil, 0, 0, fmt.Errorf("decode SEC submissions: %w", err)
 	}
-	issuer := model.Issuer{ID: issuerID, LegalName: raw.Name, Country: raw.StateOfIncorporation, Industry: raw.SICDescription, CIK: cik}
+	parsedCIK, err := strconv.ParseInt(string(raw.CIK), 10, 64)
+	if err != nil || parsedCIK != cik {
+		return model.Issuer{}, nil, 0, 0, fmt.Errorf("SEC submissions CIK mismatch: got %q want %d", raw.CIK, cik)
+	}
+	if strings.TrimSpace(raw.Name) == "" {
+		return model.Issuer{}, nil, 0, 0, fmt.Errorf("SEC submissions missing legal name")
+	}
+	// StateOfIncorporation is retained as source metadata, never interpreted as an ISO country.
+	issuer := model.Issuer{ID: issuerID, LegalName: raw.Name, Industry: raw.SICDescription, CIK: cik}
 	r := raw.Filings.Recent
 	received := len(r.AccessionNumber)
 	rejected := 0
@@ -146,12 +189,15 @@ type fact struct {
 	Val                                      json.Number `json:"val"`
 }
 
-func parseCompanyFacts(b []byte, issuerID string, ingested time.Time) ([]model.FundamentalObservation, int, int, error) {
+func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested time.Time, acceptedByAccession map[string]time.Time) ([]model.FundamentalObservation, int, int, error) {
 	var raw companyFacts
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.UseNumber()
 	if err := dec.Decode(&raw); err != nil {
 		return nil, 0, 0, fmt.Errorf("decode SEC companyfacts: %w", err)
+	}
+	if raw.CIK != expectedCIK {
+		return nil, 0, 0, fmt.Errorf("SEC companyfacts CIK mismatch: got %d want %d", raw.CIK, expectedCIK)
 	}
 	hash := digest(b)
 	received, rejected := 0, 0
@@ -164,7 +210,7 @@ func parseCompanyFacts(b []byte, issuerID string, ingested time.Time) ([]model.F
 					end, endErr := time.Parse("2006-01-02", f.End)
 					filed, filedErr := time.Parse("2006-01-02", f.Filed)
 					value, valueErr := strconv.ParseFloat(f.Val.String(), 64)
-					if endErr != nil || filedErr != nil || valueErr != nil || f.Accn == "" {
+					if endErr != nil || filedErr != nil || valueErr != nil || math.IsNaN(value) || math.IsInf(value, 0) || f.Accn == "" {
 						rejected++
 						continue
 					}
@@ -180,10 +226,13 @@ func parseCompanyFacts(b []byte, issuerID string, ingested time.Time) ([]model.F
 					}
 					fy, _ := strconv.Atoi(f.FY.String())
 					filed = filed.UTC()
-					available := filed.AddDate(0, 0, 1)
+					published, available, precision := filed.Add(48*time.Hour), filed.Add(48*time.Hour), model.PrecisionDate
+					if accepted, ok := acceptedByAccession[f.Accn]; ok {
+						published, available, precision = accepted.UTC(), accepted.UTC(), model.PrecisionSecond
+					}
 					o := model.FundamentalObservation{
 						Source: "sec", IssuerID: issuerID, Taxonomy: taxonomy, Concept: concept, Unit: unit, Value: value,
-						Temporal:    model.Temporal{ObservedAt: end.UTC(), PublishedAt: filed, PublishedPrecision: model.PrecisionDate, AvailableAt: available, IngestedAt: ingested},
+						Temporal:    model.Temporal{ObservedAt: end.UTC(), PublishedAt: published, PublishedPrecision: precision, AvailableAt: available, IngestedAt: ingested},
 						PeriodStart: start, PeriodEnd: end.UTC(), AccessionNumber: f.Accn, Form: f.Form, FiscalYear: fy, FiscalPeriod: f.FP, Frame: f.Frame, RawPayloadHash: hash,
 					}
 					key := strings.Join([]string{issuerID, taxonomy, concept, unit, f.Accn, f.Start, f.End, f.Frame}, "\x1f")

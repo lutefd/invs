@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"sort"
 	"strconv"
@@ -47,8 +48,10 @@ func (c *Client) Collect(ctx context.Context, req model.HistoricalPriceRequest) 
 	if req.Start.IsZero() || req.End.IsZero() || req.End.Before(req.Start) {
 		return Result{}, fmt.Errorf("valid start and end dates are required")
 	}
-	base, _ := url.Parse(c.baseURL)
-	u := base.ResolveReference(&url.URL{Path: url.PathEscape(req.VendorSymbol)})
+	u, err := chartURL(c.baseURL, req.VendorSymbol)
+	if err != nil {
+		return Result{}, err
+	}
 	q := u.Query()
 	q.Set("period1", strconv.FormatInt(req.Start.UTC().Unix(), 10))
 	q.Set("period2", strconv.FormatInt(req.End.UTC().AddDate(0, 0, 1).Unix(), 10))
@@ -64,6 +67,15 @@ func (c *Client) Collect(ctx context.Context, req model.HistoricalPriceRequest) 
 		return Result{}, err
 	}
 	return Result{Bars: bars, Raw: b, SHA256: digest(b), RecordsReceived: received, RecordsRejected: rejected}, nil
+}
+
+func chartURL(baseURL, symbol string) (*url.URL, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse Yahoo base URL: %w", err)
+	}
+	escaped := url.PathEscape(symbol)
+	return base.ResolveReference(&url.URL{Path: symbol, RawPath: escaped}), nil
 }
 
 type response struct {
@@ -122,21 +134,20 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 			continue
 		}
 		open, high, low, closeValue, volume := *q.Open[i], *q.High[i], *q.Low[i], *q.Close[i], *q.Volume[i]
-		if volume < 0 || low > high || open < low || open > high || closeValue < low || closeValue > high {
+		if volume < 0 || open < 0 || high < 0 || low < 0 || closeValue < 0 || math.IsNaN(open) || math.IsNaN(high) || math.IsNaN(low) || math.IsNaN(closeValue) || math.IsInf(open, 0) || math.IsInf(high, 0) || math.IsInf(low, 0) || math.IsInf(closeValue, 0) || low > high || open < low || open > high || closeValue < low || closeValue > high {
 			rejected++
 			continue
 		}
 		day := time.Unix(ts, 0).In(loc)
 		closeAt := time.Date(day.Year(), day.Month(), day.Day(), 16, 0, 0, 0, loc).UTC()
 		if closeAt.After(ingested) {
-			rejected++
 			continue
 		}
 		key := closeAt.Format("2006-01-02")
 		if _, ok := unique[key]; ok {
 			continue
 		}
-		unique[key] = model.PriceBar{Source: "yahoo", SecurityID: securityID, Currency: currency, Open: open, High: high, Low: low, Close: closeValue, Volume: volume, RawPayloadHash: hash, Temporal: model.Temporal{ObservedAt: closeAt, PublishedAt: closeAt, PublishedPrecision: model.PrecisionSecond, AvailableAt: closeAt, IngestedAt: ingested}}
+		unique[key] = model.PriceBar{Source: "yahoo", SecurityID: securityID, Currency: currency, Open: open, High: high, Low: low, Close: closeValue, Volume: volume, RawPayloadHash: hash, Temporal: model.Temporal{ObservedAt: closeAt, PublishedAt: ingested, PublishedPrecision: model.PrecisionSecond, AvailableAt: ingested, IngestedAt: ingested}}
 	}
 	bars := make([]model.PriceBar, 0, len(unique))
 	for _, v := range unique {
