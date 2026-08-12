@@ -288,6 +288,11 @@ func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObser
 	}
 	return publish(w, dir, partition, existing, rows, metadata)
 }
+
+// WriteEconomics updates obs revisions in place after a successful write so
+// callers can publish the same effective revisions in their snapshots. The
+// input slice is unchanged when validation, conflict detection, or publishing
+// fails.
 func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation) (string, int, error) {
 	dir, err := w.partition("macroeconomics", "source=fred", "series_id="+seriesID)
 	if err != nil {
@@ -309,7 +314,8 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 		}
 	}
 	in := make([]EconomicRow, 0, len(obs))
-	for _, o := range obs {
+	effectiveRevisions := make([]int, len(obs))
+	for i, o := range obs {
 		r, err := economicRow(o)
 		if err != nil {
 			return "", 0, err
@@ -319,11 +325,13 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 			if economicKey(latest) == economicKey(r) && !sameEconomic(latest, r) {
 				return "", 0, fmt.Errorf("%w: %s", ErrNaturalKeyConflict, economicKey(r))
 			}
+			effectiveRevisions[i] = int(latest.Revision)
 			continue
 		}
 		if found && r.Revision <= latest.Revision {
 			r.Revision = latest.Revision + 1
 		}
+		effectiveRevisions[i] = int(r.Revision)
 		in = append(in, r)
 	}
 	rows, err := merge(existing, in, economicKey, sameEconomic)
@@ -337,7 +345,14 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 	if err != nil && !slices.Equal(existing, rows) {
 		return "", 0, err
 	}
-	return publish(w, dir, partition, existing, rows, metadata)
+	path, n, err := publish(w, dir, partition, existing, rows, metadata)
+	if err != nil {
+		return "", 0, err
+	}
+	for i := range obs {
+		obs[i].Revision = effectiveRevisions[i]
+	}
+	return path, n, nil
 }
 
 func priceRow(o model.PriceBar) (PriceRow, error) {

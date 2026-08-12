@@ -206,22 +206,43 @@ func TestMacroRevisionsNoOpUnchangedAndPreserveABA(t *testing.T) {
 	observed := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	pub := observed.Add(24 * time.Hour)
 	base := model.EconomicObservation{Source: "fred", SeriesID: "X", Geography: "US", Frequency: "monthly", Unit: "Index", Value: "1", Temporal: model.Temporal{ObservedAt: observed, PublishedAt: pub, AvailableAt: pub, IngestedAt: pub.Add(time.Hour)}, RawPayloadHash: rawHash, Provenance: provenance(pub.Add(time.Hour))}
-	path, n, err := w.WriteEconomics("X", []model.EconomicObservation{base})
+	first := []model.EconomicObservation{base}
+	path, n, err := w.WriteEconomics("X", first)
 	if err != nil || n != 1 {
 		t.Fatal(err)
+	}
+	if first[0].Revision != 0 {
+		t.Fatalf("initial input revision=%d, want 0", first[0].Revision)
 	}
 	same := base
 	same.Temporal.PublishedAt = pub.Add(time.Hour)
 	same.Temporal.AvailableAt = same.Temporal.PublishedAt
 	same.Temporal.IngestedAt = same.Temporal.PublishedAt.Add(time.Hour)
 	same.Provenance.IngestedAt = same.Temporal.IngestedAt
-	if _, n, err = w.WriteEconomics("X", []model.EconomicObservation{same}); err != nil || n != 0 {
+	sameInput := []model.EconomicObservation{same}
+	if _, n, err = w.WriteEconomics("X", sameInput); err != nil || n != 0 {
 		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if sameInput[0].Revision != 0 {
+		t.Fatalf("unchanged input revision=%d, want 0", sameInput[0].Revision)
 	}
 	b := same
 	b.Value = "2"
-	if _, _, err = w.WriteEconomics("X", []model.EconomicObservation{b}); err != nil {
+	changedInput := []model.EconomicObservation{b}
+	if _, _, err = w.WriteEconomics("X", changedInput); err != nil {
 		t.Fatal(err)
+	}
+	if changedInput[0].Revision != 1 {
+		t.Fatalf("changed input revision=%d, want 1", changedInput[0].Revision)
+	}
+	duplicate := changedInput[0]
+	duplicate.Revision = 0
+	duplicateInput := []model.EconomicObservation{duplicate}
+	if _, n, err = w.WriteEconomics("X", duplicateInput); err != nil || n != 0 {
+		t.Fatalf("duplicate n=%d err=%v", n, err)
+	}
+	if duplicateInput[0].Revision != 1 {
+		t.Fatalf("duplicate input revision=%d, want 1", duplicateInput[0].Revision)
 	}
 	a2 := b
 	a2.Value = "1"
@@ -229,12 +250,53 @@ func TestMacroRevisionsNoOpUnchangedAndPreserveABA(t *testing.T) {
 	a2.Temporal.AvailableAt = a2.Temporal.PublishedAt
 	a2.Temporal.IngestedAt = a2.Temporal.PublishedAt.Add(time.Hour)
 	a2.Provenance.IngestedAt = a2.Temporal.IngestedAt
-	if _, _, err = w.WriteEconomics("X", []model.EconomicObservation{a2}); err != nil {
+	abaInput := []model.EconomicObservation{a2}
+	if _, _, err = w.WriteEconomics("X", abaInput); err != nil {
 		t.Fatal(err)
+	}
+	if abaInput[0].Revision != 2 {
+		t.Fatalf("ABA input revision=%d, want 2", abaInput[0].Revision)
 	}
 	rows := rowsFromManifest[EconomicRow](t, path)
 	if len(rows) != 3 || rows[0].Revision != 0 || rows[1].Revision != 1 || rows[2].Revision != 2 {
 		t.Fatalf("rows=%+v", rows)
+	}
+}
+
+func TestMacroRevisionInvalidAndConflictingInputsFailClosed(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	observed := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	pub := observed.Add(24 * time.Hour)
+	base := model.EconomicObservation{Source: "fred", SeriesID: "X", Geography: "US", Frequency: "monthly", Unit: "Index", Value: "1", Temporal: model.Temporal{ObservedAt: observed, PublishedAt: pub, AvailableAt: pub, IngestedAt: pub.Add(time.Hour)}, RawPayloadHash: rawHash, Provenance: provenance(pub.Add(time.Hour))}
+	path, _, err := w.WriteEconomics("X", []model.EconomicObservation{base})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invalid := base
+	invalid.Geography = ""
+	invalidInput := []model.EconomicObservation{invalid}
+	if _, _, err := w.WriteEconomics("X", invalidInput); err == nil {
+		t.Fatal("invalid economic observation accepted")
+	}
+	if invalidInput[0].Revision != 0 {
+		t.Fatalf("invalid input revision=%d, want unchanged 0", invalidInput[0].Revision)
+	}
+
+	conflict := base
+	conflict.RawPayloadHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	conflict.Provenance.RawPayloadHash = conflict.RawPayloadHash
+	conflictInput := []model.EconomicObservation{conflict}
+	if _, _, err := w.WriteEconomics("X", conflictInput); !errors.Is(err, ErrNaturalKeyConflict) {
+		t.Fatalf("conflict error=%v", err)
+	}
+	if conflictInput[0].Revision != 0 {
+		t.Fatalf("conflicting input revision=%d, want unchanged 0", conflictInput[0].Revision)
+	}
+
+	rows := rowsFromManifest[EconomicRow](t, path)
+	if len(rows) != 1 || rows[0].Revision != 0 || rows[0].Value != "1" {
+		t.Fatalf("rows changed after failed input: %+v", rows)
 	}
 }
 
