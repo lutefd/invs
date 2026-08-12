@@ -26,6 +26,103 @@ type Metrics struct {
 	Cursor                                   map[string]any
 	Err                                      error
 }
+
+const upsertMarketPriceSnapshotSQL = `
+INSERT INTO market_price_snapshots (
+	data_source_id, security_id, ingestion_run_id, schema_version, interval,
+	price_basis, currency, observed_at, published_at, available_at, ingested_at,
+	published_precision, open_value, high_value, low_value, close_value,
+	volume_value, raw_payload_hash
+) VALUES (
+	$1, $2, $3, $4, $5,
+	$6, $7, $8, $9, $10, $11,
+	$12, $13, $14, $15, $16,
+	$17, $18
+)
+ON CONFLICT (data_source_id, security_id) DO UPDATE SET
+	ingestion_run_id = EXCLUDED.ingestion_run_id,
+	schema_version = EXCLUDED.schema_version,
+	interval = EXCLUDED.interval,
+	price_basis = EXCLUDED.price_basis,
+	currency = EXCLUDED.currency,
+	observed_at = EXCLUDED.observed_at,
+	published_at = EXCLUDED.published_at,
+	available_at = EXCLUDED.available_at,
+	ingested_at = EXCLUDED.ingested_at,
+	published_precision = EXCLUDED.published_precision,
+	open_value = EXCLUDED.open_value,
+	high_value = EXCLUDED.high_value,
+	low_value = EXCLUDED.low_value,
+	close_value = EXCLUDED.close_value,
+	volume_value = EXCLUDED.volume_value,
+	raw_payload_hash = EXCLUDED.raw_payload_hash,
+	projected_at = clock_timestamp()
+WHERE (
+	EXCLUDED.observed_at,
+	EXCLUDED.available_at,
+	EXCLUDED.ingested_at,
+	EXCLUDED.raw_payload_hash COLLATE "C"
+) > (
+	market_price_snapshots.observed_at,
+	market_price_snapshots.available_at,
+	market_price_snapshots.ingested_at,
+	market_price_snapshots.raw_payload_hash COLLATE "C"
+)`
+
+const upsertMacroObservationSnapshotSQL = `
+INSERT INTO macro_observation_snapshots (
+	data_source_id, ingestion_run_id, schema_version, series_id, geography,
+	unit, frequency, seasonal_adjustment, observed_at, published_at, available_at,
+	ingested_at, published_precision, value, revision, vintage_at, raw_payload_hash
+) VALUES (
+	$1, $2, $3, $4, $5,
+	$6, $7, $8, $9, $10, $11,
+	$12, $13, $14, $15, $16, $17
+)
+ON CONFLICT (data_source_id, series_id) DO UPDATE SET
+	ingestion_run_id = EXCLUDED.ingestion_run_id,
+	schema_version = EXCLUDED.schema_version,
+	geography = EXCLUDED.geography,
+	unit = EXCLUDED.unit,
+	frequency = EXCLUDED.frequency,
+	seasonal_adjustment = EXCLUDED.seasonal_adjustment,
+	observed_at = EXCLUDED.observed_at,
+	published_at = EXCLUDED.published_at,
+	available_at = EXCLUDED.available_at,
+	ingested_at = EXCLUDED.ingested_at,
+	published_precision = EXCLUDED.published_precision,
+	value = EXCLUDED.value,
+	revision = EXCLUDED.revision,
+	vintage_at = EXCLUDED.vintage_at,
+	raw_payload_hash = EXCLUDED.raw_payload_hash,
+	projected_at = clock_timestamp()
+WHERE (
+	EXCLUDED.observed_at,
+	EXCLUDED.revision,
+	EXCLUDED.available_at,
+	EXCLUDED.ingested_at,
+	EXCLUDED.raw_payload_hash COLLATE "C"
+) > (
+	macro_observation_snapshots.observed_at,
+	macro_observation_snapshots.revision,
+	macro_observation_snapshots.available_at,
+	macro_observation_snapshots.ingested_at,
+	macro_observation_snapshots.raw_payload_hash COLLATE "C"
+)`
+
+const finishRunSQL = `
+UPDATE ingestion_runs
+SET status=$2::ingestion_run_status,
+	finished_at=$3,
+	records_received=$4,
+	records_written=$5,
+	records_rejected=$6,
+	raw_payload_count=$7,
+	raw_bytes=$8,
+	error_message=$9,
+	cursor=$10::jsonb
+WHERE id=$1 AND status IN ('running','queued')`
+
 type source struct {
 	code, name, kind, baseURL string
 	enabled                   bool
@@ -180,26 +277,181 @@ func classify(m Metrics) string {
 	}
 	return "succeeded"
 }
-func (r *Repository) FinishRun(ctx context.Context, run Run, finished time.Time, m Metrics) error {
+
+// priceSnapshotIsNewer defines the price projection's total precedence order.
+// A candidate wins by newer observed_at, then available_at, then ingested_at;
+// if all three timestamps are equal, the lexicographically larger raw payload
+// hash wins. published_at is retained as data but is not a precedence field.
+func priceSnapshotIsNewer(candidate, current model.PriceBar) bool {
+	if c := compareTime(candidate.Temporal.ObservedAt, current.Temporal.ObservedAt); c != 0 {
+		return c > 0
+	}
+	if c := compareTime(candidate.Temporal.AvailableAt, current.Temporal.AvailableAt); c != 0 {
+		return c > 0
+	}
+	if c := compareTime(candidate.Temporal.IngestedAt, current.Temporal.IngestedAt); c != 0 {
+		return c > 0
+	}
+	return snapshotRawPayloadHash(candidate.RawPayloadHash, candidate.Provenance.RawPayloadHash) > snapshotRawPayloadHash(current.RawPayloadHash, current.Provenance.RawPayloadHash)
+}
+
+// macroSnapshotIsNewer defines the macro projection's total precedence order.
+// A candidate wins by newer observed_at, then higher revision, then newer
+// available_at and ingested_at; a larger raw payload hash breaks any remaining
+// tie. This keeps an old observation from displacing a newer series value while
+// still allowing same-observation revisions to advance the projection.
+func macroSnapshotIsNewer(candidate, current model.EconomicObservation) bool {
+	if c := compareTime(candidate.Temporal.ObservedAt, current.Temporal.ObservedAt); c != 0 {
+		return c > 0
+	}
+	if candidate.Revision != current.Revision {
+		return candidate.Revision > current.Revision
+	}
+	if c := compareTime(candidate.Temporal.AvailableAt, current.Temporal.AvailableAt); c != 0 {
+		return c > 0
+	}
+	if c := compareTime(candidate.Temporal.IngestedAt, current.Temporal.IngestedAt); c != 0 {
+		return c > 0
+	}
+	return snapshotRawPayloadHash(candidate.RawPayloadHash, candidate.Provenance.RawPayloadHash) > snapshotRawPayloadHash(current.RawPayloadHash, current.Provenance.RawPayloadHash)
+}
+
+func compareTime(a, b time.Time) int {
+	if a.After(b) {
+		return 1
+	}
+	if a.Before(b) {
+		return -1
+	}
+	return 0
+}
+
+func snapshotRawPayloadHash(topLevel, provenance string) string {
+	if topLevel != "" {
+		return topLevel
+	}
+	return provenance
+}
+
+func snapshotBelongsToRun(run Run, p model.Provenance) bool {
+	return p.DataSourceID == run.DataSourceID && p.IngestionRunID == run.ID
+}
+
+func validateSnapshotLineage(run Run, prices []model.PriceBar, macros []model.EconomicObservation) error {
+	for i, candidate := range prices {
+		if !snapshotBelongsToRun(run, candidate.Provenance) {
+			return fmt.Errorf("price snapshot %d provenance does not match run %s/%s", i, run.DataSourceID, run.ID)
+		}
+	}
+	for i, candidate := range macros {
+		if !snapshotBelongsToRun(run, candidate.Provenance) {
+			return fmt.Errorf("macro snapshot %d provenance does not match run %s/%s", i, run.DataSourceID, run.ID)
+		}
+	}
+	return nil
+}
+
+func runErrorMessage(err error) *string {
+	if err == nil {
+		return nil
+	}
+	v := err.Error()
+	if len(v) > 4000 {
+		v = v[:4000]
+	}
+	return &v
+}
+
+// FinalizeRun atomically publishes accepted latest-only snapshots and moves an
+// active ingestion run to its terminal status. Price candidates are ordered by
+// observed_at, available_at, ingested_at, and raw_payload_hash. Macro candidates
+// are ordered by observed_at, revision, available_at, ingested_at, and
+// raw_payload_hash. In both cases the larger value at the first differing field
+// wins, so older candidates cannot replace the current projection.
+func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Time, m Metrics, prices []model.PriceBar, macros []model.EconomicObservation) error {
 	if r == nil {
 		return nil
 	}
-	status := classify(m)
-	var message *string
-	if m.Err != nil {
-		v := m.Err.Error()
-		if len(v) > 4000 {
-			v = v[:4000]
-		}
-		message = &v
+	if err := validateSnapshotLineage(run, prices, macros); err != nil {
+		return err
 	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for i, candidate := range prices {
+		_, err = tx.Exec(ctx, upsertMarketPriceSnapshotSQL,
+			run.DataSourceID,
+			candidate.SecurityID,
+			run.ID,
+			model.SchemaVersion,
+			candidate.Interval,
+			candidate.PriceBasis,
+			candidate.Currency,
+			candidate.Temporal.ObservedAt.UTC(),
+			candidate.Temporal.PublishedAt.UTC(),
+			candidate.Temporal.AvailableAt.UTC(),
+			candidate.Temporal.IngestedAt.UTC(),
+			string(candidate.Temporal.PublishedPrecision),
+			candidate.Open,
+			candidate.High,
+			candidate.Low,
+			candidate.Close,
+			candidate.Volume,
+			snapshotRawPayloadHash(candidate.RawPayloadHash, candidate.Provenance.RawPayloadHash),
+		)
+		if err != nil {
+			return fmt.Errorf("upsert price snapshot %d: %w", i, err)
+		}
+	}
+
+	for i, candidate := range macros {
+		var seasonalAdjustment any
+		if candidate.SeasonalAdjustment != "" {
+			seasonalAdjustment = candidate.SeasonalAdjustment
+		}
+		var vintageAt any
+		if candidate.VintageAt != nil {
+			vintageAt = candidate.VintageAt.UTC()
+		}
+		_, err = tx.Exec(ctx, upsertMacroObservationSnapshotSQL,
+			run.DataSourceID,
+			run.ID,
+			model.SchemaVersion,
+			candidate.SeriesID,
+			candidate.Geography,
+			candidate.Unit,
+			candidate.Frequency,
+			seasonalAdjustment,
+			candidate.Temporal.ObservedAt.UTC(),
+			candidate.Temporal.PublishedAt.UTC(),
+			candidate.Temporal.AvailableAt.UTC(),
+			candidate.Temporal.IngestedAt.UTC(),
+			string(candidate.Temporal.PublishedPrecision),
+			candidate.Value,
+			candidate.Revision,
+			vintageAt,
+			snapshotRawPayloadHash(candidate.RawPayloadHash, candidate.Provenance.RawPayloadHash),
+		)
+		if err != nil {
+			return fmt.Errorf("upsert macro snapshot %d: %w", i, err)
+		}
+	}
+
 	cursor, _ := json.Marshal(m.Cursor)
-	tag, err := r.pool.Exec(ctx, `UPDATE ingestion_runs SET status=$2::ingestion_run_status,finished_at=$3,records_received=$4,records_written=$5,records_rejected=$6,raw_payload_count=$7,raw_bytes=$8,error_message=$9,cursor=$10::jsonb WHERE id=$1 AND status IN ('running','queued')`, run.ID, status, finished.UTC(), m.Received, m.Written, m.Rejected, m.RawPayloads, m.RawBytes, message, cursor)
+	tag, err := tx.Exec(ctx, finishRunSQL, run.ID, classify(m), finished.UTC(), m.Received, m.Written, m.Rejected, m.RawPayloads, m.RawBytes, runErrorMessage(m.Err), cursor)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("run %s is no longer active", run.ID)
 	}
-	return nil
+	return tx.Commit(ctx)
+}
+
+func (r *Repository) FinishRun(ctx context.Context, run Run, finished time.Time, m Metrics) error {
+	return r.FinalizeRun(ctx, run, finished, m, nil, nil)
 }

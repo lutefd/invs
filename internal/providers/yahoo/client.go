@@ -63,11 +63,13 @@ func (c *Client) Collect(ctx context.Context, req model.HistoricalPriceRequest) 
 	if err != nil {
 		return Result{}, fmt.Errorf("Yahoo prices %s: %w", req.VendorSymbol, err)
 	}
+	result := Result{Raw: b, SHA256: digest(b)}
 	bars, received, rejected, err := parse(b, req.SecurityID, req.Currency, c.now().UTC())
+	result.Bars, result.RecordsReceived, result.RecordsRejected = bars, received, rejected
 	if err != nil {
-		return Result{}, err
+		return result, err
 	}
-	return Result{Bars: bars, Raw: b, SHA256: digest(b), RecordsReceived: received, RecordsRejected: rejected}, nil
+	return result, nil
 }
 
 func chartURL(baseURL, symbol string) (*url.URL, error) {

@@ -1,9 +1,24 @@
 package yahoo
 
 import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
+
+	"github.com/luisdourado/invs/internal/model"
 )
+
+type fakeGetter struct{ body []byte }
+
+func (f fakeGetter) Get(context.Context, string) ([]byte, error) { return f.body, nil }
+
+func sha256Hex(b []byte) string {
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
+}
 
 func TestChartURLDoesNotDoubleEscapeSymbols(t *testing.T) {
 	cases := map[string]string{"AAPL": "AAPL", "^BVSP": "%5EBVSP", "BRK/B": "BRK%2FB"}
@@ -43,5 +58,31 @@ func TestParseRejectsIncompleteTradingDay(t *testing.T) {
 	bars, received, rejected, err := parse(b, "security-1", "USD", time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC))
 	if err != nil || len(bars) != 0 || received != 1 || rejected != 0 {
 		t.Fatalf("bars=%v received=%d rejected=%d err=%v", bars, received, rejected, err)
+	}
+}
+
+func TestCollectRetainsRawOnParseError(t *testing.T) {
+	cases := map[string][]byte{
+		"malformed JSON":       []byte(`{"chart":`),
+		"invalid chart schema": []byte(`{"chart":{"result":[],"error":null}}`),
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := NewClient(fakeGetter{body: body})
+			r, err := c.Collect(context.Background(), model.HistoricalPriceRequest{
+				SecurityID: "security-1", VendorSymbol: "AAPL", Currency: "USD",
+				Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+				End:   time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+			})
+			if err == nil {
+				t.Fatal("expected parse error")
+			}
+			if !bytes.Equal(r.Raw, body) {
+				t.Fatalf("raw=%q want %q", r.Raw, body)
+			}
+			if r.SHA256 != sha256Hex(body) {
+				t.Fatalf("sha256=%q want %q", r.SHA256, sha256Hex(body))
+			}
+		})
 	}
 }

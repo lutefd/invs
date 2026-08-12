@@ -1,7 +1,10 @@
 package sec
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +19,11 @@ func (f fakeGetter) Get(_ context.Context, u string) ([]byte, error) {
 		}
 	}
 	return nil, context.Canceled
+}
+
+func sha256Hex(b []byte) string {
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
 }
 
 func TestCollectCompanyNormalizesAndDeduplicates(t *testing.T) {
@@ -65,5 +73,47 @@ func TestSubmissionsRejectsCIKMismatch(t *testing.T) {
 	b := []byte(`{"cik":"0000000002","name":"Wrong","filings":{"recent":{}}}`)
 	if _, _, _, _, err := parseSubmissions(b, "issuer", 1, time.Now()); err == nil {
 		t.Fatal("CIK mismatch accepted")
+	}
+}
+
+func TestCollectCompanyRetainsRawOnParseError(t *testing.T) {
+	validSubmissions := []byte(`{"cik":"0000000001","name":"Example Corp","filings":{"recent":{}}}`)
+	validFacts := []byte(`{"cik":1,"facts":{}}`)
+	cases := map[string]struct {
+		submissions []byte
+		facts       []byte
+	}{
+		"malformed submissions JSON": {
+			submissions: []byte(`{"cik":`),
+			facts:       validFacts,
+		},
+		"invalid companyfacts schema": {
+			submissions: validSubmissions,
+			facts:       []byte(`{"cik":2,"facts":{}}`),
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := NewClient(fakeGetter{responses: map[string][]byte{
+				"submissions/CIK0000000001.json":  tc.submissions,
+				"companyfacts/CIK0000000001.json": tc.facts,
+			}})
+			r, err := c.CollectCompany(context.Background(), "issuer-1", 1)
+			if err == nil {
+				t.Fatal("expected parse error")
+			}
+			want := []RawDocument{
+				{Kind: "submissions", Data: tc.submissions, SHA256: sha256Hex(tc.submissions)},
+				{Kind: "companyfacts", Data: tc.facts, SHA256: sha256Hex(tc.facts)},
+			}
+			if len(r.Raw) != len(want) {
+				t.Fatalf("raw documents=%d want %d", len(r.Raw), len(want))
+			}
+			for i := range want {
+				if r.Raw[i].Kind != want[i].Kind || !bytes.Equal(r.Raw[i].Data, want[i].Data) || r.Raw[i].SHA256 != want[i].SHA256 {
+					t.Fatalf("raw[%d]=%+v want %+v", i, r.Raw[i], want[i])
+				}
+			}
+		})
 	}
 }

@@ -115,6 +115,7 @@ func (f collectorHTTPFake) Get(ctx context.Context, requestURL string) ([]byte, 
 type orderingRawStore struct {
 	events    []string
 	completed bool
+	payloads  [][]byte
 }
 
 func (s *orderingRawStore) Put(ctx context.Context, _ string, data io.Reader, meta storage.RawMetadata) (storage.RawMetadata, error) {
@@ -129,6 +130,7 @@ func (s *orderingRawStore) Put(ctx context.Context, _ string, data io.Reader, me
 	meta.SHA256 = hex.EncodeToString(hash[:])
 	meta.Size = int64(len(b))
 	s.completed = true
+	s.payloads = append(s.payloads, append([]byte(nil), b...))
 	s.events = append(s.events, "raw:put:complete")
 	return meta, nil
 }
@@ -143,6 +145,7 @@ type orderingNormalizedStore struct {
 	expectedHash   string
 	expectedSource string
 	locatorPrefix  string
+	zeroRows       bool
 	prices         []model.PriceBar
 	fundamentals   []model.FundamentalObservation
 	economics      []model.EconomicObservation
@@ -188,7 +191,11 @@ func (s *orderingNormalizedStore) WritePrices(_ string, observations []model.Pri
 		}
 	}
 	s.prices = append(s.prices, observations...)
-	return "test/data.parquet", len(observations), nil
+	rows := len(observations)
+	if s.zeroRows {
+		rows = 0
+	}
+	return "test/data.parquet", rows, nil
 }
 
 func (s *orderingNormalizedStore) WriteFundamentals(_ string, observations []model.FundamentalObservation) (string, int, error) {
@@ -214,11 +221,16 @@ func (s *orderingNormalizedStore) WriteEconomics(_ string, observations []model.
 		}
 	}
 	s.economics = append(s.economics, observations...)
-	return "test/data.parquet", len(observations), nil
+	rows := len(observations)
+	if s.zeroRows {
+		rows = 0
+	}
+	return "test/data.parquet", rows, nil
 }
 
 type collectorMetadataFake struct {
-	run metadata.Run
+	run        metadata.Run
+	onFinalize func(metadata.Metrics, []model.PriceBar, []model.EconomicObservation)
 }
 
 func (f collectorMetadataFake) EnrichSECIssuer(context.Context, model.Issuer, string) error {
@@ -233,7 +245,10 @@ func (f collectorMetadataFake) StartRun(_ context.Context, source, runKey string
 	return run, nil
 }
 
-func (collectorMetadataFake) FinishRun(context.Context, metadata.Run, time.Time, metadata.Metrics) error {
+func (f collectorMetadataFake) FinalizeRun(_ context.Context, _ metadata.Run, _ time.Time, m metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) error {
+	if f.onFinalize != nil {
+		f.onFinalize(m, prices, macros)
+	}
 	return nil
 }
 
@@ -331,6 +346,188 @@ func TestCollectorFREDStoresRawBeforeNormalizedWrite(t *testing.T) {
 	if got := len(app.normalized.(*orderingNormalizedStore).economics); got != 1 {
 		t.Fatalf("economic observations = %d, want 1", got)
 	}
+}
+
+func TestCollectorFinalizesSnapshotsWhenWriteAddsNoRows(t *testing.T) {
+	t.Run("yahoo", func(t *testing.T) {
+		payload := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600],"indicators":{"quote":[{"open":[10],"high":[12],"low":[9],"close":[11],"volume":[100]}]}}],"error":null}}`)
+		raw := &orderingRawStore{}
+		run := testRun()
+		var written int64
+		var snapshots []model.PriceBar
+		app := &app{
+			cfg: config.Config{
+				Universe:  []config.Security{{SecurityID: testSecurityID, YahooSymbol: "AAPL", Currency: "USD"}},
+				Providers: config.Providers{Prices: config.PriceProvider{Enabled: true, Start: "2024-01-01", End: "2024-12-31"}},
+			},
+			raw: raw,
+			normalized: &orderingNormalizedStore{
+				raw: raw, expectedRun: run, expectedHash: hashPayload(payload), expectedSource: "yahoo", locatorPrefix: "chart/date=", zeroRows: true,
+			},
+			http: collectorHTTPFake{payload: payload},
+			log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+			metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) {
+				written = m.Written
+				snapshots = append(snapshots, prices...)
+				if len(macros) != 0 {
+					t.Errorf("macro snapshots = %d, want none", len(macros))
+				}
+			}},
+			batchKey: "zero-row-yahoo-test",
+		}
+
+		if err := app.run(context.Background(), "prices"); err != nil {
+			t.Fatal(err)
+		}
+		if written != 0 {
+			t.Fatalf("finalized written rows = %d, want 0", written)
+		}
+		if len(snapshots) != 1 || snapshots[0].SecurityID != testSecurityID {
+			t.Fatalf("finalized price snapshots = %+v, want one snapshot for %s", snapshots, testSecurityID)
+		}
+	})
+
+	t.Run("fred", func(t *testing.T) {
+		payload := []byte("observation_date,DGS10\n2024-01-02,4.25\n")
+		raw := &orderingRawStore{}
+		run := testRun()
+		var written int64
+		var snapshots []model.EconomicObservation
+		app := &app{
+			cfg: config.Config{
+				Providers: config.Providers{FRED: config.FREDProvider{Enabled: true, Series: []string{"DGS10"}}},
+			},
+			raw: raw,
+			normalized: &orderingNormalizedStore{
+				raw: raw, expectedRun: run, expectedHash: hashPayload(payload), expectedSource: "fred", locatorPrefix: "csv/date=", zeroRows: true,
+			},
+			http: collectorHTTPFake{responses: map[string][]byte{"fredgraph.csv": payload}},
+			log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+			metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) {
+				written = m.Written
+				snapshots = append(snapshots, macros...)
+				if len(prices) != 0 {
+					t.Errorf("price snapshots = %d, want none", len(prices))
+				}
+			}},
+			batchKey: "zero-row-fred-test",
+		}
+
+		if err := app.run(context.Background(), "fred"); err != nil {
+			t.Fatal(err)
+		}
+		if written != 0 {
+			t.Fatalf("finalized written rows = %d, want 0", written)
+		}
+		if len(snapshots) != 1 || snapshots[0].SeriesID != "DGS10" {
+			t.Fatalf("finalized economic snapshots = %+v, want one snapshot for DGS10", snapshots)
+		}
+	})
+}
+
+func TestCollectorPartialRunFinalizesSuccessfulEntityCandidates(t *testing.T) {
+	goodPayload := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600],"indicators":{"quote":[{"open":[10],"high":[12],"low":[9],"close":[11],"volume":[100]}]}}],"error":null}}`)
+	badPayload := []byte(`{"chart":{"result":[],"error":null}}`)
+	secondSecurityID := "7f3c1f6b-42dc-4d0a-9c1b-8d8a3c5f2b11"
+	raw := &orderingRawStore{}
+	run := testRun()
+	var snapshots []model.PriceBar
+	app := &app{
+		cfg: config.Config{
+			Universe: []config.Security{
+				{SecurityID: testSecurityID, YahooSymbol: "AAPL", Currency: "USD"},
+				{SecurityID: secondSecurityID, YahooSymbol: "MSFT", Currency: "USD"},
+			},
+			Providers: config.Providers{Prices: config.PriceProvider{Enabled: true, Start: "2024-01-01", End: "2024-12-31"}},
+		},
+		raw: raw,
+		normalized: &orderingNormalizedStore{
+			raw: raw, expectedRun: run, expectedHash: hashPayload(goodPayload), expectedSource: "yahoo", locatorPrefix: "chart/date=",
+		},
+		http: collectorHTTPFake{responses: map[string][]byte{"AAPL": goodPayload, "MSFT": badPayload}},
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(_ metadata.Metrics, prices []model.PriceBar, _ []model.EconomicObservation) {
+			snapshots = append(snapshots, prices...)
+			raw.events = append(raw.events, "metadata:finalize")
+		}},
+		batchKey: "partial-yahoo-test",
+	}
+
+	if err := app.run(context.Background(), "prices"); err == nil {
+		t.Fatal("expected partial collection error")
+	}
+	if len(snapshots) != 1 || snapshots[0].SecurityID != testSecurityID {
+		t.Fatalf("finalized price snapshots = %+v, want only successful entity %s", snapshots, testSecurityID)
+	}
+	wantEvents := []string{"raw:put:complete", "canonical:prices:write", "raw:put:complete", "metadata:finalize"}
+	if !reflect.DeepEqual(raw.events, wantEvents) {
+		t.Fatalf("publication order = %v, want %v", raw.events, wantEvents)
+	}
+}
+
+func TestCollectorPersistsProviderRawOnParseErrorBeforeFinalization(t *testing.T) {
+	t.Run("yahoo schema", func(t *testing.T) {
+		payload := []byte(`{"chart":{"result":[],"error":null}}`)
+		raw := &orderingRawStore{}
+		run := testRun()
+		app := &app{
+			cfg: config.Config{
+				Universe:  []config.Security{{SecurityID: testSecurityID, YahooSymbol: "AAPL", Currency: "USD"}},
+				Providers: config.Providers{Prices: config.PriceProvider{Enabled: true, Start: "2024-01-01", End: "2024-12-31"}},
+			},
+			raw:        raw,
+			normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedSource: "yahoo", locatorPrefix: "chart/date="},
+			http:       collectorHTTPFake{payload: payload},
+			log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+			metadata: collectorMetadataFake{run: run, onFinalize: func(_ metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) {
+				raw.events = append(raw.events, "metadata:finalize")
+				if len(prices) != 0 || len(macros) != 0 {
+					t.Errorf("finalized snapshots = %d prices, %d macros; want none", len(prices), len(macros))
+				}
+			}},
+			batchKey: "parse-error-yahoo-test",
+		}
+
+		if err := app.run(context.Background(), "prices"); err == nil {
+			t.Fatal("expected Yahoo schema error")
+		}
+		if len(raw.payloads) != 1 || string(raw.payloads[0]) != string(payload) {
+			t.Fatalf("persisted Yahoo raw payload = %q, want %q", raw.payloads, payload)
+		}
+		if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "metadata:finalize"}) {
+			t.Fatalf("Yahoo publication order = %v", raw.events)
+		}
+	})
+
+	t.Run("fred schema", func(t *testing.T) {
+		payload := []byte("wrong_column,DGS10\n2024-01-02,4.25\n")
+		raw := &orderingRawStore{}
+		run := testRun()
+		app := &app{
+			cfg:        config.Config{Providers: config.Providers{FRED: config.FREDProvider{Enabled: true, Series: []string{"DGS10"}}}},
+			raw:        raw,
+			normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedSource: "fred", locatorPrefix: "csv/date="},
+			http:       collectorHTTPFake{responses: map[string][]byte{"fredgraph.csv": payload}},
+			log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+			metadata: collectorMetadataFake{run: run, onFinalize: func(_ metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) {
+				raw.events = append(raw.events, "metadata:finalize")
+				if len(prices) != 0 || len(macros) != 0 {
+					t.Errorf("finalized snapshots = %d prices, %d macros; want none", len(prices), len(macros))
+				}
+			}},
+			batchKey: "parse-error-fred-test",
+		}
+
+		if err := app.run(context.Background(), "fred"); err == nil {
+			t.Fatal("expected FRED schema error")
+		}
+		if len(raw.payloads) != 1 || string(raw.payloads[0]) != string(payload) {
+			t.Fatalf("persisted FRED raw payload = %q, want %q", raw.payloads, payload)
+		}
+		if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "metadata:finalize"}) {
+			t.Fatalf("FRED publication order = %v", raw.events)
+		}
+	})
 }
 
 func hashPayload(payload []byte) string {

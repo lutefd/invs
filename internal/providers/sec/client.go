@@ -63,10 +63,14 @@ func (c *Client) CollectCompany(ctx context.Context, issuerID string, cik int64)
 	if err != nil {
 		return CompanyResult{}, fmt.Errorf("SEC companyfacts CIK %d: %w", cik, err)
 	}
+	rawDocuments := []RawDocument{
+		{Kind: "submissions", Data: subBytes, SHA256: digest(subBytes)},
+		{Kind: "companyfacts", Data: factBytes, SHA256: digest(factBytes)},
+	}
 	ingested := c.now().UTC()
 	issuer, filings, receivedFilings, rejectedFilings, err := parseSubmissions(subBytes, issuerID, cik, ingested)
 	if err != nil {
-		return CompanyResult{}, err
+		return CompanyResult{Raw: rawDocuments}, err
 	}
 	acceptedByAccession := make(map[string]time.Time, len(filings))
 	for _, filing := range filings {
@@ -76,11 +80,11 @@ func (c *Client) CollectCompany(ctx context.Context, issuerID string, cik int64)
 	}
 	facts, receivedFacts, rejectedFacts, err := parseCompanyFacts(factBytes, issuerID, cik, ingested, acceptedByAccession)
 	if err != nil {
-		return CompanyResult{}, err
+		return CompanyResult{Raw: rawDocuments}, err
 	}
 	return CompanyResult{
 		Issuer: issuer, StateOfIncorporation: submissionState(subBytes), Filings: filings, Facts: facts,
-		Raw:             []RawDocument{{Kind: "submissions", Data: subBytes, SHA256: digest(subBytes)}, {Kind: "companyfacts", Data: factBytes, SHA256: digest(factBytes)}},
+		Raw:             rawDocuments,
 		RecordsReceived: receivedFilings + receivedFacts, RecordsRejected: rejectedFilings + rejectedFacts,
 	}, nil
 }

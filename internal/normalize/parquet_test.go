@@ -249,6 +249,9 @@ func TestPreV1FailsClosedWithoutOverwrite(t *testing.T) {
 	if err := parquet.WriteFile(path, []legacy{{"yahoo"}}); err != nil {
 		t.Fatal(err)
 	}
+	if err := w.ValidateExisting(); !errors.Is(err, ErrMigrationRequired) {
+		t.Fatalf("ValidateExisting error = %v", err)
+	}
 	before, _ := os.ReadFile(path)
 	_, _, err := w.WritePrices(securityID, []model.PriceBar{price(time.Now().UTC().Add(-3 * time.Hour))})
 	if !errors.Is(err, ErrMigrationRequired) {
@@ -257,6 +260,17 @@ func TestPreV1FailsClosedWithoutOverwrite(t *testing.T) {
 	after, _ := os.ReadFile(path)
 	if string(before) != string(after) {
 		t.Fatal("legacy file overwritten")
+	}
+}
+
+func TestValidateExistingAcceptsCanonicalFiles(t *testing.T) {
+	root := t.TempDir()
+	w, _ := NewWriter(root)
+	if _, _, err := w.WritePrices(securityID, []model.PriceBar{price(time.Now().UTC().Add(-3 * time.Hour))}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.ValidateExisting(); err != nil {
+		t.Fatal(err)
 	}
 }
 

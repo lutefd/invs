@@ -2,7 +2,7 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-The current vertical slice covers Yahoo daily prices, SEC company facts, and FRED macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; in the current tree those panels remain explicitly empty until the collector-side snapshot publisher is completed.
+The current vertical slice covers Yahoo daily prices, SEC company facts, and FRED macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; they remain explicitly empty until a successful collection publishes accepted observations.
 
 ## Requirements
 
@@ -79,6 +79,8 @@ make notebook
 The notebook loads the configured universe to map a price `security_id` to its SEC `issuer_id`; it never pairs independently selected identifiers. Its explicit decision timestamp produces an “as known then” snapshot: the latest price revision for each observed session and the latest eligible SEC/FRED observations whose conservative `available_at` is not later than that decision. Missing pre-ingestion datasets produce typed empty views and an explanatory no-data result.
 
 The DuckDB catalog accepts canonical Parquet schema `1.0.0` only. Its `prices_canonical`, `fundamentals_canonical`, and `macroeconomics_canonical` views preserve exact UTF-8 decimal values, presence flags, and collection provenance. The shorter `prices`, `fundamentals`, and `macroeconomics` research views add `DECIMAL(38,18)` and `DOUBLE` projections for analysis. The exact string columns remain available as `*_value` or `value_text`; use them whenever rounding is unacceptable. Legacy files without `schema_version`, numeric physical decimal columns, unsupported versions, and malformed decimal strings fail closed with actionable schema errors instead of being silently coerced.
+
+Legacy normalized data is handled by an explicit archive/reset policy. The collector validates `data/normalized/` before starting a run and refuses to touch a pre-v1 or otherwise incompatible Parquet file. Move the incompatible normalized tree to a recoverable archive location, keep `data/raw/` intact, and reingest so v1 provenance is obtained from the PostgreSQL source/run catalog. No attempted migration invents missing lineage.
 
 This does not claim a historical backtest. Yahoo and current FRED backfills are only known to this system when collected, so v0 cannot reconstruct what their provider data looked like on past trading dates. A backtest must vary decision timestamps and use sources with defensible historical availability/vintage data.
 

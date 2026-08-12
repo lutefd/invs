@@ -52,11 +52,13 @@ func (c *Client) Collect(ctx context.Context, seriesID string) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("FRED series %s: %w", seriesID, err)
 	}
+	result := Result{Raw: b, SHA256: digest(b)}
 	obs, received, rejected, err := parseCSV(b, seriesID, c.now().UTC())
+	result.Observations, result.RecordsReceived, result.RecordsRejected = obs, received, rejected
 	if err != nil {
-		return Result{}, err
+		return result, err
 	}
-	return Result{Observations: obs, Raw: b, SHA256: digest(b), RecordsReceived: received, RecordsRejected: rejected}, nil
+	return result, nil
 }
 
 func parseCSV(b []byte, seriesID string, ingested time.Time) ([]model.EconomicObservation, int, int, error) {

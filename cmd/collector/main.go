@@ -45,7 +45,7 @@ type httpGetter interface {
 type metadataStore interface {
 	EnrichSECIssuer(context.Context, model.Issuer, string) error
 	StartRun(context.Context, string, string, time.Time) (metadata.Run, error)
-	FinishRun(context.Context, metadata.Run, time.Time, metadata.Metrics) error
+	FinalizeRun(context.Context, metadata.Run, time.Time, metadata.Metrics, []model.PriceBar, []model.EconomicObservation) error
 }
 
 type normalizedStore interface {
@@ -90,6 +90,10 @@ func main() {
 	normalized, err := normalize.NewWriter(filepath.Join(cfg.DataDir, "normalized"))
 	if err != nil {
 		log.Error("normalized store failed", "error", err)
+		os.Exit(2)
+	}
+	if err := normalized.ValidateExisting(); err != nil {
+		log.Error("normalized store requires explicit legacy-data handling", "error", err)
 		os.Exit(2)
 	}
 	metadataRepo, err := metadata.Open(ctx, cfg.DatabaseURL)
@@ -168,6 +172,12 @@ func (a *app) collectSEC(ctx context.Context) error {
 		}
 		r, err := c.CollectCompany(ctx, s.IssuerID, s.CIK)
 		if err != nil {
+			for _, d := range r.Raw {
+				key := rawKey("sec", d.Kind, fmt.Sprintf("cik-%010d", s.CIK), d.Data, m.StartedAt, "json")
+				if _, putErr := a.storeRaw(ctx, &m, key, d.Data, storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, "sec/"+d.Kind, d.SHA256); putErr != nil {
+					errs = append(errs, putErr)
+				}
+			}
 			errs = append(errs, fmt.Errorf("%s: %w", s.IssuerID, err))
 			continue
 		}
@@ -177,19 +187,12 @@ func (a *app) collectSEC(ctx context.Context) error {
 		rawHashes := map[string]string{}
 		for _, d := range r.Raw {
 			key := rawKey("sec", d.Kind, fmt.Sprintf("cik-%010d", s.CIK), d.Data, m.StartedAt, "json")
-			stored, putErr := a.raw.Put(ctx, key, bytes.NewReader(d.Data), storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}})
+			storedHash, putErr := a.storeRaw(ctx, &m, key, d.Data, storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, "sec/"+d.Kind, d.SHA256)
 			if putErr != nil {
 				errs = append(errs, putErr)
 				rawOK = false
 			} else {
-				m.RawObjects++
-				m.RawBytes += stored.Size
-				if hashErr := validateStoredHash("sec/"+d.Kind, d.SHA256, stored.SHA256); hashErr != nil {
-					errs = append(errs, hashErr)
-					rawOK = false
-				} else {
-					rawHashes[d.Kind] = stored.SHA256
-				}
+				rawHashes[d.Kind] = storedHash
 			}
 		}
 		if !rawOK {
@@ -216,7 +219,7 @@ func (a *app) collectSEC(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("%d records rejected", m.Rejected))
 	}
 	collectErr := errors.Join(errs...)
-	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr))
+	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
 }
 
 func (a *app) collectPrices(ctx context.Context) error {
@@ -241,6 +244,7 @@ func (a *app) collectPrices(ctx context.Context) error {
 		return nil
 	}
 	var errs []error
+	var snapshots []model.PriceBar
 	for _, s := range a.cfg.Universe {
 		if s.YahooSymbol == "" {
 			m.Rejected++
@@ -248,21 +252,21 @@ func (a *app) collectPrices(ctx context.Context) error {
 		}
 		r, err := c.Collect(ctx, model.HistoricalPriceRequest{SecurityID: s.SecurityID, VendorSymbol: s.YahooSymbol, Currency: s.Currency, Start: start, End: end})
 		if err != nil {
+			if len(r.Raw) > 0 {
+				key := rawKey("marketdata", "yahoo", s.SecurityID, r.Raw, m.StartedAt, "json")
+				if _, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo", r.SHA256); putErr != nil {
+					errs = append(errs, putErr)
+				}
+			}
 			errs = append(errs, fmt.Errorf("%s: %w", s.SecurityID, err))
 			continue
 		}
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
 		key := rawKey("marketdata", "yahoo", s.SecurityID, r.Raw, m.StartedAt, "json")
-		stored, putErr := a.raw.Put(ctx, key, bytes.NewReader(r.Raw), storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}})
+		_, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo", r.SHA256)
 		if putErr != nil {
 			errs = append(errs, putErr)
-			continue
-		}
-		m.RawObjects++
-		m.RawBytes += stored.Size
-		if err := validateStoredHash("yahoo", r.SHA256, stored.SHA256); err != nil {
-			errs = append(errs, err)
 			continue
 		}
 		if err := stampPrices(run, r.SHA256, r.Bars); err != nil {
@@ -273,6 +277,7 @@ func (a *app) collectPrices(ctx context.Context) error {
 		if err != nil {
 			errs = append(errs, err)
 		} else {
+			snapshots = append(snapshots, r.Bars...)
 			m.OutputRows += n
 			m.Cursor["last_security_id"] = s.SecurityID
 			a.log.Info("normalized dataset", "source", "yahoo", "security_id", s.SecurityID, "path", path, "rows", len(r.Bars))
@@ -282,7 +287,7 @@ func (a *app) collectPrices(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("%d records rejected", m.Rejected))
 	}
 	collectErr := errors.Join(errs...)
-	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr))
+	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, snapshots, nil))
 }
 
 func (a *app) collectFRED(ctx context.Context) error {
@@ -296,24 +301,25 @@ func (a *app) collectFRED(ctx context.Context) error {
 		return nil
 	}
 	var errs []error
+	var snapshots []model.EconomicObservation
 	for _, series := range a.cfg.Providers.FRED.Series {
 		r, err := c.Collect(ctx, series)
 		if err != nil {
+			if len(r.Raw) > 0 {
+				key := rawKey("fred", "series", series, r.Raw, m.StartedAt, "csv")
+				if _, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred", r.SHA256); putErr != nil {
+					errs = append(errs, putErr)
+				}
+			}
 			errs = append(errs, err)
 			continue
 		}
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
 		key := rawKey("fred", "series", series, r.Raw, m.StartedAt, "csv")
-		stored, putErr := a.raw.Put(ctx, key, bytes.NewReader(r.Raw), storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}})
+		_, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred", r.SHA256)
 		if putErr != nil {
 			errs = append(errs, putErr)
-			continue
-		}
-		m.RawObjects++
-		m.RawBytes += stored.Size
-		if err := validateStoredHash("fred", r.SHA256, stored.SHA256); err != nil {
-			errs = append(errs, err)
 			continue
 		}
 		if err := stampEconomics(run, r.SHA256, r.Observations); err != nil {
@@ -324,6 +330,7 @@ func (a *app) collectFRED(ctx context.Context) error {
 		if err != nil {
 			errs = append(errs, err)
 		} else {
+			snapshots = append(snapshots, r.Observations...)
 			m.OutputRows += n
 			m.Cursor["last_series_id"] = series
 			a.log.Info("normalized dataset", "source", "fred", "series_id", series, "path", path, "rows", len(r.Observations))
@@ -333,7 +340,7 @@ func (a *app) collectFRED(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("%d records rejected", m.Rejected))
 	}
 	collectErr := errors.Join(errs...)
-	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr))
+	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, snapshots))
 }
 
 func (a *app) start(ctx context.Context, m *metrics) (metadata.Run, bool, error) {
@@ -372,6 +379,19 @@ func validateStoredHash(source, expected, stored string) error {
 		return fmt.Errorf("%s raw SHA-256 mismatch: adapter=%s stored=%s", source, expected, stored)
 	}
 	return nil
+}
+
+func (a *app) storeRaw(ctx context.Context, m *metrics, key string, data []byte, meta storage.RawMetadata, source, expectedHash string) (string, error) {
+	stored, err := a.raw.Put(ctx, key, bytes.NewReader(data), meta)
+	if err != nil {
+		return "", err
+	}
+	m.RawObjects++
+	m.RawBytes += stored.Size
+	if err := validateStoredHash(source, expectedHash, stored.SHA256); err != nil {
+		return "", err
+	}
+	return stored.SHA256, nil
 }
 
 func stampProvenance(run metadata.Run, rawHash string, topLevelHash *string, p *model.Provenance, temporal model.Temporal) error {
@@ -418,7 +438,7 @@ func stampEconomics(run metadata.Run, rawHash string, observations []model.Econo
 	return nil
 }
 
-func (a *app) finish(ctx context.Context, run metadata.Run, m metrics, err error) error {
+func (a *app) finish(ctx context.Context, run metadata.Run, m metrics, err error, prices []model.PriceBar, macros []model.EconomicObservation) error {
 	m.Duration = time.Since(m.StartedAt)
 	status := "success"
 	if errors.Is(err, context.Canceled) {
@@ -432,7 +452,7 @@ func (a *app) finish(ctx context.Context, run metadata.Run, m metrics, err error
 	}
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	if dbErr := a.metadata.FinishRun(finishCtx, run, time.Now().UTC(), metadata.Metrics{Received: int64(m.Received), Written: int64(m.OutputRows), Rejected: int64(m.Rejected), RawPayloads: int64(m.RawObjects), RawBytes: m.RawBytes, Cursor: m.Cursor, Err: err}); dbErr != nil {
+	if dbErr := a.metadata.FinalizeRun(finishCtx, run, time.Now().UTC(), metadata.Metrics{Received: int64(m.Received), Written: int64(m.OutputRows), Rejected: int64(m.Rejected), RawPayloads: int64(m.RawObjects), RawBytes: m.RawBytes, Cursor: m.Cursor, Err: err}, prices, macros); dbErr != nil {
 		a.log.Error("persist collector run failed", "source", m.Source, "error", dbErr)
 		return dbErr
 	}

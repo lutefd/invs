@@ -135,6 +135,48 @@ func NewWriter(root string) (*Writer, error) {
 	return &Writer{abs}, nil
 }
 
+// ValidateExisting checks every committed normalized Parquet file before a
+// collector starts network work. Legacy files are intentionally not migrated
+// implicitly: their raw lineage cannot be reconstructed defensibly. Operators
+// must archive/reset the normalized output and reingest from data/raw.
+func (w *Writer) ValidateExisting() error {
+	err := filepath.WalkDir(w.root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".parquet" {
+			return nil
+		}
+		rel, err := filepath.Rel(w.root, path)
+		if err != nil {
+			return err
+		}
+		parts := strings.Split(filepath.ToSlash(rel), "/")
+		if len(parts) == 0 {
+			return nil
+		}
+		var readErr error
+		switch parts[0] {
+		case "prices":
+			_, readErr = readV1[PriceRow](path)
+		case "fundamentals":
+			_, readErr = readV1[FundamentalRow](path)
+		case "macroeconomics":
+			_, readErr = readV1[EconomicRow](path)
+		default:
+			readErr = fmt.Errorf("unsupported normalized dataset directory %q", parts[0])
+		}
+		if readErr != nil {
+			return fmt.Errorf("validate normalized file %s: %w; archive/reset normalized output and reingest from preserved raw evidence", path, readErr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (w *Writer) WritePrices(securityID string, obs []model.PriceBar) (string, int, error) {
 	if _, err := uuid.Parse(securityID); err != nil {
 		return "", 0, fmt.Errorf("security ID must be UUID: %w", err)
