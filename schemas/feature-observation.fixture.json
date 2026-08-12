@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "feature_set": "market-basic",
+  "feature_set_version": "1.0.0",
+  "security_id": "00000000-0000-0000-0000-000000000001",
+  "decision_at": "2026-08-12T14:30:00Z",
+  "input_available_at": "2026-08-12T14:29:00Z",
+  "computation_delay_seconds": 30,
+  "available_at": "2026-08-12T14:29:30Z",
+  "input_fingerprint": "5dbe426c83826ba4d578b6cc116312d97860be0a3714de2a68339338869f01bb",
+  "artifact": {
+    "artifact_id": "00000000-0000-0000-0000-000000000005",
+    "artifact_version": "1.0.0",
+    "generator_version": "contract-fixture",
+    "git_commit": "unknown",
+    "created_at": "2026-08-12T14:30:01Z"
+  },
+  "features": {
+    "close": "123.4500",
+    "return_1d": "0.0100",
+    "range_1d": "1.2500",
+    "volume": null
+  }
+}

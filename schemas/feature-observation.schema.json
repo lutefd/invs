@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-observation.schema.json",
+  "title": "FeatureObservation",
+  "description": "One point-in-time row in the immutable market-basic feature artifact.",
+  "$comment": "The feature engine is not part of this contract. A reader must use the referenced artifact manifest to resolve the selected inputs and must enforce the timestamp and fingerprint invariants documented by ADR 0005.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "feature_set",
+    "feature_set_version",
+    "security_id",
+    "decision_at",
+    "input_available_at",
+    "computation_delay_seconds",
+    "available_at",
+    "input_fingerprint",
+    "artifact",
+    "features"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "feature_set": { "const": "market-basic" },
+    "feature_set_version": { "const": "1.0.0" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "decision_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Explicit historical knowledge cutoff for selecting the inputs used by this row."
+    },
+    "input_available_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Maximum available_at of the selected input rows; it must be no later than decision_at."
+    },
+    "computation_delay_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "$comment": "Declared deterministic computation delay in whole seconds. available_at must equal input_available_at plus this duration."
+    },
+    "available_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Exact feature availability, after computation. Consumers must gate on this field at their own decision_at."
+    },
+    "input_fingerprint": {
+      "$ref": "common.schema.json#/$defs/sha256",
+      "$comment": "SHA-256 of the canonical input-selection envelope recorded by the feature manifest."
+    },
+    "artifact": {
+      "$ref": "feature-manifest.schema.json#/$defs/artifactMetadata",
+      "$comment": "Immutable artifact identity and producer metadata. It must match the enclosing feature manifest."
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["close", "return_1d", "range_1d", "volume"],
+      "$comment": "The closed market-basic 1.0.0 registry. Every value is an exact decimal string or null; null is a defined unavailable result, not a missing column.",
+      "properties": {
+        "close": { "$ref": "#/$defs/featureValue" },
+        "return_1d": { "$ref": "#/$defs/featureValue" },
+        "range_1d": { "$ref": "#/$defs/featureValue" },
+        "volume": { "$ref": "#/$defs/featureValue" }
+      }
+    }
+  },
+  "$defs": {
+    "featureValue": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/decimal" },
+        { "type": "null" }
+      ]
+    }
+  }
+}
