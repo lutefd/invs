@@ -34,6 +34,42 @@ func TestValidateProviderRequirements(t *testing.T) {
 	}
 }
 
+func TestValidateBCBProviderRequirements(t *testing.T) {
+	c := validConfig()
+	c.Providers.BCB = BCBProvider{Enabled: true, Series: []BCBSeries{{
+		Code: "432", Geography: "BR", Unit: "percent", Frequency: "daily",
+		SeasonalAdjustment: "not_adjusted", Start: "2024-01-01", End: "2024-01-31",
+	}}}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, mutate := range map[string]func(*BCBSeries){
+		"missing code":      func(s *BCBSeries) { s.Code = "" },
+		"noncanonical code": func(s *BCBSeries) { s.Code = "0432" },
+		"missing geography": func(s *BCBSeries) { s.Geography = "" },
+		"missing unit":      func(s *BCBSeries) { s.Unit = "" },
+		"invalid frequency": func(s *BCBSeries) { s.Frequency = "business_daily" },
+		"invalid start":     func(s *BCBSeries) { s.Start = "01/01/2024" },
+		"reversed dates":    func(s *BCBSeries) { s.Start, s.End = "2024-02-01", "2024-01-01" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := c
+			candidate.Providers.BCB.Series = []BCBSeries{c.Providers.BCB.Series[0]}
+			mutate(&candidate.Providers.BCB.Series[0])
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid BCB configuration accepted")
+			}
+		})
+	}
+
+	duplicate := c
+	duplicate.Providers.BCB.Series = append(duplicate.Providers.BCB.Series, duplicate.Providers.BCB.Series[0])
+	if err := duplicate.Validate(); err == nil {
+		t.Fatal("duplicate BCB series accepted")
+	}
+}
+
 func TestIdentifierValidityRequiredWithPricesDisabled(t *testing.T) {
 	c := validConfig()
 	c.Providers.Prices.Enabled = false

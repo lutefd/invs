@@ -62,6 +62,7 @@ type Providers struct {
 	SEC    EnabledProvider `yaml:"sec"`
 	Prices PriceProvider   `yaml:"prices"`
 	FRED   FREDProvider    `yaml:"fred"`
+	BCB    BCBProvider     `yaml:"bcb"`
 }
 
 type EnabledProvider struct {
@@ -75,6 +76,19 @@ type PriceProvider struct {
 type FREDProvider struct {
 	Enabled bool     `yaml:"enabled"`
 	Series  []string `yaml:"series"`
+}
+type BCBProvider struct {
+	Enabled bool        `yaml:"enabled"`
+	Series  []BCBSeries `yaml:"series"`
+}
+type BCBSeries struct {
+	Code               string `yaml:"code"`
+	Geography          string `yaml:"geography"`
+	Unit               string `yaml:"unit"`
+	Frequency          string `yaml:"frequency"`
+	SeasonalAdjustment string `yaml:"seasonal_adjustment"`
+	Start              string `yaml:"start"`
+	End                string `yaml:"end"`
 }
 type Security struct {
 	IssuerID            string `yaml:"issuer_id"`
@@ -179,7 +193,49 @@ func (c Config) Validate() error {
 	if c.Providers.FRED.Enabled && len(c.Providers.FRED.Series) == 0 {
 		errs = append(errs, errors.New("enabled FRED provider requires at least one series"))
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled {
+	if c.Providers.BCB.Enabled {
+		if len(c.Providers.BCB.Series) == 0 {
+			errs = append(errs, errors.New("enabled BCB provider requires at least one series"))
+		}
+		seenCodes := make(map[string]bool, len(c.Providers.BCB.Series))
+		for i, series := range c.Providers.BCB.Series {
+			pfx := fmt.Sprintf("providers.bcb.series[%d]", i)
+			if !validBCBCode(series.Code) {
+				errs = append(errs, fmt.Errorf("%s.code must be a positive canonical decimal code", pfx))
+			}
+			if strings.TrimSpace(series.Geography) == "" {
+				errs = append(errs, fmt.Errorf("%s.geography is required", pfx))
+			}
+			if strings.TrimSpace(series.Unit) == "" {
+				errs = append(errs, fmt.Errorf("%s.unit is required", pfx))
+			}
+			if !validEconomicFrequency(series.Frequency) {
+				errs = append(errs, fmt.Errorf("%s.frequency is unsupported", pfx))
+			}
+			if series.SeasonalAdjustment != "" && strings.TrimSpace(series.SeasonalAdjustment) == "" {
+				errs = append(errs, fmt.Errorf("%s.seasonal_adjustment must not be whitespace", pfx))
+			}
+			start, startErr := optionalISODate(series.Start)
+			if startErr != nil {
+				errs = append(errs, fmt.Errorf("%s.start must be an ISO date", pfx))
+			}
+			end, endErr := optionalISODate(series.End)
+			if endErr != nil {
+				errs = append(errs, fmt.Errorf("%s.end must be an ISO date", pfx))
+			}
+			if startErr == nil && endErr == nil && !start.IsZero() && !end.IsZero() && end.Before(start) {
+				errs = append(errs, fmt.Errorf("%s.end must not precede start", pfx))
+			}
+			if validBCBCode(series.Code) {
+				code := strings.TrimSpace(series.Code)
+				if seenCodes[code] {
+					errs = append(errs, fmt.Errorf("%s.code duplicates %q", pfx, code))
+				}
+				seenCodes[code] = true
+			}
+		}
+	}
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.BCB.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -237,6 +293,38 @@ func (c Config) Validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func validBCBCode(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "0" || (len(value) > 1 && value[0] == '0') {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func validEconomicFrequency(value string) bool {
+	switch value {
+	case "daily", "weekly", "monthly", "quarterly", "semiannual", "annual", "irregular":
+		return true
+	default:
+		return false
+	}
+}
+
+func optionalISODate(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	if strings.TrimSpace(value) != value {
+		return time.Time{}, errors.New("date has surrounding whitespace")
+	}
+	return time.Parse("2006-01-02", value)
 }
 
 func upperAlpha(v string, n int) bool {
