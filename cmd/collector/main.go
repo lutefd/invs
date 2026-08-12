@@ -22,6 +22,7 @@ import (
 	"github.com/luisdourado/invs/internal/metadata"
 	"github.com/luisdourado/invs/internal/model"
 	"github.com/luisdourado/invs/internal/normalize"
+	"github.com/luisdourado/invs/internal/providers/bcb"
 	"github.com/luisdourado/invs/internal/providers/fred"
 	"github.com/luisdourado/invs/internal/providers/sec"
 	"github.com/luisdourado/invs/internal/providers/yahoo"
@@ -81,7 +82,7 @@ type metrics struct {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, prices, or fred")
+	source := flag.String("source", "all", "collector source: all, sec, prices, fred, or bcb")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -208,7 +209,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true}
+	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "bcb": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -220,6 +221,9 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "fred" && !a.cfg.Providers.FRED.Enabled {
 		return errors.New("FRED provider is disabled")
+	}
+	if source == "bcb" && !a.cfg.Providers.BCB.Enabled {
+		return errors.New("BCB provider is disabled")
 	}
 	var errs []error
 	if (source == "all" || source == "sec") && a.cfg.Providers.SEC.Enabled {
@@ -234,6 +238,11 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "fred") && a.cfg.Providers.FRED.Enabled {
 		if err := a.collectFRED(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "bcb") && a.cfg.Providers.BCB.Enabled {
+		if err := a.collectBCB(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -427,6 +436,159 @@ func (a *app) collectFRED(ctx context.Context) error {
 	}
 	collectErr := errors.Join(errs...)
 	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, snapshots))
+}
+
+func (a *app) collectBCB(ctx context.Context) error {
+	c := bcb.NewClient(a.http)
+	configuredSeries := a.cfg.Providers.BCB.Series
+	seriesCursor := map[string]any{}
+	m := metrics{
+		Source:    "bcb",
+		StartedAt: time.Now().UTC(),
+		Cursor: map[string]any{
+			"provider":         "bcb",
+			"series_total":     len(configuredSeries),
+			"series_processed": 0,
+			"series_accepted":  0,
+			"series":           seriesCursor,
+		},
+	}
+	run, skip, err := a.start(ctx, &m)
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+
+	var errs []error
+	var snapshots []model.EconomicObservation
+	processedSeries, acceptedSeries := 0, 0
+	for _, configured := range configuredSeries {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, err)
+			break
+		}
+
+		code := strings.TrimSpace(configured.Code)
+		m.Cursor["last_series_code"] = code
+		result, collectErr := c.Collect(ctx, bcb.Series{
+			Code:               configured.Code,
+			Geography:          configured.Geography,
+			Unit:               configured.Unit,
+			Frequency:          configured.Frequency,
+			SeasonalAdjustment: configured.SeasonalAdjustment,
+			Start:              configured.Start,
+			End:                configured.End,
+		})
+		m.Received += result.RecordsReceived
+		m.Rejected += result.RecordsRejected
+		processedSeries++
+		m.Cursor["series_processed"] = processedSeries
+
+		seriesState := map[string]any{
+			"code":             code,
+			"status":           "fetch_failed",
+			"records_received": result.RecordsReceived,
+			"records_rejected": result.RecordsRejected,
+			"records_missing":  result.RecordsMissing,
+			"rows":             len(result.Observations),
+		}
+		var rawHash, rawKeyValue string
+		var rawErr error
+		if result.SHA256 != "" {
+			rawKeyValue = rawKey("bcb", "series", code, result.Raw, m.StartedAt, "csv")
+			rawHash, rawErr = a.storeRaw(ctx, &m, rawKeyValue, result.Raw, storage.RawMetadata{
+				Source:      "bcb",
+				ContentType: "text/csv",
+				FetchedAt:   m.StartedAt,
+				Attributes:  bcbRawAttributes(configured),
+			}, bcbLogicalKey(configured), "bcb", result.SHA256)
+			if rawErr == nil {
+				seriesState["raw_payload_hash"] = rawHash
+				seriesState["raw_object_key"] = rawKeyValue
+			}
+		}
+
+		if collectErr != nil {
+			if rawErr != nil {
+				seriesState["status"] = "raw_store_failed"
+			} else if result.SHA256 != "" {
+				seriesState["status"] = "parse_failed"
+			}
+			seriesCursor[code] = seriesState
+			if rawErr != nil {
+				errs = append(errs, fmt.Errorf("BCB series %s raw payload: %w", code, rawErr))
+			}
+			errs = append(errs, fmt.Errorf("BCB series %s: %w", code, collectErr))
+			continue
+		}
+		if rawErr != nil {
+			seriesState["status"] = "raw_store_failed"
+			seriesCursor[code] = seriesState
+			errs = append(errs, fmt.Errorf("BCB series %s raw payload: %w", code, rawErr))
+			continue
+		}
+		if result.SHA256 == "" {
+			seriesState["status"] = "invalid_result"
+			seriesCursor[code] = seriesState
+			errs = append(errs, fmt.Errorf("BCB series %s returned no raw payload hash", code))
+			continue
+		}
+		if err := stampEconomics(run, rawHash, result.Observations); err != nil {
+			seriesState["status"] = "provenance_failed"
+			seriesCursor[code] = seriesState
+			errs = append(errs, fmt.Errorf("BCB series %s: %w", code, err))
+			continue
+		}
+		path, n, writeErr := a.normalized.WriteEconomics(code, result.Observations)
+		if writeErr != nil {
+			seriesState["status"] = "canonical_write_failed"
+			seriesCursor[code] = seriesState
+			errs = append(errs, fmt.Errorf("BCB series %s: %w", code, writeErr))
+			continue
+		}
+		seriesState["status"] = "accepted"
+		seriesState["canonical_path"] = path
+		acceptedSeries++
+		m.Cursor["series_accepted"] = acceptedSeries
+		m.Cursor["last_accepted_series_code"] = code
+		seriesCursor[code] = seriesState
+		snapshots = append(snapshots, result.Observations...)
+		m.OutputRows += n
+		m.Cursor["last_series_code"] = code
+		a.log.Info("normalized dataset", "source", "bcb", "series_id", code, "path", path, "rows", len(result.Observations))
+	}
+	if m.Rejected > 0 {
+		errs = append(errs, fmt.Errorf("%d records rejected", m.Rejected))
+	}
+	collectErr := errors.Join(errs...)
+	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, snapshots))
+}
+
+func bcbRawAttributes(series config.BCBSeries) map[string]string {
+	return map[string]string{
+		"provider_format":     "sgs-csv",
+		"series_code":         strings.TrimSpace(series.Code),
+		"geography":           strings.TrimSpace(series.Geography),
+		"unit":                strings.TrimSpace(series.Unit),
+		"frequency":           strings.TrimSpace(series.Frequency),
+		"seasonal_adjustment": strings.TrimSpace(series.SeasonalAdjustment),
+		"start":               strings.TrimSpace(series.Start),
+		"end":                 strings.TrimSpace(series.End),
+		"vintage":             "current",
+	}
+}
+
+func bcbLogicalKey(series config.BCBSeries) string {
+	start, end := strings.TrimSpace(series.Start), strings.TrimSpace(series.End)
+	if start == "" {
+		start = "beginning"
+	}
+	if end == "" {
+		end = "current"
+	}
+	return "bcb/series/" + strings.TrimSpace(series.Code) + "/start/" + start + "/end/" + end
 }
 
 func (a *app) start(ctx context.Context, m *metrics) (metadata.Run, bool, error) {

@@ -153,7 +153,7 @@ type source struct {
 	enabled                   bool
 }
 
-var sources = []source{{"sec", "SEC EDGAR", "fundamentals", "https://data.sec.gov", true}, {"yahoo", "Yahoo Finance", "market_data", "https://query1.finance.yahoo.com", true}, {"fred", "Federal Reserve Economic Data", "macro", "https://fred.stlouisfed.org", true}}
+var sources = []source{{"sec", "SEC EDGAR", "fundamentals", "https://data.sec.gov", true}, {"yahoo", "Yahoo Finance", "market_data", "https://query1.finance.yahoo.com", true}, {"fred", "Federal Reserve Economic Data", "macro", "https://fred.stlouisfed.org", true}, {"bcb", "Banco Central do Brasil SGS", "macro", "https://api.bcb.gov.br/dados/serie/", true}}
 
 func Open(ctx context.Context, databaseURL string) (*Repository, error) {
 	if strings.TrimSpace(databaseURL) == "" {
@@ -185,7 +185,7 @@ func (r *Repository) SyncCatalog(ctx context.Context, cfg config.Config) error {
 	}
 	defer tx.Rollback(ctx)
 	for _, s := range sources {
-		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled}[s.code]
+		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled, "bcb": cfg.Providers.BCB.Enabled}[s.code]
 		_, err = tx.Exec(ctx, `INSERT INTO data_sources(code,name,source_kind,base_url,enabled) VALUES($1,$2,$3,$4,$5) ON CONFLICT(code) DO UPDATE SET name=excluded.name,source_kind=excluded.source_kind,base_url=excluded.base_url,enabled=excluded.enabled,updated_at=now()`, s.code, s.name, s.kind, s.baseURL, enabled)
 		if err != nil {
 			return fmt.Errorf("upsert data source %s: %w", s.code, err)
@@ -521,7 +521,7 @@ func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Tim
 			candidate.PriceBasis,
 			candidate.Currency,
 			candidate.Temporal.ObservedAt.UTC(),
-			string(candidate.Temporal.ObservedPrecision),
+			snapshotObservedPrecision(candidate.Temporal.ObservedPrecision),
 			candidate.Temporal.PublishedAt.UTC(),
 			candidate.Temporal.AvailableAt.UTC(),
 			candidate.Temporal.IngestedAt.UTC(),
@@ -557,7 +557,7 @@ func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Tim
 			candidate.Frequency,
 			seasonalAdjustment,
 			candidate.Temporal.ObservedAt.UTC(),
-			string(candidate.Temporal.ObservedPrecision),
+			snapshotObservedPrecision(candidate.Temporal.ObservedPrecision),
 			candidate.Temporal.PublishedAt.UTC(),
 			candidate.Temporal.AvailableAt.UTC(),
 			candidate.Temporal.IngestedAt.UTC(),
@@ -588,6 +588,13 @@ func nullableManifestHash(hash string) any {
 		return nil
 	}
 	return hash
+}
+
+func snapshotObservedPrecision(precision model.TimePrecision) string {
+	if precision == "" {
+		return string(model.PrecisionUnknown)
+	}
+	return string(precision)
 }
 
 func (r *Repository) FinishRun(ctx context.Context, run Run, finished time.Time, m Metrics) error {

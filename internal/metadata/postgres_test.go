@@ -55,6 +55,34 @@ func TestSnapshotUpsertsPersistObservedPrecision(t *testing.T) {
 	}
 }
 
+func TestSnapshotObservedPrecisionDefaultsBlankToUnknown(t *testing.T) {
+	if got := snapshotObservedPrecision(""); got != string(model.PrecisionUnknown) {
+		t.Fatalf("blank snapshot precision = %q, want %q", got, model.PrecisionUnknown)
+	}
+	if got := snapshotObservedPrecision(model.PrecisionDate); got != string(model.PrecisionDate) {
+		t.Fatalf("date snapshot precision = %q, want %q", got, model.PrecisionDate)
+	}
+	if got := snapshotObservedPrecision(model.PrecisionSecond); got != string(model.PrecisionSecond) {
+		t.Fatalf("second snapshot precision = %q, want %q", got, model.PrecisionSecond)
+	}
+}
+
+func TestCatalogIncludesBCBMacroSource(t *testing.T) {
+	for _, candidate := range sources {
+		if candidate.code != "bcb" {
+			continue
+		}
+		if candidate.kind != "macro" {
+			t.Fatalf("BCB source kind = %q, want macro", candidate.kind)
+		}
+		if candidate.baseURL != "https://api.bcb.gov.br/dados/serie/" {
+			t.Fatalf("BCB base URL = %q", candidate.baseURL)
+		}
+		return
+	}
+	t.Fatal("BCB source is missing from catalog")
+}
+
 func TestPriceSnapshotOrdering(t *testing.T) {
 	baseAt := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
 	base := model.PriceBar{

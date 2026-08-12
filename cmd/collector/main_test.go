@@ -117,6 +117,8 @@ type orderingRawStore struct {
 	events          []string
 	completed       bool
 	payloads        [][]byte
+	rawKeys         []string
+	rawMetadata     []storage.RawMetadata
 	manifestPayload []byte
 	manifestErr     error
 }
@@ -141,6 +143,8 @@ func (s *orderingRawStore) Put(ctx context.Context, key string, data io.Reader, 
 	}
 	s.completed = true
 	s.payloads = append(s.payloads, append([]byte(nil), b...))
+	s.rawKeys = append(s.rawKeys, key)
+	s.rawMetadata = append(s.rawMetadata, meta)
 	s.events = append(s.events, "raw:put:complete")
 	return meta, nil
 }
@@ -455,6 +459,178 @@ func TestCollectorFREDStoresRawBeforeNormalizedWrite(t *testing.T) {
 	}
 	if got := len(app.normalized.(*orderingNormalizedStore).economics); got != 1 {
 		t.Fatalf("economic observations = %d, want 1", got)
+	}
+}
+
+func TestCollectorBCBStoresRawBeforeCanonicalWrite(t *testing.T) {
+	payload := []byte("\"data\";\"valor\"\r\n\"01/01/2024\";\"14,25\"\r\n")
+	raw := &orderingRawStore{}
+	run := testRun()
+	var finalized metadata.Metrics
+	var snapshots []model.EconomicObservation
+	app := &app{
+		cfg: config.Config{Providers: config.Providers{BCB: config.BCBProvider{Enabled: true, Series: []config.BCBSeries{{
+			Code: "432", Geography: "BR", Unit: "percent", Frequency: "daily", SeasonalAdjustment: "not_adjusted",
+		}}}}},
+		raw:        raw,
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedHash: hashPayload(payload), expectedSource: "bcb", locatorPrefix: "csv/date="},
+		http:       collectorHTTPFake{responses: map[string][]byte{"bcdata.sgs.432": payload}},
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, _ []model.PriceBar, macros []model.EconomicObservation) {
+			finalized = m
+			snapshots = append(snapshots, macros...)
+			raw.events = append(raw.events, "metadata:finalize")
+		}},
+		batchKey: "bcb-ordering-test",
+	}
+
+	if err := app.run(context.Background(), "bcb"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "canonical:economics:write", "metadata:finalize"}) {
+		t.Fatalf("BCB publication order = %v", raw.events)
+	}
+	if len(raw.rawKeys) != 1 || !strings.HasPrefix(raw.rawKeys[0], "bcb/series/") || !strings.Contains(raw.rawKeys[0], "/432/") {
+		t.Fatalf("BCB raw object keys = %v", raw.rawKeys)
+	}
+	if len(raw.rawMetadata) != 1 {
+		t.Fatalf("BCB raw metadata count = %d, want 1", len(raw.rawMetadata))
+	}
+	if got := raw.rawMetadata[0].Attributes; got["series_code"] != "432" || got["provider_format"] != "sgs-csv" || got["geography"] != "BR" || got["frequency"] != "daily" {
+		t.Fatalf("BCB raw attributes = %+v", got)
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 1 || manifest.Entries[0].Attributes["series_code"] != "432" {
+		t.Fatalf("BCB raw manifest entries = %+v", manifest.Entries)
+	}
+	if len(snapshots) != 1 || snapshots[0].Source != "bcb" || snapshots[0].Temporal.ObservedPrecision != model.PrecisionDate {
+		t.Fatalf("BCB snapshots = %+v", snapshots)
+	}
+	if finalized.Cursor["provider"] != "bcb" || finalized.Cursor["last_series_code"] != "432" || finalized.Cursor["last_accepted_series_code"] != "432" {
+		t.Fatalf("BCB cursor = %+v", finalized.Cursor)
+	}
+	if finalized.Cursor["series_processed"] != 1 || finalized.Cursor["series_accepted"] != 1 {
+		t.Fatalf("BCB cursor counts = %+v", finalized.Cursor)
+	}
+}
+
+func TestCollectorBCBRetainsRawOnParseFailureBeforeFinalization(t *testing.T) {
+	payload := []byte("\"wrong\";\"valor\"\r\n\"01/01/2024\";\"14,25\"\r\n")
+	raw := &orderingRawStore{}
+	run := testRun()
+	var finalized metadata.Metrics
+	app := &app{
+		cfg:        config.Config{Providers: config.Providers{BCB: config.BCBProvider{Enabled: true, Series: []config.BCBSeries{{Code: "432", Geography: "BR", Unit: "percent", Frequency: "daily"}}}}},
+		raw:        raw,
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedSource: "bcb", locatorPrefix: "csv/date="},
+		http:       collectorHTTPFake{payload: payload},
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) {
+			finalized = m
+			raw.events = append(raw.events, "metadata:finalize")
+			if len(prices) != 0 || len(macros) != 0 {
+				t.Errorf("finalized snapshots = %d prices, %d macros; want none", len(prices), len(macros))
+			}
+		}},
+		batchKey: "bcb-parse-error-test",
+	}
+
+	if err := app.run(context.Background(), "bcb"); err == nil {
+		t.Fatal("expected BCB schema error")
+	}
+	if len(raw.payloads) != 1 || string(raw.payloads[0]) != string(payload) {
+		t.Fatalf("persisted BCB raw payload = %q, want %q", raw.payloads, payload)
+	}
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "metadata:finalize"}) {
+		t.Fatalf("BCB parse-error publication order = %v", raw.events)
+	}
+	if got := len(decodeTestManifest(t, raw.manifestPayload).Entries); got != 1 {
+		t.Fatalf("BCB parse-error manifest entries = %d, want 1", got)
+	}
+	if finalized.Err == nil || finalized.RawPayloads != 1 {
+		t.Fatalf("BCB parse-error final metrics = %+v", finalized)
+	}
+}
+
+func TestCollectorBCBPartialRunFinalizesAcceptedSeries(t *testing.T) {
+	goodPayload := []byte("\"data\";\"valor\"\r\n\"01/01/2024\";\"14,25\"\r\n")
+	badPayload := []byte("\"wrong\";\"valor\"\r\n\"01/01/2024\";\"14,25\"\r\n")
+	raw := &orderingRawStore{}
+	run := testRun()
+	var snapshots []model.EconomicObservation
+	app := &app{
+		cfg: config.Config{Providers: config.Providers{BCB: config.BCBProvider{Enabled: true, Series: []config.BCBSeries{
+			{Code: "432", Geography: "BR", Unit: "percent", Frequency: "daily"},
+			{Code: "433", Geography: "BR", Unit: "percent", Frequency: "daily"},
+		}}}},
+		raw:        raw,
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedHash: hashPayload(goodPayload), expectedSource: "bcb", locatorPrefix: "csv/date="},
+		http: collectorHTTPFake{responses: map[string][]byte{
+			"bcdata.sgs.432": goodPayload,
+			"bcdata.sgs.433": badPayload,
+		}},
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(_ metadata.Metrics, _ []model.PriceBar, macros []model.EconomicObservation) {
+			snapshots = append(snapshots, macros...)
+			raw.events = append(raw.events, "metadata:finalize")
+		}},
+		batchKey: "bcb-partial-test",
+	}
+
+	if err := app.run(context.Background(), "bcb"); err == nil {
+		t.Fatal("expected partial BCB collection error")
+	}
+	if len(snapshots) != 1 || snapshots[0].SeriesID != "432" {
+		t.Fatalf("finalized BCB snapshots = %+v, want only accepted series 432", snapshots)
+	}
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "canonical:economics:write", "raw:put:complete", "metadata:finalize"}) {
+		t.Fatalf("BCB partial publication order = %v", raw.events)
+	}
+	if got := len(decodeTestManifest(t, raw.manifestPayload).Entries); got != 2 {
+		t.Fatalf("BCB partial manifest entries = %d, want 2", got)
+	}
+}
+
+func TestCollectorBCBEmptyAcceptedRowsStillFinalize(t *testing.T) {
+	payload := []byte("\"data\";\"valor\"\r\n")
+	raw := &orderingRawStore{}
+	run := testRun()
+	var finalized metadata.Metrics
+	var snapshots []model.EconomicObservation
+	app := &app{
+		cfg:        config.Config{Providers: config.Providers{BCB: config.BCBProvider{Enabled: true, Series: []config.BCBSeries{{Code: "432", Geography: "BR", Unit: "percent", Frequency: "daily"}}}}},
+		raw:        raw,
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedHash: hashPayload(payload), expectedSource: "bcb", locatorPrefix: "csv/date=", zeroRows: true},
+		http:       collectorHTTPFake{payload: payload},
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, _ []model.PriceBar, macros []model.EconomicObservation) {
+			finalized = m
+			snapshots = append(snapshots, macros...)
+		}},
+		batchKey: "bcb-empty-test",
+	}
+
+	if err := app.run(context.Background(), "bcb"); err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshots) != 0 || finalized.Written != 0 {
+		t.Fatalf("BCB empty finalization snapshots=%d metrics=%+v", len(snapshots), finalized)
+	}
+	if got := len(decodeTestManifest(t, raw.manifestPayload).Entries); got != 1 {
+		t.Fatalf("BCB empty manifest entries = %d, want 1", got)
+	}
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "canonical:economics:write"}) {
+		t.Fatalf("BCB empty publication order = %v", raw.events)
+	}
+}
+
+func TestCollectorValidatesBCBSourceSelection(t *testing.T) {
+	app := &app{}
+	if err := app.run(context.Background(), "unknown"); err == nil || !strings.Contains(err.Error(), "unknown source") {
+		t.Fatalf("unknown source error = %v", err)
+	}
+	if err := app.run(context.Background(), "bcb"); err == nil || !strings.Contains(err.Error(), "BCB provider is disabled") {
+		t.Fatalf("disabled BCB error = %v", err)
 	}
 }
 
