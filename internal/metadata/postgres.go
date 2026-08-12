@@ -16,9 +16,9 @@ import (
 
 type Repository struct{ pool *pgxpool.Pool }
 type Run struct {
-	ID, Source, RunKey, Status string
-	StartedAt                  time.Time
-	Skip                       bool
+	ID, DataSourceID, Source, RunKey, Status string
+	StartedAt                                time.Time
+	Skip                                     bool
 }
 type Metrics struct {
 	Received, Written, Rejected, RawPayloads int64
@@ -133,7 +133,7 @@ func (r *Repository) EnrichSECIssuer(ctx context.Context, issuer model.Issuer, s
 
 func (r *Repository) StartRun(ctx context.Context, source, runKey string, started time.Time) (Run, error) {
 	if r == nil {
-		return Run{Source: source, RunKey: runKey, StartedAt: started}, nil
+		return Run{}, errors.New("PostgreSQL metadata repository is required for canonical collection")
 	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -141,9 +141,9 @@ func (r *Repository) StartRun(ctx context.Context, source, runKey string, starte
 	}
 	defer tx.Rollback(ctx)
 	var run Run
-	err = tx.QueryRow(ctx, `INSERT INTO ingestion_runs(data_source_id,run_key,status,started_at,metadata) SELECT id,$2::text,'running',$3::timestamptz,jsonb_build_object('collector_source',$1::text) FROM data_sources WHERE code=$1::text ON CONFLICT(data_source_id,run_key) DO NOTHING RETURNING id::text,status::text,started_at`, source, runKey, started.UTC()).Scan(&run.ID, &run.Status, &run.StartedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO ingestion_runs(data_source_id,run_key,status,started_at,metadata) SELECT id,$2::text,'running',$3::timestamptz,jsonb_build_object('collector_source',$1::text) FROM data_sources WHERE code=$1::text ON CONFLICT(data_source_id,run_key) DO NOTHING RETURNING id::text,data_source_id::text,status::text,started_at`, source, runKey, started.UTC()).Scan(&run.ID, &run.DataSourceID, &run.Status, &run.StartedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		err = tx.QueryRow(ctx, `SELECT r.id::text,r.status::text,r.started_at FROM ingestion_runs r JOIN data_sources s ON s.id=r.data_source_id WHERE s.code=$1 AND r.run_key=$2 FOR UPDATE`, source, runKey).Scan(&run.ID, &run.Status, &run.StartedAt)
+		err = tx.QueryRow(ctx, `SELECT r.id::text,r.data_source_id::text,r.status::text,r.started_at FROM ingestion_runs r JOIN data_sources s ON s.id=r.data_source_id WHERE s.code=$1 AND r.run_key=$2 FOR UPDATE`, source, runKey).Scan(&run.ID, &run.DataSourceID, &run.Status, &run.StartedAt)
 		if err != nil {
 			return Run{}, err
 		}

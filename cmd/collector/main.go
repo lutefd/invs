@@ -31,11 +31,27 @@ import (
 type app struct {
 	cfg        config.Config
 	raw        storage.RawStore
-	normalized *normalize.Writer
-	http       *httpx.Client
+	normalized normalizedStore
+	http       httpGetter
 	log        *slog.Logger
-	metadata   *metadata.Repository
+	metadata   metadataStore
 	batchKey   string
+}
+
+type httpGetter interface {
+	Get(context.Context, string) ([]byte, error)
+}
+
+type metadataStore interface {
+	EnrichSECIssuer(context.Context, model.Issuer, string) error
+	StartRun(context.Context, string, string, time.Time) (metadata.Run, error)
+	FinishRun(context.Context, metadata.Run, time.Time, metadata.Metrics) error
+}
+
+type normalizedStore interface {
+	WritePrices(string, []model.PriceBar) (string, int, error)
+	WriteFundamentals(string, []model.FundamentalObservation) (string, int, error)
+	WriteEconomics(string, []model.EconomicObservation) (string, int, error)
 }
 type metrics struct {
 	Source                         string
@@ -81,12 +97,14 @@ func main() {
 		log.Error("metadata database unavailable", "error", err)
 		os.Exit(2)
 	}
-	if metadataRepo != nil {
-		defer metadataRepo.Close()
-		if err := metadataRepo.SyncCatalog(ctx, cfg); err != nil {
-			log.Error("metadata catalog sync failed", "error", err)
-			os.Exit(2)
-		}
+	if metadataRepo == nil {
+		log.Error("metadata database unavailable", "error", errors.New("DATABASE_URL is required for canonical collection"))
+		os.Exit(2)
+	}
+	defer metadataRepo.Close()
+	if err := metadataRepo.SyncCatalog(ctx, cfg); err != nil {
+		log.Error("metadata catalog sync failed", "error", err)
+		os.Exit(2)
 	}
 	batchKey := *runKey
 	if batchKey == "" {
@@ -156,20 +174,32 @@ func (a *app) collectSEC(ctx context.Context) error {
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
 		rawOK := true
+		rawHashes := map[string]string{}
 		for _, d := range r.Raw {
 			key := rawKey("sec", d.Kind, fmt.Sprintf("cik-%010d", s.CIK), d.Data, m.StartedAt, "json")
-			if stored, err := a.raw.Put(ctx, key, bytes.NewReader(d.Data), storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}); err != nil {
-				errs = append(errs, err)
+			stored, putErr := a.raw.Put(ctx, key, bytes.NewReader(d.Data), storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}})
+			if putErr != nil {
+				errs = append(errs, putErr)
 				rawOK = false
 			} else {
 				m.RawObjects++
 				m.RawBytes += stored.Size
+				if hashErr := validateStoredHash("sec/"+d.Kind, d.SHA256, stored.SHA256); hashErr != nil {
+					errs = append(errs, hashErr)
+					rawOK = false
+				} else {
+					rawHashes[d.Kind] = stored.SHA256
+				}
 			}
 		}
 		if !rawOK {
 			continue
 		}
 		if err := a.metadata.EnrichSECIssuer(ctx, r.Issuer, r.StateOfIncorporation); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if err := stampFundamentals(run, rawHashes["companyfacts"], r.Facts); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -224,12 +254,20 @@ func (a *app) collectPrices(ctx context.Context) error {
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
 		key := rawKey("marketdata", "yahoo", s.SecurityID, r.Raw, m.StartedAt, "json")
-		if stored, err := a.raw.Put(ctx, key, bytes.NewReader(r.Raw), storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}); err != nil {
+		stored, putErr := a.raw.Put(ctx, key, bytes.NewReader(r.Raw), storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}})
+		if putErr != nil {
+			errs = append(errs, putErr)
+			continue
+		}
+		m.RawObjects++
+		m.RawBytes += stored.Size
+		if err := validateStoredHash("yahoo", r.SHA256, stored.SHA256); err != nil {
 			errs = append(errs, err)
 			continue
-		} else {
-			m.RawObjects++
-			m.RawBytes += stored.Size
+		}
+		if err := stampPrices(run, r.SHA256, r.Bars); err != nil {
+			errs = append(errs, err)
+			continue
 		}
 		path, n, err := a.normalized.WritePrices(s.SecurityID, r.Bars)
 		if err != nil {
@@ -267,12 +305,20 @@ func (a *app) collectFRED(ctx context.Context) error {
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
 		key := rawKey("fred", "series", series, r.Raw, m.StartedAt, "csv")
-		if stored, err := a.raw.Put(ctx, key, bytes.NewReader(r.Raw), storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}}); err != nil {
+		stored, putErr := a.raw.Put(ctx, key, bytes.NewReader(r.Raw), storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}})
+		if putErr != nil {
+			errs = append(errs, putErr)
+			continue
+		}
+		m.RawObjects++
+		m.RawBytes += stored.Size
+		if err := validateStoredHash("fred", r.SHA256, stored.SHA256); err != nil {
 			errs = append(errs, err)
 			continue
-		} else {
-			m.RawObjects++
-			m.RawBytes += stored.Size
+		}
+		if err := stampEconomics(run, r.SHA256, r.Observations); err != nil {
+			errs = append(errs, err)
+			continue
 		}
 		path, n, err := a.normalized.WriteEconomics(series, r.Observations)
 		if err != nil {
@@ -291,8 +337,14 @@ func (a *app) collectFRED(ctx context.Context) error {
 }
 
 func (a *app) start(ctx context.Context, m *metrics) (metadata.Run, bool, error) {
+	if a.metadata == nil {
+		return metadata.Run{}, false, errors.New("PostgreSQL metadata repository is required for canonical collection")
+	}
 	run, err := a.metadata.StartRun(ctx, m.Source, a.batchKey+"/"+m.Source, m.StartedAt)
 	if err != nil {
+		return metadata.Run{}, false, err
+	}
+	if err := validateRunLineage(run); err != nil {
 		return metadata.Run{}, false, err
 	}
 	if run.Skip {
@@ -301,6 +353,71 @@ func (a *app) start(ctx context.Context, m *metrics) (metadata.Run, bool, error)
 	}
 	return run, false, nil
 }
+
+func validateRunLineage(run metadata.Run) error {
+	if _, err := uuid.Parse(run.DataSourceID); err != nil {
+		return fmt.Errorf("run data_source_id must be UUID: %w", err)
+	}
+	if _, err := uuid.Parse(run.ID); err != nil {
+		return fmt.Errorf("run ID must be UUID: %w", err)
+	}
+	return nil
+}
+
+func validateStoredHash(source, expected, stored string) error {
+	if expected == "" {
+		return fmt.Errorf("%s adapter returned an empty raw SHA-256", source)
+	}
+	if expected != stored {
+		return fmt.Errorf("%s raw SHA-256 mismatch: adapter=%s stored=%s", source, expected, stored)
+	}
+	return nil
+}
+
+func stampProvenance(run metadata.Run, rawHash string, topLevelHash *string, p *model.Provenance, temporal model.Temporal) error {
+	if rawHash == "" || *topLevelHash != rawHash || p.RawPayloadHash != rawHash {
+		return errors.New("adapter/raw-store payload hash mismatch")
+	}
+	if p.RawRecordLocator == "" {
+		return errors.New("adapter raw record locator is required")
+	}
+	if temporal.IngestedAt.IsZero() {
+		return errors.New("temporal ingested_at is required")
+	}
+	p.DataSourceID = run.DataSourceID
+	p.IngestionRunID = run.ID
+	p.RawPayloadHash = rawHash
+	p.IngestedAt = temporal.IngestedAt
+	return nil
+}
+
+func stampPrices(run metadata.Run, rawHash string, observations []model.PriceBar) error {
+	for i := range observations {
+		if err := stampProvenance(run, rawHash, &observations[i].RawPayloadHash, &observations[i].Provenance, observations[i].Temporal); err != nil {
+			return fmt.Errorf("price observation %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func stampFundamentals(run metadata.Run, rawHash string, observations []model.FundamentalObservation) error {
+	for i := range observations {
+		if err := stampProvenance(run, rawHash, &observations[i].RawPayloadHash, &observations[i].Provenance, observations[i].Temporal); err != nil {
+			return fmt.Errorf("fundamental observation %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func stampEconomics(run metadata.Run, rawHash string, observations []model.EconomicObservation) error {
+	for i := range observations {
+		if err := stampProvenance(run, rawHash, &observations[i].RawPayloadHash, &observations[i].Provenance, observations[i].Temporal); err != nil {
+			return fmt.Errorf("economic observation %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
 func (a *app) finish(ctx context.Context, run metadata.Run, m metrics, err error) error {
 	m.Duration = time.Since(m.StartedAt)
 	status := "success"
