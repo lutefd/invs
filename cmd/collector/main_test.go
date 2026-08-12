@@ -244,6 +244,101 @@ type collectorMetadataFake struct {
 	finalizeError error
 }
 
+type operatorMetadataFake struct {
+	run       metadata.Run
+	lookedUp  bool
+	cancelled bool
+	reason    string
+}
+
+func (f *operatorMetadataFake) LookupRun(_ context.Context, source, runKey, runID string) (metadata.Run, error) {
+	f.lookedUp = true
+	if runID == "" && (source != f.run.Source || runKey != f.run.RunKey) {
+		return metadata.Run{}, fmt.Errorf("unexpected source/run key %q/%q", source, runKey)
+	}
+	if runID != "" && runID != f.run.ID {
+		return metadata.Run{}, fmt.Errorf("unexpected run ID %q", runID)
+	}
+	return f.run, nil
+}
+
+func (f *operatorMetadataFake) CancelRun(_ context.Context, run metadata.Run, _ time.Time, reason string) error {
+	if strings.TrimSpace(reason) == "" {
+		return errors.New("operator cancellation reason is required")
+	}
+	if run.Status != "running" && run.Status != "queued" {
+		return fmt.Errorf("run %s is already terminal with status %s", run.ID, run.Status)
+	}
+	f.cancelled = true
+	f.reason = "operator cancellation: " + strings.TrimSpace(reason)
+	f.run.Status = "cancelled"
+	return nil
+}
+
+func TestCancelOrphanRunRecordsCancellationReason(t *testing.T) {
+	store := &operatorMetadataFake{run: metadata.Run{ID: testRunID, DataSourceID: testDataSource, Source: "yahoo", RunKey: "orphaned-batch/prices", Status: "running"}}
+	options := cancellationOptions{enabled: true, source: "yahoo", runKey: "orphaned-batch/prices", reason: "collector process disappeared"}
+
+	if _, err := cancelOrphanRun(context.Background(), store, options, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if !store.lookedUp || !store.cancelled {
+		t.Fatalf("cancellation store state = %+v, want lookup and cancellation", store)
+	}
+	if store.run.Status != "cancelled" || store.reason != "operator cancellation: collector process disappeared" {
+		t.Fatalf("cancelled run = status %q reason %q", store.run.Status, store.reason)
+	}
+}
+
+func TestCancelOrphanRunAcceptsRunIDIdentity(t *testing.T) {
+	store := &operatorMetadataFake{run: metadata.Run{ID: testRunID, DataSourceID: testDataSource, Source: "sec", RunKey: "orphaned-batch/sec", Status: "running"}}
+	options := cancellationOptions{enabled: true, runID: testRunID, reason: "worker exited"}
+
+	if _, err := cancelOrphanRun(context.Background(), store, options, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if !store.cancelled {
+		t.Fatal("run ID cancellation did not complete")
+	}
+}
+
+func TestCancelOrphanRunCannotCancelTerminalRun(t *testing.T) {
+	store := &operatorMetadataFake{run: metadata.Run{ID: testRunID, DataSourceID: testDataSource, Source: "yahoo", RunKey: "finished-batch/prices", Status: "succeeded"}}
+	options := cancellationOptions{enabled: true, source: "yahoo", runKey: "finished-batch/prices", reason: "operator cleanup"}
+
+	if _, err := cancelOrphanRun(context.Background(), store, options, time.Now().UTC()); err == nil || !strings.Contains(err.Error(), "already terminal") {
+		t.Fatalf("cancelOrphanRun error = %v, want terminal-state protection", err)
+	}
+	if store.cancelled {
+		t.Fatal("terminal run was marked cancelled")
+	}
+}
+
+func TestCancellationRejectsBlankReason(t *testing.T) {
+	options := cancellationOptions{enabled: true, source: "yahoo", runKey: "orphaned-batch/prices", reason: " \t"}
+	if err := validateCancellationOptions(options); err == nil || !strings.Contains(err.Error(), "cancel-reason") {
+		t.Fatalf("validateCancellationOptions error = %v, want blank-reason rejection", err)
+	}
+}
+
+func TestNormalCollectionFlagsRemainUnchanged(t *testing.T) {
+	if err := validateCancellationOptions(cancellationOptions{}); err != nil {
+		t.Fatalf("normal collection options rejected: %v", err)
+	}
+}
+
+func TestCancelOrphanRunDoesNotUseProviderOrCollectionStores(t *testing.T) {
+	store := &operatorMetadataFake{run: metadata.Run{ID: testRunID, DataSourceID: testDataSource, Source: "fred", RunKey: "orphaned-batch/fred", Status: "queued"}}
+	options := cancellationOptions{enabled: true, source: "fred", runKey: "orphaned-batch/fred", reason: "worker stopped before fetch"}
+
+	if _, err := cancelOrphanRun(context.Background(), store, options, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if !store.cancelled {
+		t.Fatal("cancellation did not complete")
+	}
+}
+
 func (f collectorMetadataFake) EnrichSECIssuer(context.Context, model.Issuer, string) error {
 	return nil
 }

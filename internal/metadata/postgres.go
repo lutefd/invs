@@ -132,6 +132,18 @@ SET status='cancelled'::ingestion_run_status,
 	error_message=$4
 WHERE id=$1 AND data_source_id=$2 AND status IN ('running','queued')`
 
+const lookupRunBySourceAndKeySQL = `
+SELECT r.id::text, r.data_source_id::text, s.code, r.run_key, r.status::text, r.started_at
+FROM ingestion_runs r
+JOIN data_sources s ON s.id=r.data_source_id
+WHERE s.code=$1 AND r.run_key=$2`
+
+const lookupRunByIDSQL = `
+SELECT r.id::text, r.data_source_id::text, s.code, r.run_key, r.status::text, r.started_at
+FROM ingestion_runs r
+JOIN data_sources s ON s.id=r.data_source_id
+WHERE r.id=$1::uuid`
+
 type source struct {
 	code, name, kind, baseURL string
 	enabled                   bool
@@ -266,6 +278,40 @@ func (r *Repository) StartRun(ctx context.Context, source, runKey string, starte
 	}
 	run.Source, run.RunKey = source, runKey
 	if err = tx.Commit(ctx); err != nil {
+		return Run{}, err
+	}
+	return run, nil
+}
+
+// LookupRun resolves the stable operator identity for a run without changing
+// any run or snapshot state. Callers must provide either source plus run key,
+// or a run ID, but never both.
+func (r *Repository) LookupRun(ctx context.Context, source, runKey, runID string) (Run, error) {
+	source = strings.TrimSpace(source)
+	runKey = strings.TrimSpace(runKey)
+	runID = strings.TrimSpace(runID)
+	if runID != "" && (source != "" || runKey != "") {
+		return Run{}, errors.New("run ID cannot be combined with source or run key")
+	}
+	if runID == "" && (source == "" || runKey == "") {
+		return Run{}, errors.New("source and run key, or run ID, are required")
+	}
+	if r == nil {
+		return Run{}, errors.New("PostgreSQL metadata repository is required to look up a run")
+	}
+
+	query, args := lookupRunByIDSQL, []any{runID}
+	identity := fmt.Sprintf("run ID %q", runID)
+	if runID == "" {
+		query, args = lookupRunBySourceAndKeySQL, []any{source, runKey}
+		identity = fmt.Sprintf("source %q and run key %q", source, runKey)
+	}
+	var run Run
+	err := r.pool.QueryRow(ctx, query, args...).Scan(&run.ID, &run.DataSourceID, &run.Source, &run.RunKey, &run.Status, &run.StartedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Run{}, fmt.Errorf("no ingestion run found for %s", identity)
+	}
+	if err != nil {
 		return Run{}, err
 	}
 	return run, nil
@@ -567,6 +613,9 @@ func (r *Repository) CancelRun(ctx context.Context, run Run, finished time.Time,
 	}
 	if !run.StartedAt.IsZero() && finished.Before(run.StartedAt) {
 		return fmt.Errorf("run cancellation finish time %s precedes start time %s", finished.UTC().Format(time.RFC3339Nano), run.StartedAt.UTC().Format(time.RFC3339Nano))
+	}
+	if run.Status != "" && run.Status != "running" && run.Status != "queued" {
+		return fmt.Errorf("run %s is already terminal with status %s", run.ID, run.Status)
 	}
 
 	tag, err := r.pool.Exec(ctx, cancelRunSQL, run.ID, run.DataSourceID, finished.UTC(), message)

@@ -53,6 +53,20 @@ type normalizedStore interface {
 	WriteFundamentals(string, []model.FundamentalObservation) (string, int, error)
 	WriteEconomics(string, []model.EconomicObservation) (string, int, error)
 }
+
+type operatorMetadataStore interface {
+	LookupRun(context.Context, string, string, string) (metadata.Run, error)
+	CancelRun(context.Context, metadata.Run, time.Time, string) error
+}
+
+type cancellationOptions struct {
+	enabled bool
+	source  string
+	runKey  string
+	runID   string
+	reason  string
+}
+
 type metrics struct {
 	Source                         string
 	StartedAt                      time.Time
@@ -69,14 +83,43 @@ func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
 	source := flag.String("source", "all", "collector source: all, sec, prices, or fred")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
+	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
+	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
+	cancelRunKey := flag.String("cancel-run-key", "", "exact ingestion run key for cancellation lookup")
+	cancelRunID := flag.String("cancel-run-id", "", "ingestion run UUID for cancellation lookup")
+	cancelReason := flag.String("cancel-reason", "", "non-empty operator reason for cancellation")
 	flag.Parse()
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	cancelOptions := cancellationOptions{enabled: *cancelRun, source: *cancelSource, runKey: *cancelRunKey, runID: *cancelRunID, reason: *cancelReason}
+	if err := validateCancellationOptions(cancelOptions); err != nil {
+		log.Error("invalid cancellation options", "error", err)
+		os.Exit(2)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Error("configuration failed", "error", err)
 		os.Exit(2)
+	}
+	if cancelOptions.enabled {
+		metadataRepo, err := metadata.Open(ctx, cfg.DatabaseURL)
+		if err != nil {
+			log.Error("metadata database unavailable", "error", err)
+			os.Exit(2)
+		}
+		if metadataRepo == nil {
+			log.Error("metadata database unavailable", "error", errors.New("DATABASE_URL is required to cancel a run"))
+			os.Exit(2)
+		}
+		defer metadataRepo.Close()
+		run, err := cancelOrphanRun(ctx, metadataRepo, cancelOptions, time.Now().UTC())
+		if err != nil {
+			log.Error("run cancellation failed", "error", err)
+			os.Exit(1)
+		}
+		log.Info("run cancelled", "source", run.Source, "run_key", run.RunKey, "run_id", run.ID, "reason", strings.TrimSpace(cancelOptions.reason))
+		return
 	}
 	httpClient, err := httpx.New(httpx.Config{UserAgent: cfg.UserAgent, Timeout: cfg.HTTP.Timeout, RequestsPerSecond: cfg.HTTP.RequestsPerSecond, Burst: cfg.HTTP.Burst, MaxAttempts: cfg.HTTP.MaxAttempts, InitialBackoff: cfg.HTTP.InitialBackoff})
 	if err != nil {
@@ -120,6 +163,48 @@ func main() {
 		log.Error("collection failed", "source", *source, "error", err)
 		os.Exit(1)
 	}
+}
+
+func validateCancellationOptions(options cancellationOptions) error {
+	if !options.enabled {
+		if strings.TrimSpace(options.source) != "" || strings.TrimSpace(options.runKey) != "" || strings.TrimSpace(options.runID) != "" || strings.TrimSpace(options.reason) != "" {
+			return errors.New("cancellation options require --cancel-run")
+		}
+		return nil
+	}
+	if strings.TrimSpace(options.reason) == "" {
+		return errors.New("--cancel-reason is required and must not be blank")
+	}
+	if strings.TrimSpace(options.runID) != "" {
+		if strings.TrimSpace(options.source) != "" || strings.TrimSpace(options.runKey) != "" {
+			return errors.New("--cancel-run-id cannot be combined with --cancel-source or --cancel-run-key")
+		}
+		if _, err := uuid.Parse(strings.TrimSpace(options.runID)); err != nil {
+			return fmt.Errorf("--cancel-run-id must be a UUID: %w", err)
+		}
+		return nil
+	}
+	if strings.TrimSpace(options.source) == "" || strings.TrimSpace(options.runKey) == "" {
+		return errors.New("--cancel-source and --cancel-run-key are required when --cancel-run-id is omitted")
+	}
+	return nil
+}
+
+func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options cancellationOptions, finished time.Time) (metadata.Run, error) {
+	if err := validateCancellationOptions(options); err != nil {
+		return metadata.Run{}, err
+	}
+	run, err := store.LookupRun(ctx, options.source, options.runKey, options.runID)
+	if err != nil {
+		return metadata.Run{}, err
+	}
+	if err := validateRunLineage(run); err != nil {
+		return metadata.Run{}, err
+	}
+	if err := store.CancelRun(ctx, run, finished, options.reason); err != nil {
+		return metadata.Run{}, err
+	}
+	return run, nil
 }
 
 func (a *app) run(ctx context.Context, source string) error {

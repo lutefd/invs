@@ -242,6 +242,51 @@ func TestOperatorCancellationMessageRequiresIntent(t *testing.T) {
 	}
 }
 
+func TestCancelRunSQLOnlyChangesActiveRuns(t *testing.T) {
+	where := strings.SplitN(cancelRunSQL, "WHERE", 2)[1]
+	for _, status := range []string{"running", "queued"} {
+		if !strings.Contains(where, "'"+status+"'") {
+			t.Fatalf("cancelRunSQL does not allow active status %q", status)
+		}
+	}
+	for _, status := range []string{"succeeded", "partial", "failed", "cancelled"} {
+		if strings.Contains(where, "'"+status+"'") {
+			t.Fatalf("cancelRunSQL unexpectedly allows terminal status %q", status)
+		}
+	}
+	if !strings.Contains(cancelRunSQL, "status='cancelled'::ingestion_run_status") || !strings.Contains(cancelRunSQL, "error_message=$4") {
+		t.Fatalf("cancelRunSQL does not record cancellation status and reason: %s", cancelRunSQL)
+	}
+}
+
+func TestLookupRunRequiresOneStableIdentity(t *testing.T) {
+	var repo *Repository
+	for _, tc := range []struct {
+		name                  string
+		source, runKey, runID string
+		want                  string
+	}{
+		{name: "missing identity", want: "source and run key, or run ID, are required"},
+		{name: "mixed identity", source: "yahoo", runKey: "batch", runID: "run-id", want: "run ID cannot be combined"},
+		{name: "partial key identity", source: "yahoo", want: "source and run key, or run ID, are required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := repo.LookupRun(context.Background(), tc.source, tc.runKey, tc.runID)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("LookupRun error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCancelRunRejectsKnownTerminalRunBeforeDatabaseWork(t *testing.T) {
+	repo := &Repository{}
+	run := Run{ID: "run-1", DataSourceID: "source-1", Status: "succeeded", StartedAt: time.Now().UTC()}
+	if err := repo.CancelRun(context.Background(), run, time.Now().UTC(), "orphaned process"); err == nil || !strings.Contains(err.Error(), "already terminal") {
+		t.Fatalf("CancelRun error = %v, want terminal-state protection", err)
+	}
+}
+
 func TestValidateSnapshotLineage(t *testing.T) {
 	run := Run{ID: "run-1", DataSourceID: "source-1"}
 	price := model.PriceBar{Provenance: model.Provenance{DataSourceID: run.DataSourceID, IngestionRunID: run.ID}}

@@ -86,6 +86,28 @@ unlisted files are therefore invisible to research readers.
   queued/running orphan active run; it is not auto-cancelled. Only an operator may
   cancel such a run, with a non-empty reason, and operator cancellation changes only
   the active run state/error metadata—it never publishes or deletes snapshot data.
+- The collector exposes an explicit administrative cancellation path. Identify the
+  run either by its metadata source and exact stable run key:
+
+  ```sh
+  docker compose --profile collect run --rm collector \
+    --cancel-run --cancel-source yahoo \
+    --cancel-run-key 'operator-batch/prices' \
+    --cancel-reason 'collector process was terminated'
+  ```
+
+  or by its run UUID:
+
+  ```sh
+  docker compose --profile collect run --rm collector \
+    --cancel-run --cancel-run-id 00000000-0000-0000-0000-000000000000 \
+    --cancel-reason 'collector process was terminated'
+  ```
+
+  `--cancel-run` is required, and the reason must contain non-whitespace text. The
+  path performs only the metadata lookup and active-only state transition; it does
+  not initialize providers, read or validate normalized data, write snapshots, or
+  cancel any other run. Terminal runs are rejected by the lookup/transition boundary.
 - Checkpoints/cursors advance only in the same transaction that publishes the output
   they describe.
 
