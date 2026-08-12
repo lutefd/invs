@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -127,12 +128,122 @@ type EconomicObservation struct {
 	Provenance                               Provenance
 }
 
+// Filing is canonical metadata for one source document. SourceDocumentID is
+// the source-owned identity used for idempotent publication; it must include
+// any source version component that distinguishes a resubmission. The source
+// strings are intentionally not normalized beyond the contract's required
+// presence checks. Complete source fidelity remains in the raw payload.
+//
+// The fields below the canonical contract are retained for the SEC adapter's
+// existing result API. They are compatibility fields only; canonical writers
+// use the explicit v1 fields above them and never infer AvailableAt from
+// FiledDate, PeriodEnd, or any other observation date.
 type Filing struct {
-	Source, IssuerID, AccessionNumber, Form, PrimaryDocument string
-	FiledDate                                                time.Time
-	AcceptedAt                                               *time.Time
-	IngestedAt                                               time.Time
-	RawPayloadHash                                           string
+	ID                     string
+	Source                 string
+	IssuerID               string
+	SourceDocumentID       string
+	DocumentURL            string
+	AccessionNumber        string
+	FormType               string
+	Category               string
+	DocumentType           string
+	Species                string
+	Subject                string
+	PresentationType       string
+	PrimaryDocument        string
+	AmendsSourceDocumentID string
+	FilingDate             time.Time
+	PeriodEnd              *time.Time
+	Temporal               Temporal
+	EffectiveAt            *time.Time
+	Provenance             Provenance
+
+	// Deprecated adapter compatibility fields. New providers should populate
+	// SourceDocumentID, FormType, FilingDate, Temporal, and Provenance.
+	Form           string
+	FiledDate      time.Time
+	AcceptedAt     *time.Time
+	IngestedAt     time.Time
+	RawPayloadHash string
+}
+
+// Validate checks the provider-neutral filing contract before physical
+// normalization. UUID and SHA-256 checks belong to the storage boundary where
+// those identifiers are serialized; this method deliberately does not invent
+// values for missing temporal fields.
+func (f Filing) Validate() error {
+	if f.Source == "" {
+		return errors.New("filing source required")
+	}
+	if f.IssuerID == "" {
+		return errors.New("filing issuer_id required")
+	}
+	if f.SourceDocumentID == "" {
+		return errors.New("filing source_document_id required")
+	}
+	if f.FormType == "" {
+		return errors.New("filing form_type required")
+	}
+	if f.FilingDate.IsZero() {
+		return errors.New("filing_date required")
+	}
+	if f.DocumentURL == "" {
+		return errors.New("filing document_url required")
+	}
+	u, err := url.Parse(f.DocumentURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return errors.New("filing document_url must be an absolute URL")
+	}
+	if f.Temporal.AvailableAt.IsZero() || f.Temporal.IngestedAt.IsZero() {
+		return errors.New("filing available_at and ingested_at required")
+	}
+	if f.Temporal.AvailableAt.After(f.Temporal.IngestedAt) {
+		return errors.New("filing available_at after ingested_at")
+	}
+	if err := validateFilingPrecision(f.Temporal.ObservedAt, f.Temporal.ObservedPrecision, "observed"); err != nil {
+		return err
+	}
+	if err := validateFilingPrecision(f.Temporal.PublishedAt, f.Temporal.PublishedPrecision, "published"); err != nil {
+		return err
+	}
+	if !f.Temporal.PublishedAt.IsZero() && f.Temporal.PublishedAt.After(f.Temporal.AvailableAt) {
+		return errors.New("filing published_at after available_at")
+	}
+	if !f.Temporal.ObservedAt.IsZero() && !f.Temporal.PublishedAt.IsZero() && f.Temporal.ObservedAt.After(f.Temporal.PublishedAt) {
+		return errors.New("filing observed_at after published_at")
+	}
+	if f.EffectiveAt != nil && f.EffectiveAt.IsZero() {
+		return errors.New("filing effective_at must be non-zero when present")
+	}
+	return nil
+}
+
+func validateFilingPrecision(at time.Time, precision TimePrecision, field string) error {
+	if precision == "" {
+		precision = PrecisionUnknown
+	}
+	if precision != PrecisionDate && precision != PrecisionSecond && precision != PrecisionUnknown {
+		return errors.New("filing " + field + "_precision is invalid")
+	}
+	if at.IsZero() {
+		if precision != PrecisionUnknown {
+			return errors.New("filing " + field + "_precision must be unknown when " + field + "_at is absent")
+		}
+		return nil
+	}
+	utc := at.UTC()
+	switch precision {
+	case PrecisionDate:
+		if utc.Hour() != 0 || utc.Minute() != 0 || utc.Second() != 0 || utc.Nanosecond() != 0 {
+			return errors.New("filing " + field + "_precision=date requires UTC midnight")
+		}
+	case PrecisionSecond:
+		if utc.Nanosecond() != 0 {
+			return errors.New("filing " + field + "_precision=second requires whole-second time")
+		}
+	}
+	return nil
 }
 
 type CorporateAction struct {

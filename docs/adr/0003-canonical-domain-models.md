@@ -49,7 +49,8 @@ idempotent writes:
 - price: `(source, security, interval, observed_at, price_basis)`
 - fundamental: `(source, entity, concept, period, published_at, revision, accession_number, form, frame)`
 - economic: `(source, series, observed_at, published_at, revision)`
-- filing: `(source, accession/document identifier)`
+- filing: `(source, source_document_id)`; source-version components belong in
+  `source_document_id` when a resubmission is a distinct document identity
 - corporate action: `(source, source_event_id)`
 - ingestion run: `(data_source_id, run_key)`
 

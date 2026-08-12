@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -108,6 +109,47 @@ type EconomicRow struct {
 	NormalizerVersion     string `parquet:"normalizer_version"`
 }
 
+// FilingRow is the physical v1 representation of source-document metadata.
+// Presence flags keep nullable temporal fields distinct from the Unix epoch;
+// available_at and ingested_at are always present. Source metadata strings are
+// stored verbatim so a later collector can retain CVM's category/type/species/
+// subject/presentation values without lossy normalization.
+type FilingRow struct {
+	SchemaVersion          string `parquet:"schema_version"`
+	ID                     string `parquet:"id"`
+	Source                 string `parquet:"source"`
+	IssuerID               string `parquet:"issuer_id"`
+	SourceDocumentID       string `parquet:"source_document_id"`
+	DocumentURL            string `parquet:"document_url"`
+	AccessionNumber        string `parquet:"accession_number"`
+	FormType               string `parquet:"form_type"`
+	Category               string `parquet:"category"`
+	DocumentType           string `parquet:"document_type"`
+	Species                string `parquet:"species"`
+	Subject                string `parquet:"subject"`
+	PresentationType       string `parquet:"presentation_type"`
+	PrimaryDocument        string `parquet:"primary_document"`
+	AmendsSourceDocumentID string `parquet:"amends_source_document_id"`
+	FilingDate             int32  `parquet:"filing_date,date"`
+	PeriodEnd              int32  `parquet:"period_end,date"`
+	HasPeriodEnd           bool   `parquet:"has_period_end"`
+	ObservedAt             int64  `parquet:"observed_at,timestamp(microsecond:utc)"`
+	HasObservedAt          bool   `parquet:"has_observed_at"`
+	ObservedPrecision      string `parquet:"observed_precision"`
+	PublishedAt            int64  `parquet:"published_at,timestamp(microsecond:utc)"`
+	HasPublishedAt         bool   `parquet:"has_published_at"`
+	PublishedPrecision     string `parquet:"published_precision"`
+	AvailableAt            int64  `parquet:"available_at,timestamp(microsecond:utc)"`
+	EffectiveAt            int64  `parquet:"effective_at,timestamp(microsecond:utc)"`
+	HasEffectiveAt         bool   `parquet:"has_effective_at"`
+	IngestedAt             int64  `parquet:"ingested_at,timestamp(microsecond:utc)"`
+	RawPayloadHash         string `parquet:"raw_payload_hash"`
+	DataSourceID           string `parquet:"data_source_id"`
+	IngestionRunID         string `parquet:"ingestion_run_id"`
+	RawRecordLocator       string `parquet:"raw_record_locator"`
+	NormalizerVersion      string `parquet:"normalizer_version"`
+}
+
 func (r FundamentalRow) PeriodStartTime() *time.Time {
 	if !r.HasPeriodStart {
 		return nil
@@ -120,6 +162,14 @@ func (r EconomicRow) VintageTime() *time.Time {
 		return nil
 	}
 	v := time.UnixMicro(r.VintageAt).UTC()
+	return &v
+}
+
+func (r FilingRow) PeriodEndTime() *time.Time {
+	if !r.HasPeriodEnd {
+		return nil
+	}
+	v := time.Unix(int64(r.PeriodEnd)*86400, 0).UTC()
 	return &v
 }
 
@@ -192,6 +242,8 @@ func (w *Writer) ValidateExisting() error {
 			_, readErr = readCommitted[FundamentalRow](dir, partition)
 		case "macroeconomics":
 			_, readErr = readCommitted[EconomicRow](dir, partition)
+		case "filings":
+			_, readErr = readCommitted[FilingRow](dir, partition)
 		default:
 			readErr = fmt.Errorf("unsupported normalized dataset directory %q", partition["dataset"])
 		}
@@ -284,6 +336,58 @@ func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObser
 	}
 	sort.Slice(rows, func(i, j int) bool { return fundamentalKey(rows[i]) < fundamentalKey(rows[j]) })
 	metadata, err := metadataFromRows(in, func(r FundamentalRow) publicationMetadata {
+		return publicationMetadata{Source: r.Source, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID, NormalizerVersion: r.NormalizerVersion}
+	})
+	if err != nil && !slices.Equal(existing, rows) {
+		return "", 0, err
+	}
+	return publish(w, dir, partition, existing, rows, metadata)
+}
+
+// WriteFilings publishes one issuer/source partition of canonical filing
+// metadata. SourceDocumentID is the natural identity; a source that exposes
+// versions must include that version in the ID (for example, CVM IPE's
+// protocol/version identity). An identical raw hash is a no-op, while a
+// changed raw payload under the same identity is a conflict.
+func (w *Writer) WriteFilings(issuerID string, obs []model.Filing) (string, int, error) {
+	if len(obs) == 0 {
+		return "", 0, nil
+	}
+	if _, err := uuid.Parse(issuerID); err != nil {
+		return "", 0, fmt.Errorf("issuer ID must be UUID: %w", err)
+	}
+	source := sourceOfFilings(obs)
+	if source == "" {
+		return "", 0, errors.New("filing source required")
+	}
+	dir, err := w.partition("filings", "source="+source, "issuer_id="+issuerID)
+	if err != nil {
+		return "", 0, err
+	}
+	for _, o := range obs {
+		if o.IssuerID != issuerID || o.Source != source {
+			return "", 0, errors.New("filing observation/path identity mismatch")
+		}
+	}
+	in := make([]FilingRow, 0, len(obs))
+	for _, o := range obs {
+		r, err := filingRow(o)
+		if err != nil {
+			return "", 0, err
+		}
+		in = append(in, r)
+	}
+	partition := map[string]string{"dataset": "filings", "source": source, "issuer_id": issuerID}
+	existing, err := readCommitted[FilingRow](dir, partition)
+	if err != nil {
+		return "", 0, fmt.Errorf("read existing filings: %w", err)
+	}
+	rows, err := merge(existing, in, filingKey, sameFiling)
+	if err != nil {
+		return "", 0, err
+	}
+	sort.Slice(rows, func(i, j int) bool { return filingKey(rows[i]) < filingKey(rows[j]) })
+	metadata, err := metadataFromRows(in, func(r FilingRow) publicationMetadata {
 		return publicationMetadata{Source: r.Source, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID, NormalizerVersion: r.NormalizerVersion}
 	})
 	if err != nil && !slices.Equal(existing, rows) {
@@ -478,6 +582,87 @@ func fundamentalRow(o model.FundamentalObservation) (FundamentalRow, error) {
 	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
 	return r, nil
 }
+
+func filingRow(o model.Filing) (FilingRow, error) {
+	if err := o.Validate(); err != nil {
+		return FilingRow{}, err
+	}
+	if err := validateProvenance(o.Provenance, o.RawPayloadHash); err != nil {
+		return FilingRow{}, err
+	}
+	if !o.Provenance.IngestedAt.Equal(o.Temporal.IngestedAt) {
+		return FilingRow{}, errors.New("provenance/temporal ingested_at mismatch")
+	}
+	if _, err := uuid.Parse(o.ID); err != nil {
+		return FilingRow{}, errors.New("filing id must be UUID")
+	}
+	if _, err := uuid.Parse(o.IssuerID); err != nil {
+		return FilingRow{}, errors.New("issuer_id must be UUID")
+	}
+	filingDay, err := canonicalDate(o.FilingDate, "filing_date")
+	if err != nil {
+		return FilingRow{}, err
+	}
+	var periodEnd int32
+	hasPeriodEnd := o.PeriodEnd != nil
+	if hasPeriodEnd {
+		periodEnd, err = canonicalDate(*o.PeriodEnd, "period_end")
+		if err != nil {
+			return FilingRow{}, err
+		}
+	}
+	temporal := o.Temporal
+	temporal.ObservedPrecision = normalizeObservedPrecision(temporal.ObservedPrecision)
+	temporal.PublishedPrecision = normalizePublishedPrecision(temporal.PublishedPrecision)
+	if err := validateFilingTemporal(temporal); err != nil {
+		return FilingRow{}, err
+	}
+	observed, published, available, ingested, err := filingTemporalMicros(temporal)
+	if err != nil {
+		return FilingRow{}, err
+	}
+	var effective int64
+	hasEffective := o.EffectiveAt != nil
+	if hasEffective {
+		effective, err = micros(*o.EffectiveAt)
+		if err != nil {
+			return FilingRow{}, fmt.Errorf("effective_at: %w", err)
+		}
+	}
+	r := FilingRow{
+		SchemaVersion:          model.SchemaVersion,
+		ID:                     o.ID,
+		Source:                 o.Source,
+		IssuerID:               o.IssuerID,
+		SourceDocumentID:       o.SourceDocumentID,
+		DocumentURL:            o.DocumentURL,
+		AccessionNumber:        o.AccessionNumber,
+		FormType:               o.FormType,
+		Category:               o.Category,
+		DocumentType:           o.DocumentType,
+		Species:                o.Species,
+		Subject:                o.Subject,
+		PresentationType:       o.PresentationType,
+		PrimaryDocument:        o.PrimaryDocument,
+		AmendsSourceDocumentID: o.AmendsSourceDocumentID,
+		FilingDate:             filingDay,
+		PeriodEnd:              periodEnd,
+		HasPeriodEnd:           hasPeriodEnd,
+		ObservedAt:             observed,
+		HasObservedAt:          !temporal.ObservedAt.IsZero(),
+		ObservedPrecision:      string(temporal.ObservedPrecision),
+		PublishedAt:            published,
+		HasPublishedAt:         !temporal.PublishedAt.IsZero(),
+		PublishedPrecision:     string(temporal.PublishedPrecision),
+		AvailableAt:            available,
+		EffectiveAt:            effective,
+		HasEffectiveAt:         hasEffective,
+		IngestedAt:             ingested,
+	}
+	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
+	return r, nil
+}
+
 func economicRow(o model.EconomicObservation) (EconomicRow, error) {
 	observedAt, publishedAt, availableAt, ingestedAt, err := temporalMicros(o.Temporal, true)
 	if err != nil {
@@ -597,6 +782,89 @@ func normalizeObservedPrecision(precision model.TimePrecision) model.TimePrecisi
 	}
 	return precision
 }
+func normalizePublishedPrecision(precision model.TimePrecision) model.TimePrecision {
+	if precision == "" {
+		return model.PrecisionUnknown
+	}
+	return precision
+}
+func validateFilingTemporal(t model.Temporal) error {
+	if t.AvailableAt.IsZero() || t.IngestedAt.IsZero() {
+		return errors.New("filing required temporal field is zero")
+	}
+	if t.AvailableAt.After(t.IngestedAt) {
+		return errors.New("filing available_at after ingested_at")
+	}
+	if err := validateFilingInstantPrecision(t.ObservedAt, t.ObservedPrecision, "observed"); err != nil {
+		return err
+	}
+	if err := validateFilingInstantPrecision(t.PublishedAt, t.PublishedPrecision, "published"); err != nil {
+		return err
+	}
+	if !t.ObservedAt.IsZero() && !t.PublishedAt.IsZero() && t.ObservedAt.After(t.PublishedAt) {
+		return errors.New("filing observed_at after published_at")
+	}
+	if !t.PublishedAt.IsZero() && t.PublishedAt.After(t.AvailableAt) {
+		return errors.New("filing published_at after available_at")
+	}
+	return nil
+}
+func validateFilingInstantPrecision(at time.Time, precision model.TimePrecision, field string) error {
+	precision = normalizePublishedPrecision(precision)
+	if precision != model.PrecisionDate && precision != model.PrecisionSecond && precision != model.PrecisionUnknown {
+		return fmt.Errorf("filing %s_precision is invalid", field)
+	}
+	if at.IsZero() {
+		if precision != model.PrecisionUnknown {
+			return fmt.Errorf("filing %s_precision must be unknown when %s_at is absent", field, field)
+		}
+		return nil
+	}
+	utc := at.UTC()
+	switch precision {
+	case model.PrecisionDate:
+		if utc.Hour() != 0 || utc.Minute() != 0 || utc.Second() != 0 || utc.Nanosecond() != 0 {
+			return fmt.Errorf("filing %s_precision=date requires UTC midnight", field)
+		}
+	case model.PrecisionSecond:
+		if utc.Nanosecond() != 0 {
+			return fmt.Errorf("filing %s_precision=second requires whole-second time", field)
+		}
+	}
+	return nil
+}
+func filingTemporalMicros(t model.Temporal) (observed, published, available, ingested int64, err error) {
+	if err = validateFilingTemporal(t); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if !t.ObservedAt.IsZero() {
+		if observed, err = micros(t.ObservedAt); err != nil {
+			return 0, 0, 0, 0, fmt.Errorf("observed_at: %w", err)
+		}
+	}
+	if !t.PublishedAt.IsZero() {
+		if published, err = micros(t.PublishedAt); err != nil {
+			return 0, 0, 0, 0, fmt.Errorf("published_at: %w", err)
+		}
+	}
+	if available, err = micros(t.AvailableAt); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("available_at: %w", err)
+	}
+	if ingested, err = micros(t.IngestedAt); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("ingested_at: %w", err)
+	}
+	return observed, published, available, ingested, nil
+}
+func canonicalDate(at time.Time, field string) (int32, error) {
+	if at.IsZero() {
+		return 0, fmt.Errorf("%s required", field)
+	}
+	utc := at.UTC()
+	if utc.Hour() != 0 || utc.Minute() != 0 || utc.Second() != 0 || utc.Nanosecond() != 0 {
+		return 0, fmt.Errorf("%s must be a UTC date at midnight", field)
+	}
+	return days(utc), nil
+}
 func isCurrency(v string) bool {
 	if len(v) != 3 {
 		return false
@@ -636,6 +904,12 @@ func sourceOfPrices(obs []model.PriceBar) string {
 func sourceOfEconomics(obs []model.EconomicObservation) string {
 	if len(obs) == 0 {
 		return "unknown"
+	}
+	return obs[0].Source
+}
+func sourceOfFilings(obs []model.Filing) string {
+	if len(obs) == 0 {
+		return ""
 	}
 	return obs[0].Source
 }
@@ -683,6 +957,9 @@ func fundamentalKey(r FundamentalRow) string {
 func economicKey(r EconomicRow) string {
 	return strings.Join([]string{r.Source, r.SeriesID, fmt.Sprint(r.ObservedAt), fmt.Sprint(r.PublishedAt), fmt.Sprint(r.Revision)}, "\x1f")
 }
+func filingKey(r FilingRow) string {
+	return strings.Join([]string{r.Source, r.SourceDocumentID}, "\x1f")
+}
 func economicSeriesKey(r EconomicRow) string {
 	return strings.Join([]string{r.Source, r.SeriesID, fmt.Sprint(r.ObservedAt)}, "\x1f")
 }
@@ -713,6 +990,18 @@ func sameFundamental(a, b FundamentalRow) bool {
 	return a == b
 }
 func sameEconomic(a, b EconomicRow) bool {
+	a.IngestionRunID = b.IngestionRunID
+	a.IngestedAt = b.IngestedAt
+	return a == b
+}
+func sameFiling(a, b FilingRow) bool {
+	if a.RawPayloadHash != b.RawPayloadHash {
+		return false
+	}
+	// CVM's conservative availability for date-only delivery metadata is the
+	// local receipt time, so retries may legitimately have a new availability
+	// and ingestion run while representing the same source bytes.
+	a.AvailableAt = b.AvailableAt
 	a.IngestionRunID = b.IngestionRunID
 	a.IngestedAt = b.IngestedAt
 	return a == b
@@ -869,6 +1158,10 @@ func validateRowPartition[T any](row T, partition map[string]string) error {
 		if r.Source != source || r.SeriesID != partition["series_id"] {
 			return errors.New("economic row does not match partition identity")
 		}
+	case FilingRow:
+		if r.Source != source || r.IssuerID != partition["issuer_id"] {
+			return errors.New("filing row does not match partition identity")
+		}
 	default:
 		return errors.New("unsupported normalized row type")
 	}
@@ -955,6 +1248,13 @@ func defaultStoredObservedPrecision[T any](row *T) {
 		if r.ObservedPrecision == "" {
 			r.ObservedPrecision = string(model.PrecisionUnknown)
 		}
+	case *FilingRow:
+		if r.ObservedPrecision == "" {
+			r.ObservedPrecision = string(model.PrecisionUnknown)
+		}
+		if r.PublishedPrecision == "" {
+			r.PublishedPrecision = string(model.PrecisionUnknown)
+		}
 	}
 }
 
@@ -966,6 +1266,8 @@ func validateExistingRow[T any](row T) (string, error) {
 		return fundamentalKey(r), validateStoredFundamental(r)
 	case EconomicRow:
 		return economicKey(r), validateStoredEconomic(r)
+	case FilingRow:
+		return filingKey(r), validateStoredFiling(r)
 	default:
 		return "", errors.New("unsupported normalized row type")
 	}
@@ -1080,6 +1382,51 @@ func validateStoredEconomic(r EconomicRow) error {
 	return validateTemporal(storedTemporal(r.ObservedAt, r.PublishedAt, r.ObservedPrecision, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, true), true)
 }
 
+func validateStoredFiling(r FilingRow) error {
+	if err := validateStoredCommon(r.SchemaVersion, r.Source, r.RawPayloadHash, r.DataSourceID, r.IngestionRunID, r.NormalizerVersion); err != nil {
+		return err
+	}
+	if _, err := uuid.Parse(r.ID); err != nil {
+		return errors.New("filing id must be UUID")
+	}
+	if _, err := uuid.Parse(r.IssuerID); err != nil {
+		return errors.New("issuer_id must be UUID")
+	}
+	if r.SourceDocumentID == "" || r.FormType == "" || !absoluteURL(r.DocumentURL) {
+		return errors.New("invalid filing identity or document URL")
+	}
+	if r.HasPeriodEnd != (r.PeriodEnd != 0) {
+		return errors.New("period_end presence mismatch")
+	}
+	if r.HasObservedAt != (r.ObservedAt != 0) {
+		return errors.New("observed_at presence mismatch")
+	}
+	if r.HasPublishedAt != (r.PublishedAt != 0) {
+		return errors.New("published_at presence mismatch")
+	}
+	if r.HasEffectiveAt != (r.EffectiveAt != 0) {
+		return errors.New("effective_at presence mismatch")
+	}
+	temporal := model.Temporal{
+		ObservedAt:         time.UnixMicro(r.ObservedAt).UTC(),
+		ObservedPrecision:  normalizeObservedPrecision(model.TimePrecision(r.ObservedPrecision)),
+		PublishedAt:        time.UnixMicro(r.PublishedAt).UTC(),
+		PublishedPrecision: normalizePublishedPrecision(model.TimePrecision(r.PublishedPrecision)),
+		AvailableAt:        time.UnixMicro(r.AvailableAt).UTC(),
+		IngestedAt:         time.UnixMicro(r.IngestedAt).UTC(),
+	}
+	if !r.HasObservedAt {
+		temporal.ObservedAt = time.Time{}
+	}
+	if !r.HasPublishedAt {
+		temporal.PublishedAt = time.Time{}
+	}
+	if err := validateFilingTemporal(temporal); err != nil {
+		return err
+	}
+	return nil
+}
+
 func validateStoredCommon(schemaVersion, source, hash, dataSourceID, runID, normalizerVersion string) error {
 	if schemaVersion != model.SchemaVersion {
 		return fmt.Errorf("unsupported schema_version %q", schemaVersion)
@@ -1116,6 +1463,11 @@ func validateCanonicalDecimal(v string, nonNegative bool) error {
 		return fmt.Errorf("non-canonical decimal %q", v)
 	}
 	return nil
+}
+
+func absoluteURL(value string) bool {
+	u, err := url.Parse(value)
+	return err == nil && u.Scheme != "" && u.Host != ""
 }
 
 func storedTemporal(observed, published int64, observedPrecision, publishedPrecision string, available, ingested int64, hasPublished bool) model.Temporal {

@@ -46,11 +46,19 @@ latest-only operational snapshot; accepted rows retain `raw_payload_hash` and
 | `effective_at` | When an action or metadata change takes economic/legal effect | No, by itself |
 | `provenance.ingested_at` | When this installation durably received the raw bytes | Only for live replay |
 
-`published_at: null` is intentionally allowed only for metadata and price sources
-where public release precision may be unavailable. Such records are excluded from
-point-in-time research until a documented conservative availability policy resolves
-the timestamp. Fundamentals, macro vintages, filings, and corporate actions require
-an explicit publication instant.
+`published_at: null` is allowed for metadata sources where public release precision
+is unavailable. Such records require an explicit `available_at` supplied by the
+source normalizer; readers must not substitute `observed_at`, `period_end`, or a
+delivery date as a publication instant. Numeric fundamentals, macro vintages, and
+corporate actions retain their stricter source-specific publication requirements.
+
+Filing metadata is a canonical dataset in v1. A CVM IPE delivery date is retained as
+`filing_date` and may populate `period_end`/`observed_at` when the source supplies a
+reference date, but it does not establish `published_at`. CVM rows therefore use
+`published_at: null` and `published_precision: "unknown"`; `available_at` is explicit
+(normally the durable receipt time) and is never derived from `period_end`. The
+filing natural key is `(source, source_document_id)`, so a source version must be
+part of `source_document_id` when it changes document identity.
 
 All timestamps are UTC RFC 3339 values ending in `Z`. Financial decimals are strings
 so Go, Python, JSON, and Parquet conversions do not silently round them.

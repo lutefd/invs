@@ -84,7 +84,11 @@ than coercing them or guessing precision.
 Unknown `published_at` does not become a historical cutoff by inference. The source
 normalizer must instead supply an explicit conservative `available_at`; missing
 `available_at` means unavailable to a point-in-time backtest. It must not default to
-`observed_at`, `period_end`, or `ingested_at`.
+`observed_at` or `period_end`. For metadata such as CVM IPE, `available_at` may be
+the durable receipt time when the source exposes only a delivery date, while
+`published_at` remains null with an `unknown` precision marker. This is an explicit
+source policy, not a conversion of the delivery or period date into a publication
+instant.
 
 Trading signals computed after a market close may first trade at the next executable
 session unless the strategy and input publication times prove an earlier execution

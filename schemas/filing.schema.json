@@ -4,30 +4,114 @@
   "title": "Filing",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "issuer_id", "form_type", "source_document_id", "filing_date", "period_end", "observed_at", "published_at", "effective_at", "document_url", "provenance"],
+  "required": [
+    "schema_version",
+    "id",
+    "source",
+    "issuer_id",
+    "source_document_id",
+    "accession_number",
+    "form_type",
+    "category",
+    "document_type",
+    "species",
+    "subject",
+    "presentation_type",
+    "primary_document",
+    "amends_source_document_id",
+    "filing_date",
+    "period_end",
+    "observed_at",
+    "observed_precision",
+    "published_at",
+    "published_precision",
+    "available_at",
+    "effective_at",
+    "document_url",
+    "provenance"
+  ],
   "properties": {
     "schema_version": { "const": "1.0.0" },
     "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "source": { "type": "string", "minLength": 1 },
     "issuer_id": { "$ref": "common.schema.json#/$defs/uuid" },
-    "form_type": { "type": "string", "minLength": 1 },
     "source_document_id": { "type": "string", "minLength": 1 },
     "accession_number": { "type": ["string", "null"], "minLength": 1 },
+    "form_type": { "type": "string", "minLength": 1 },
+    "category": { "type": ["string", "null"], "minLength": 1 },
+    "document_type": { "type": ["string", "null"], "minLength": 1 },
+    "species": { "type": ["string", "null"], "minLength": 1 },
+    "subject": { "type": ["string", "null"], "minLength": 1 },
+    "presentation_type": { "type": ["string", "null"], "minLength": 1 },
+    "primary_document": { "type": ["string", "null"], "minLength": 1 },
+    "amends_source_document_id": { "type": ["string", "null"], "minLength": 1 },
     "filing_date": { "$ref": "common.schema.json#/$defs/date" },
-    "period_end": { "oneOf": [{ "$ref": "common.schema.json#/$defs/date" }, { "type": "null" }] },
+    "period_end": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/date" },
+        { "type": "null" }
+      ]
+    },
     "observed_at": {
-      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
-      "$comment": "Report period end as an instant when meaningful; it does not control availability."
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        { "type": "null" }
+      ],
+      "$comment": "Optional source reference instant; a CVM period/reference date is not a publication or availability time."
+    },
+    "observed_precision": {
+      "$ref": "common.schema.json#/$defs/observedPrecision",
+      "$comment": "Use date for a date-only reference encoded at UTC midnight and unknown when observed_at is null."
     },
     "published_at": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        { "type": "null" }
+      ],
+      "$comment": "Earliest defensible public instant for this exact document. CVM delivery dates do not establish an instant and therefore use null."
+    },
+    "published_precision": {
+      "$ref": "common.schema.json#/$defs/observedPrecision",
+      "$comment": "Use unknown when published_at is null; never treat a delivery date as an exact publication instant."
+    },
+    "available_at": {
       "$ref": "common.schema.json#/$defs/utcTimestamp",
-      "$comment": "Regulator acceptance/publication instant for the exact filing."
+      "$comment": "Explicit conservative knowledge cutoff. It is supplied by the source normalizer and must not be derived from period_end."
     },
     "effective_at": {
-      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
-      "$comment": "Legal effective instant for forms where this is distinct from publication."
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        { "type": "null" }
+      ],
+      "$comment": "Legal/economic effect, if the document carries one; it is not publication or availability."
     },
-    "document_url": { "type": "string", "format": "uri" },
-    "amends_source_document_id": { "type": ["string", "null"], "minLength": 1 },
+    "document_url": { "type": "string", "format": "uri", "minLength": 1 },
     "provenance": { "$ref": "common.schema.json#/$defs/provenance" }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "observed_at": { "type": "null" }
+        }
+      },
+      "then": {
+        "properties": {
+          "observed_precision": { "const": "unknown" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "published_at": { "type": "null" }
+        }
+      },
+      "then": {
+        "properties": {
+          "published_precision": { "const": "unknown" }
+        }
+      }
+    }
+  ]
 }

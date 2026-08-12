@@ -46,3 +46,33 @@ func TestCanonicalDecimalIsLosslessAndSchemaCompatible(t *testing.T) {
 		t.Fatal("accepted negative nonnegative decimal")
 	}
 }
+
+func TestFilingAllowsUnknownCVMPublicationWithoutInferringAvailability(t *testing.T) {
+	ingested := time.Date(2026, 8, 12, 15, 4, 5, 123456000, time.UTC)
+	periodEnd := time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
+	filing := Filing{
+		ID:               "1b3d88f5-55b8-4dc5-a6be-2f77e9e99201",
+		Source:           "cvm",
+		IssuerID:         "469fc20f-7d4b-45bb-b827-05f8410e71aa",
+		SourceDocumentID: "cvm-ipe:1023:12345:v2",
+		DocumentURL:      "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/IPE/DADOS/ipe.zip",
+		AccessionNumber:  "12345",
+		FormType:         "cvm_ipe",
+		FilingDate:       time.Date(2026, 1, 7, 0, 0, 0, 0, time.UTC),
+		PeriodEnd:        &periodEnd,
+		Temporal: Temporal{
+			ObservedAt:         periodEnd,
+			ObservedPrecision:  PrecisionDate,
+			PublishedPrecision: PrecisionUnknown,
+			AvailableAt:        ingested,
+			IngestedAt:         ingested,
+		},
+	}
+	if err := filing.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	filing.Temporal.PublishedPrecision = PrecisionDate
+	if err := filing.Validate(); err == nil {
+		t.Fatal("accepted a date precision marker without published_at")
+	}
+}
