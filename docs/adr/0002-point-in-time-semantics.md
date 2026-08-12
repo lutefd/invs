@@ -86,9 +86,16 @@ normalizer must instead supply an explicit conservative `available_at`; missing
 `available_at` means unavailable to a point-in-time backtest. It must not default to
 `observed_at` or `period_end`. For metadata such as CVM IPE, `available_at` may be
 the durable receipt time when the source exposes only a delivery date, while
-`published_at` remains null with an `unknown` precision marker. This is an explicit
-source policy, not a conversion of the delivery or period date into a publication
-instant.
+`published_at` remains null with an `unknown` precision marker. Once its provider and
+collector are integrated, this supports live replay of what this installation knew;
+it does not establish historical public availability. This is an explicit source
+policy, not a conversion of the delivery or period date into a publication instant.
+
+CVM CAD is a current issuer snapshot rather than versioned filing history. It is
+excluded from historical filing claims and must not be treated as a row that can be
+joined into an as-of filing query. CVM integration remains staged; B3 is deferred
+until its access, instrument-identity, fixture, and market-data policy boundaries are
+established.
 
 Trading signals computed after a market close may first trade at the next executable
 session unless the strategy and input publication times prove an earlier execution

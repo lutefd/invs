@@ -15,6 +15,32 @@ acceptance host. That absolute path is an operator reference, not a required che
 or portability dependency; earlier partial/failure runs remain in separate sibling
 archives.
 
+## CVM and B3 rollout boundary
+
+CVM is the next staged source, not part of the accepted vertical slice yet. Its
+configuration, PostgreSQL source-catalog support, and canonical filing-metadata
+contract/writer are present. The CVM provider/collector path and Python research-catalog
+exposure are still incomplete, so there has been no CVM acceptance run and no CVM
+operational output should be treated as available.
+
+CVM IPE metadata uses the source delivery date as `filing_date`; that date does not
+establish a public publication instant. IPE rows therefore retain
+`published_at = null` with `published_precision = unknown`, and receive an explicit
+conservative `available_at` equal to durable receipt time. This supports a
+"known-to-this-installation" live replay once the source is integrated, not a claim
+about historical public availability. A filing's reference date may populate
+`period_end`/`observed_at`, but never determines `available_at`.
+
+CVM CAD is a current issuer snapshot, not versioned filing history. It is excluded
+from historical filing claims and must not be joined into an as-of research snapshot.
+The notebook will gain a separate optional filings-inspection cell only after the
+provider/collector and Python catalog work is complete; filings will not be joined
+one-to-many into the existing price/fundamental/macro snapshot.
+
+B3 remains deferred. No B3 source, instrument mapping, or historical-availability
+claim is part of this foundation until unattended access, a captured fixture, and
+the required market-data policy boundary are established.
+
 ```text
 SEC / FRED / BCB / price provider
             |

@@ -2,9 +2,9 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The current vertical slice is under active development, and the post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply.
+Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The current vertical slice is under active development, and the post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM configuration, PostgreSQL source-catalog support, and the canonical filing-metadata contract/writer are staged groundwork, but CVM collector/provider integration and research-catalog exposure are not complete, so no CVM acceptance is claimed. B3 remains deferred.
 
-The current vertical slice covers Yahoo daily prices, SEC company facts, FRED macro series, and BCB SGS macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; run finalization publishes accepted price/macro candidates to those projections in the same PostgreSQL transaction that closes the run. A partial run may publish successful entities while a parse-error entity publishes no snapshot.
+The current accepted vertical slice covers Yahoo daily prices, SEC company facts, FRED macro series, and BCB SGS macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; run finalization publishes accepted price/macro candidates to those projections in the same PostgreSQL transaction that closes the run. A partial run may publish successful entities while a parse-error entity publishes no snapshot.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ make setup
 
 This creates untracked `.env` and `config/config.local.yaml` files with private permissions. Before SEC ingestion:
 
-The committed `config/config.example.yaml` is the safe starter configuration: Yahoo and FRED are enabled, while SEC and BCB are disabled by default. `make setup` copies it to the untracked `config/config.local.yaml`; the completed acceptance used a local override with SEC and BCB enabled and a bounded BCB end date. That local acceptance override is not the committed example configuration.
+The committed `config/config.example.yaml` is the safe starter configuration: Yahoo and FRED are enabled, while SEC, BCB, and CVM are disabled by default. `make setup` copies it to the untracked `config/config.local.yaml`; the completed acceptance used a local override with SEC and BCB enabled and a bounded BCB end date. That local acceptance override is not the committed example configuration.
 
 1. Set `SEC_USER_AGENT` in `.env` to a descriptive value with your contact address.
 2. Review the starting universe and date range in `config/config.local.yaml`, then set `providers.sec.enabled: true` when the contact is ready. SEC is disabled in the safe starter configuration.
@@ -60,6 +60,7 @@ Or run one source at a time:
 make ingest SOURCE=prices
 make ingest SOURCE=sec
 make ingest SOURCE=fred
+make ingest SOURCE=bcb
 ```
 
 The collector is a batch container. Raw payloads land under `data/raw/`; normalized Parquet lands under `data/normalized/`. Each source result is registered in PostgreSQL so Grafana reports actual successful, failed, rejected, and no-change runs.
@@ -88,9 +89,11 @@ Open `notebooks/vertical_slice.ipynb` in JupyterLab, or execute it non-interacti
 make notebook
 ```
 
-The notebook loads the configured universe to map a price `security_id` to its SEC `issuer_id`; it never pairs independently selected identifiers. Its explicit decision timestamp produces an “as known then” snapshot: the latest price revision for each observed session and the latest eligible SEC/FRED observations whose conservative `available_at` is not later than that decision. Missing pre-ingestion datasets produce typed empty views and an explanatory no-data result.
+The notebook loads the configured universe to map a price `security_id` to its SEC `issuer_id`; it never pairs independently selected identifiers. Its explicit decision timestamp produces an “as known then” snapshot: the latest price revision for each observed session and the latest eligible SEC/FRED/BCB observations whose conservative `available_at` is not later than that decision. Missing pre-ingestion datasets produce typed empty views and an explanatory no-data result.
 
-The DuckDB catalog accepts canonical Parquet schema `1.0.0` only. Its `prices_canonical`, `fundamentals_canonical`, and `macroeconomics_canonical` views preserve exact UTF-8 decimal values, presence flags, and collection provenance. The shorter `prices`, `fundamentals`, and `macroeconomics` research views add `DECIMAL(38,18)` and `DOUBLE` projections for analysis. The exact string columns remain available as `*_value` or `value_text`; use them whenever rounding is unacceptable. Canonical readers discover only committed `manifest.json` files, validate each manifest and its listed parts, and read only content-named immutable `part-<sha256>.parquet` files. `data.parquet`, unlisted Parquet files, and recursive Parquet glob results are not canonical input. Unmanaged pre-contract or pre-manifest normalized files without the required schema, provenance, or manifest contract fail closed with actionable schema errors instead of being silently coerced. Other incompatible files with unsupported versions, missing numeric physical decimal columns, malformed decimal strings, or invalid manifest/part pairs fail closed as well.
+The notebook does not inspect CVM filings yet. A separate optional filings-inspection cell is intentionally deferred until the CVM provider/collector path and Python research catalog are integrated. When added, it must keep CVM filings separate from the price/fundamental snapshot: CVM IPE rows use explicit receipt-time `available_at` and unknown publication precision for live replay, while CAD is a current issuer snapshot excluded from historical filing claims.
+
+The DuckDB catalog accepts canonical Parquet schema `1.0.0` only. Its `prices_canonical`, `fundamentals_canonical`, and `macroeconomics_canonical` views preserve exact UTF-8 decimal values, presence flags, and collection provenance. The shorter `prices`, `fundamentals`, and `macroeconomics` research views add `DECIMAL(38,18)` and `DOUBLE` projections for analysis. The exact string columns remain available as `*_value` or `value_text`; use them whenever rounding is unacceptable. The Go side also has the canonical filing-metadata writer and its explicit availability contract, but filings are not yet reachable from the CVM collector or exposed by the Python catalog. Canonical readers discover only committed `manifest.json` files, validate each manifest and its listed parts, and read only content-named immutable `part-<sha256>.parquet` files. `data.parquet`, unlisted Parquet files, and recursive Parquet glob results are not canonical input. Unmanaged pre-contract or pre-manifest normalized files without the required schema, provenance, or manifest contract fail closed with actionable schema errors instead of being silently coerced. Other incompatible files with unsupported versions, missing numeric physical decimal columns, malformed decimal strings, or invalid manifest/part pairs fail closed as well.
 
 Earlier valid v1 Parquet parts may omit optional `observed_precision`; readers interpret that omission as `unknown`. Those parts remain managed when they are listed by a valid manifest and carry the required schema and provenance. This compatibility case is distinct from unmanaged pre-contract or pre-manifest normalized files, which are rejected.
 
@@ -140,6 +143,8 @@ make dashboard-smoke
 ```
 
 The market dashboard shows configured securities even when no accepted Yahoo snapshot exists, exposes explicit no-snapshot rows for macro sources, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED and BCB series still live only in YAML, so the dashboard deliberately reports source-level presence rather than claiming per-series coverage.
+
+CVM is not included in the passing acceptance above. Do not interpret the staged CVM configuration, source catalog, or filing writer as a completed provider integration, and do not claim historical filing availability from it.
 
 Stop containers while retaining PostgreSQL and Grafana volumes:
 
