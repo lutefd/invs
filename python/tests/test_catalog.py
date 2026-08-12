@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import duckdb
@@ -18,6 +20,58 @@ def _write_parquet(path: Path, query: str) -> None:
     connection = duckdb.connect(":memory:")
     connection.execute(f"COPY ({query}) TO '{path}' (FORMAT PARQUET)")
     connection.close()
+
+
+def _write_manifest(
+    manifest_path: Path,
+    part_paths: list[Path],
+    *,
+    dataset: str,
+    source: str,
+    partition_key: str,
+    partition_value: str,
+) -> Path:
+    parts = []
+    for part_path in part_paths:
+        digest = hashlib.sha256(part_path.read_bytes()).hexdigest()
+        committed_path = part_path.with_name(f"part-{digest}.parquet")
+        if part_path != committed_path:
+            part_path.replace(committed_path)
+        connection = duckdb.connect(":memory:")
+        row_count = connection.execute(
+            f"SELECT count(*) FROM read_parquet('{committed_path}')"
+        ).fetchone()[0]
+        connection.close()
+        parts.append(
+            {
+                "path": committed_path.name,
+                "sha256": digest,
+                "row_count": row_count,
+            }
+        )
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "manifest_version": 1,
+                "schema_version": "1.0.0",
+                "normalizer_version": "go-v1",
+                "git_commit": "0" * 40,
+                "source": source,
+                "data_source_id": SOURCE_ID,
+                "ingestion_run_id": RUN_ID,
+                "partition": {
+                    "dataset": dataset,
+                    "source": source,
+                    partition_key: partition_value,
+                },
+                "row_count": sum(part["row_count"] for part in parts),
+                "parts": parts,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return manifest_path
 
 
 def _price_select(
@@ -48,8 +102,9 @@ def _price_select(
     """
 
 
-def _write_prices(root: Path) -> None:
-    path = root / "prices" / "source=yahoo" / f"security_id={SECURITY_ID}" / "data.parquet"
+def _write_prices(root: Path) -> Path:
+    directory = root / "prices" / "source=yahoo" / f"security_id={SECURITY_ID}"
+    path = directory / "prices.parquet"
     _write_parquet(
         path,
         f"""
@@ -60,13 +115,22 @@ def _write_prices(root: Path) -> None:
         {_price_select(observed="2026-01-10 21:00:00Z", available="2025-02-01 00:00:00Z", close="200")}
         """,
     )
+    return _write_manifest(
+        directory / "manifest.json",
+        [path],
+        dataset="prices",
+        source="yahoo",
+        partition_key="security_id",
+        partition_value=SECURITY_ID,
+    )
 
 
-def _write_fundamentals(root: Path, *, sentinel: bool = False) -> None:
+def _write_fundamentals(root: Path, *, sentinel: bool = False) -> Path:
     period_start = "DATE '1970-01-01'" if sentinel else "DATE '2024-10-01'"
     has_period_start = "false" if sentinel else "true"
+    directory = root / "fundamentals" / "source=sec" / f"issuer_id={ISSUER_ID}"
     _write_parquet(
-        root / "fundamentals" / "source=sec" / f"issuer_id={ISSUER_ID}" / "data.parquet",
+        directory / "fundamentals.parquet",
         f"""
         SELECT
           '1.0.0'::VARCHAR AS schema_version, 'sec'::VARCHAR AS source,
@@ -91,15 +155,24 @@ def _write_fundamentals(root: Path, *, sentinel: bool = False) -> None:
           'go-v1'::VARCHAR AS normalizer_version
         """,
     )
+    return _write_manifest(
+        directory / "manifest.json",
+        [directory / "fundamentals.parquet"],
+        dataset="fundamentals",
+        source="sec",
+        partition_key="issuer_id",
+        partition_value=ISSUER_ID,
+    )
 
 
-def _write_macro(root: Path, *, sentinel: bool = False) -> None:
+def _write_macro(root: Path, *, sentinel: bool = False) -> Path:
     vintage_at = "TIMESTAMPTZ '1970-01-01 00:00:00Z'" if sentinel else (
         "TIMESTAMPTZ '2025-01-15 13:00:00Z'"
     )
     has_vintage = "false" if sentinel else "true"
+    directory = root / "macroeconomics" / "source=fred" / "series_id=GDP"
     _write_parquet(
-        root / "macroeconomics" / "source=fred" / "series_id=GDP" / "data.parquet",
+        directory / "macroeconomics.parquet",
         f"""
         SELECT
           '1.0.0'::VARCHAR AS schema_version, 'fred'::VARCHAR AS source,
@@ -120,6 +193,14 @@ def _write_macro(root: Path, *, sentinel: bool = False) -> None:
           'go-v1'::VARCHAR AS normalizer_version
         """,
     )
+    return _write_manifest(
+        directory / "manifest.json",
+        [directory / "macroeconomics.parquet"],
+        dataset="macroeconomics",
+        source="fred",
+        partition_key="series_id",
+        partition_value="GDP",
+    )
 
 
 def test_fresh_data_root_registers_typed_empty_views(tmp_path: Path) -> None:
@@ -134,6 +215,72 @@ def test_fresh_data_root_registers_typed_empty_views(tmp_path: Path) -> None:
         fundamental_concept="Revenue",
         macro_series_id="GDP",
     ).empty
+
+
+def test_valid_manifest_registers_only_its_verified_parts(tmp_path: Path) -> None:
+    root = tmp_path / "normalized"
+    manifest_path = _write_prices(root)
+    _write_parquet(
+        manifest_path.parent / "stray.parquet",
+        _price_select(close="999"),
+    )
+
+    catalog = ResearchCatalog(tmp_path).register()
+
+    assert catalog.connection.execute("SELECT count(*) FROM prices_canonical").fetchone() == (3,)
+    assert catalog.status()[0].file_count == 1
+
+
+def test_legacy_data_parquet_is_ignored_without_a_manifest(tmp_path: Path) -> None:
+    legacy = (
+        tmp_path
+        / "normalized"
+        / "prices"
+        / "source=yahoo"
+        / f"security_id={SECURITY_ID}"
+        / "data.parquet"
+    )
+    _write_parquet(legacy, _price_select())
+
+    catalog = ResearchCatalog(tmp_path).register()
+
+    assert catalog.missing() == ("prices", "fundamentals", "macroeconomics")
+    assert catalog.connection.execute("SELECT count(*) FROM prices_canonical").fetchone() == (0,)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "tampered"])
+def test_missing_or_tampered_manifest_part_is_rejected(
+    tmp_path: Path, mutation: str
+) -> None:
+    manifest_path = _write_prices(tmp_path / "normalized")
+    part_path = manifest_path.parent / json.loads(
+        manifest_path.read_text(encoding="utf-8")
+    )["parts"][0]["path"]
+    if mutation == "missing":
+        part_path.unlink()
+        expected = "does not exist"
+    else:
+        part_path.write_bytes(part_path.read_bytes() + b"tampered")
+        expected = "SHA-256 mismatch"
+
+    with pytest.raises(DatasetSchemaError, match=expected):
+        ResearchCatalog(tmp_path).register()
+
+
+def test_invalid_manifest_is_rejected(tmp_path: Path) -> None:
+    manifest_path = (
+        tmp_path
+        / "normalized"
+        / "prices"
+        / "source=yahoo"
+        / f"security_id={SECURITY_ID}"
+        / "manifest.json"
+    )
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(json.dumps({"manifest_version": 1}), encoding="utf-8")
+
+    with pytest.raises(DatasetSchemaError, match="invalid manifest"):
+        ResearchCatalog(tmp_path).register()
 
 
 def test_canonical_v1_preserves_strings_provenance_and_adds_numeric_views(
@@ -195,8 +342,10 @@ def test_deterministic_point_in_time_snapshot_excludes_future_observations(
 
 def test_price_revisions_are_selected_as_known_at_decision_time(tmp_path: Path) -> None:
     root = tmp_path / "normalized"
-    _write_prices(root)
-    path = root / "prices" / "source=yahoo" / f"security_id={SECURITY_ID}" / "revision.parquet"
+    manifest_path = _write_prices(root)
+    directory = manifest_path.parent
+    original_part = directory / json.loads(manifest_path.read_text(encoding="utf-8"))["parts"][0]["path"]
+    path = directory / "revision.parquet"
     _write_parquet(
         path,
         _price_select(
@@ -204,6 +353,14 @@ def test_price_revisions_are_selected_as_known_at_decision_time(tmp_path: Path) 
             available="2025-03-05 00:00:00Z",
             close="101",
         ),
+    )
+    _write_manifest(
+        manifest_path,
+        [original_part, path],
+        dataset="prices",
+        source="yahoo",
+        partition_key="security_id",
+        partition_value=SECURITY_ID,
     )
     catalog = ResearchCatalog(tmp_path).register()
     mapping = SecurityMapping(SECURITY_ID, ISSUER_ID)
@@ -226,15 +383,19 @@ def test_price_revisions_are_selected_as_known_at_decision_time(tmp_path: Path) 
     assert before["trading_date"].is_unique and after["trading_date"].is_unique
 
 
-def test_legacy_or_unsupported_schema_fails_with_migration_message(tmp_path: Path) -> None:
-    legacy = tmp_path / "legacy" / "normalized" / "prices" / "legacy.parquet"
-    _write_parquet(legacy, "SELECT 'yahoo'::VARCHAR AS source, 1.0::DOUBLE AS close")
-    with pytest.raises(DatasetSchemaError, match="legacy.*migration required"):
-        ResearchCatalog(tmp_path / "legacy").register()
-
+def test_unsupported_schema_fails_with_migration_message(tmp_path: Path) -> None:
     unsupported_root = tmp_path / "unsupported" / "normalized"
-    path = unsupported_root / "prices" / "data.parquet"
+    directory = unsupported_root / "prices" / "source=yahoo" / f"security_id={SECURITY_ID}"
+    path = directory / "unsupported.parquet"
     _write_parquet(path, _price_select(schema_version="2.0.0"))
+    _write_manifest(
+        directory / "manifest.json",
+        [path],
+        dataset="prices",
+        source="yahoo",
+        partition_key="security_id",
+        partition_value=SECURITY_ID,
+    )
     with pytest.raises(DatasetSchemaError, match="schema_version 1.0.0.*migration required"):
         ResearchCatalog(tmp_path / "unsupported").register()
 
@@ -242,13 +403,31 @@ def test_legacy_or_unsupported_schema_fails_with_migration_message(tmp_path: Pat
 def test_non_utf8_or_invalid_decimal_fails_closed(tmp_path: Path) -> None:
     numeric_root = tmp_path / "numeric" / "normalized"
     query = _price_select().replace("'100.123456789012345678'::VARCHAR AS close", "100.0::DOUBLE AS close")
-    _write_parquet(numeric_root / "prices" / "data.parquet", query)
+    numeric_directory = numeric_root / "prices" / "source=yahoo" / f"security_id={SECURITY_ID}"
+    numeric_path = numeric_directory / "numeric.parquet"
+    _write_parquet(numeric_path, query)
+    _write_manifest(
+        numeric_directory / "manifest.json",
+        [numeric_path],
+        dataset="prices",
+        source="yahoo",
+        partition_key="security_id",
+        partition_value=SECURITY_ID,
+    )
     with pytest.raises(DatasetSchemaError, match="non-UTF8: close"):
         ResearchCatalog(tmp_path / "numeric").register()
 
     invalid_root = tmp_path / "invalid" / "normalized"
-    _write_parquet(
-        invalid_root / "prices" / "data.parquet", _price_select(close="1e2")
+    invalid_directory = invalid_root / "prices" / "source=yahoo" / f"security_id={SECURITY_ID}"
+    invalid_path = invalid_directory / "invalid.parquet"
+    _write_parquet(invalid_path, _price_select(close="1e2"))
+    _write_manifest(
+        invalid_directory / "manifest.json",
+        [invalid_path],
+        dataset="prices",
+        source="yahoo",
+        partition_key="security_id",
+        partition_value=SECURITY_ID,
     )
     with pytest.raises(DatasetSchemaError, match="invalid canonical decimal.*close"):
         ResearchCatalog(tmp_path / "invalid").register()

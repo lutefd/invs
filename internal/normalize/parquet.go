@@ -1,8 +1,6 @@
 package normalize
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/big"
@@ -122,7 +120,11 @@ func (r EconomicRow) VintageTime() *time.Time {
 	return &v
 }
 
-type Writer struct{ root string }
+type Writer struct {
+	root      string
+	gitCommit string
+	ops       publicationOps
+}
 
 func NewWriter(root string) (*Writer, error) {
 	abs, err := filepath.Abs(root)
@@ -132,47 +134,67 @@ func NewWriter(root string) (*Writer, error) {
 	if err = os.MkdirAll(abs, 0o750); err != nil {
 		return nil, err
 	}
-	return &Writer{abs}, nil
+	return &Writer{root: abs, gitCommit: currentGitCommit(), ops: defaultPublicationOps()}, nil
 }
 
-// ValidateExisting checks every committed normalized Parquet file before a
-// collector starts network work. Legacy files are intentionally not migrated
+// ValidateExisting checks every committed manifest and its listed parts before
+// a collector starts network work. Legacy files are intentionally not migrated
 // implicitly: their raw lineage cannot be reconstructed defensibly. Operators
 // must archive/reset the normalized output and reingest from data/raw.
 func (w *Writer) ValidateExisting() error {
+	manifestPaths := make([]string, 0)
+	parquetPaths := make([]string, 0)
 	err := filepath.WalkDir(w.root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".parquet" {
+		if entry.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(w.root, path)
-		if err != nil {
-			return err
-		}
-		parts := strings.Split(filepath.ToSlash(rel), "/")
-		if len(parts) == 0 {
-			return nil
-		}
-		var readErr error
-		switch parts[0] {
-		case "prices":
-			_, readErr = readV1[PriceRow](path)
-		case "fundamentals":
-			_, readErr = readV1[FundamentalRow](path)
-		case "macroeconomics":
-			_, readErr = readV1[EconomicRow](path)
+		switch entry.Name() {
+		case ManifestFilename:
+			manifestPaths = append(manifestPaths, path)
+		case "data.parquet":
+			return fmt.Errorf("legacy normalized file %s is not a committed manifest part: %w; archive/reset normalized output and reingest from preserved raw evidence", path, ErrMigrationRequired)
 		default:
-			readErr = fmt.Errorf("unsupported normalized dataset directory %q", parts[0])
-		}
-		if readErr != nil {
-			return fmt.Errorf("validate normalized file %s: %w; archive/reset normalized output and reingest from preserved raw evidence", path, readErr)
+			if filepath.Ext(entry.Name()) == PartFilenameSuffix {
+				parquetPaths = append(parquetPaths, path)
+			}
 		}
 		return nil
 	})
 	if err != nil {
 		return err
+	}
+	manifestDirs := make(map[string]struct{}, len(manifestPaths))
+	for _, path := range manifestPaths {
+		manifestDirs[filepath.Dir(path)] = struct{}{}
+	}
+	for _, path := range parquetPaths {
+		if _, ok := manifestDirs[filepath.Dir(path)]; !ok {
+			return fmt.Errorf("uncommitted normalized Parquet file %s has no %s: %w; archive/reset normalized output and reingest from preserved raw evidence", path, ManifestFilename, ErrMigrationRequired)
+		}
+	}
+	for _, path := range manifestPaths {
+		dir := filepath.Dir(path)
+		partition, err := partitionIdentityFromDir(w.root, dir)
+		if err != nil {
+			return fmt.Errorf("validate normalized manifest %s: %w: %v", path, ErrMigrationRequired, err)
+		}
+		var readErr error
+		switch partition["dataset"] {
+		case "prices":
+			_, readErr = readCommitted[PriceRow](dir, partition)
+		case "fundamentals":
+			_, readErr = readCommitted[FundamentalRow](dir, partition)
+		case "macroeconomics":
+			_, readErr = readCommitted[EconomicRow](dir, partition)
+		default:
+			readErr = fmt.Errorf("unsupported normalized dataset directory %q", partition["dataset"])
+		}
+		if readErr != nil {
+			return fmt.Errorf("validate normalized file %s: %w; archive/reset normalized output and reingest from preserved raw evidence", path, readErr)
+		}
 	}
 	return nil
 }
@@ -187,7 +209,7 @@ func (w *Writer) WritePrices(securityID string, obs []model.PriceBar) (string, i
 			return "", 0, errors.New("price observation/path identity mismatch")
 		}
 	}
-	path, err := w.path("prices", "source="+source, "security_id="+securityID)
+	dir, err := w.partition("prices", "source="+source, "security_id="+securityID)
 	if err != nil {
 		return "", 0, err
 	}
@@ -199,7 +221,8 @@ func (w *Writer) WritePrices(securityID string, obs []model.PriceBar) (string, i
 		}
 		in = append(in, r)
 	}
-	existing, err := readV1[PriceRow](path)
+	partition := map[string]string{"dataset": "prices", "source": source, "security_id": securityID}
+	existing, err := readCommitted[PriceRow](dir, partition)
 	if err != nil {
 		return "", 0, fmt.Errorf("read existing prices: %w", err)
 	}
@@ -213,13 +236,19 @@ func (w *Writer) WritePrices(securityID string, obs []model.PriceBar) (string, i
 		return "", 0, err
 	}
 	sort.Slice(rows, func(i, j int) bool { return priceKey(rows[i]) < priceKey(rows[j]) })
-	return publish(path, existing, rows)
+	metadata, err := metadataFromRows(in, func(r PriceRow) publicationMetadata {
+		return publicationMetadata{Source: r.Source, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID, NormalizerVersion: r.NormalizerVersion}
+	})
+	if err != nil && !slices.Equal(existing, rows) {
+		return "", 0, err
+	}
+	return publish(w, dir, partition, existing, rows, metadata)
 }
 func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObservation) (string, int, error) {
 	if _, err := uuid.Parse(issuerID); err != nil {
 		return "", 0, fmt.Errorf("issuer ID must be UUID: %w", err)
 	}
-	path, err := w.path("fundamentals", "source=sec", "issuer_id="+issuerID)
+	dir, err := w.partition("fundamentals", "source=sec", "issuer_id="+issuerID)
 	if err != nil {
 		return "", 0, err
 	}
@@ -236,7 +265,8 @@ func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObser
 		}
 		in = append(in, r)
 	}
-	existing, err := readV1[FundamentalRow](path)
+	partition := map[string]string{"dataset": "fundamentals", "source": "sec", "issuer_id": issuerID}
+	existing, err := readCommitted[FundamentalRow](dir, partition)
 	if err != nil {
 		return "", 0, fmt.Errorf("read existing fundamentals: %w", err)
 	}
@@ -250,10 +280,16 @@ func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObser
 		return "", 0, err
 	}
 	sort.Slice(rows, func(i, j int) bool { return fundamentalKey(rows[i]) < fundamentalKey(rows[j]) })
-	return publish(path, existing, rows)
+	metadata, err := metadataFromRows(in, func(r FundamentalRow) publicationMetadata {
+		return publicationMetadata{Source: r.Source, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID, NormalizerVersion: r.NormalizerVersion}
+	})
+	if err != nil && !slices.Equal(existing, rows) {
+		return "", 0, err
+	}
+	return publish(w, dir, partition, existing, rows, metadata)
 }
 func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation) (string, int, error) {
-	path, err := w.path("macroeconomics", "source=fred", "series_id="+seriesID)
+	dir, err := w.partition("macroeconomics", "source=fred", "series_id="+seriesID)
 	if err != nil {
 		return "", 0, err
 	}
@@ -262,7 +298,8 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 			return "", 0, errors.New("economic observation/path identity mismatch")
 		}
 	}
-	existing, err := readV1[EconomicRow](path)
+	partition := map[string]string{"dataset": "macroeconomics", "source": "fred", "series_id": seriesID}
+	existing, err := readCommitted[EconomicRow](dir, partition)
 	if err != nil {
 		return "", 0, fmt.Errorf("read existing macroeconomics: %w", err)
 	}
@@ -294,7 +331,13 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 		return "", 0, err
 	}
 	sort.Slice(rows, func(i, j int) bool { return economicKey(rows[i]) < economicKey(rows[j]) })
-	return publish(path, existing, rows)
+	metadata, err := metadataFromRows(in, func(r EconomicRow) publicationMetadata {
+		return publicationMetadata{Source: r.Source, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID, NormalizerVersion: r.NormalizerVersion}
+	})
+	if err != nil && !slices.Equal(existing, rows) {
+		return "", 0, err
+	}
+	return publish(w, dir, partition, existing, rows, metadata)
 }
 
 func priceRow(o model.PriceBar) (PriceRow, error) {
@@ -583,13 +626,135 @@ func compareDecimal(a, b string) int {
 	return ra.Cmp(rb)
 }
 
-func (w *Writer) path(parts ...string) (string, error) {
+func (w *Writer) partition(parts ...string) (string, error) {
 	for _, p := range parts {
 		if p == "" || p == "." || p == ".." || strings.ContainsAny(p, "/\\\x00") {
 			return "", fmt.Errorf("unsafe normalized path segment %q", p)
 		}
 	}
-	return filepath.Join(append([]string{w.root}, append(parts, "data.parquet")...)...), nil
+	return filepath.Join(append([]string{w.root}, parts...)...), nil
+}
+
+func (w *Writer) path(parts ...string) (string, error) {
+	dir, err := w.partition(parts...)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, ManifestFilename), nil
+}
+
+func metadataFromRows[T any](rows []T, metadata func(T) publicationMetadata) (publicationMetadata, error) {
+	if len(rows) == 0 {
+		return publicationMetadata{}, errors.New("manifest metadata requires at least one input row")
+	}
+	want := metadata(rows[0])
+	if want.Source == "" || want.DataSourceID == "" || want.IngestionRunID == "" || want.NormalizerVersion == "" {
+		return publicationMetadata{}, errors.New("manifest metadata fields required")
+	}
+	for _, row := range rows[1:] {
+		got := metadata(row)
+		if got != want {
+			return publicationMetadata{}, errors.New("manifest metadata differs within publication")
+		}
+	}
+	return want, nil
+}
+
+func readCommitted[T any](dir string, expectedPartition map[string]string) ([]T, error) {
+	legacyPath := filepath.Join(dir, "data.parquet")
+	if _, err := os.Stat(legacyPath); err == nil {
+		return nil, fmt.Errorf("%w: legacy normalized file %s is not a committed manifest part", ErrMigrationRequired, legacyPath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	manifestPath := filepath.Join(dir, ManifestFilename)
+	manifest, present, err := readManifestIfPresent(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMigrationRequired, err)
+	}
+	if !present {
+		files, err := parquetFilesInDirectory(dir)
+		if err != nil {
+			return nil, err
+		}
+		if len(files) != 0 {
+			return nil, fmt.Errorf("%w: normalized Parquet files in %s have no committed %s", ErrMigrationRequired, dir, ManifestFilename)
+		}
+		return nil, nil
+	}
+	if err := samePartitionIdentity(manifest.Partition, expectedPartition); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMigrationRequired, err)
+	}
+	rows := make([]T, 0, manifest.RowCount)
+	seen := make(map[string]struct{}, manifest.RowCount)
+	for _, part := range manifest.Parts {
+		partPath := filepath.Join(dir, part.Path)
+		actualHash, err := sha256File(partPath)
+		if err != nil {
+			return nil, fmt.Errorf("%w: read committed part %s: %v", ErrMigrationRequired, partPath, err)
+		}
+		if actualHash != part.SHA256 {
+			return nil, fmt.Errorf("%w: sha256 mismatch for committed part %s", ErrMigrationRequired, partPath)
+		}
+		partRows, err := readV1[T](partPath)
+		if err != nil {
+			return nil, err
+		}
+		if len(partRows) != part.RowCount {
+			return nil, fmt.Errorf("%w: manifest row_count %d does not match %s row count %d", ErrMigrationRequired, part.RowCount, partPath, len(partRows))
+		}
+		for _, row := range partRows {
+			key, err := validateExistingRow(row)
+			if err != nil {
+				return nil, fmt.Errorf("%w: invalid committed row in %s: %v", ErrMigrationRequired, partPath, err)
+			}
+			if _, ok := seen[key]; ok {
+				return nil, fmt.Errorf("%w: duplicate natural key in committed parts: %s", ErrMigrationRequired, key)
+			}
+			seen[key] = struct{}{}
+			if err := validateRowPartition(row, expectedPartition); err != nil {
+				return nil, fmt.Errorf("%w: committed partition mismatch in %s: %v", ErrMigrationRequired, partPath, err)
+			}
+		}
+		rows = append(rows, partRows...)
+	}
+	if len(rows) != manifest.RowCount {
+		return nil, fmt.Errorf("%w: manifest row_count %d does not match committed row count %d", ErrMigrationRequired, manifest.RowCount, len(rows))
+	}
+	return rows, nil
+}
+
+func samePartitionIdentity(got, want map[string]string) error {
+	if len(got) != len(want) {
+		return fmt.Errorf("partition identity differs: got %v want %v", got, want)
+	}
+	for key, value := range want {
+		if got[key] != value {
+			return fmt.Errorf("partition identity differs for %q: got %q want %q", key, got[key], value)
+		}
+	}
+	return nil
+}
+
+func validateRowPartition[T any](row T, partition map[string]string) error {
+	source := partition["source"]
+	switch r := any(row).(type) {
+	case PriceRow:
+		if r.Source != source || r.SecurityID != partition["security_id"] {
+			return errors.New("price row does not match partition identity")
+		}
+	case FundamentalRow:
+		if r.Source != source || r.IssuerID != partition["issuer_id"] {
+			return errors.New("fundamental row does not match partition identity")
+		}
+	case EconomicRow:
+		if r.Source != source || r.SeriesID != partition["series_id"] {
+			return errors.New("economic row does not match partition identity")
+		}
+	default:
+		return errors.New("unsupported normalized row type")
+	}
+	return nil
 }
 func readV1[T any](path string) ([]T, error) {
 	f, err := os.Open(path)
@@ -809,50 +974,107 @@ func storedTemporal(observed, published int64, precision string, available, inge
 	}
 	return t
 }
-func publish[T comparable](path string, existing, rows []T) (string, int, error) {
+func publish[T comparable](w *Writer, dir string, partition map[string]string, existing, rows []T, metadata publicationMetadata) (string, int, error) {
+	manifestPath := filepath.Join(dir, ManifestFilename)
 	if slices.Equal(existing, rows) {
-		return path, 0, nil
+		return manifestPath, 0, nil
 	}
-	changed, err := writeAtomic(path, rows)
+	part, err := writePart(dir, rows, w.publicationOps())
 	if err != nil {
 		return "", 0, err
 	}
-	if !changed {
-		return path, 0, nil
+	manifest := Manifest{
+		ManifestVersion:   ManifestVersion,
+		SchemaVersion:     model.SchemaVersion,
+		NormalizerVersion: metadata.NormalizerVersion,
+		GitCommit:         w.gitCommitValue(),
+		Source:            metadata.Source,
+		DataSourceID:      metadata.DataSourceID,
+		IngestionRunID:    metadata.IngestionRunID,
+		Partition:         clonePartition(partition),
+		RowCount:          len(rows),
+		Parts:             []ManifestPart{part},
 	}
-	return path, len(rows), nil
+	if err := validateManifest(manifest); err != nil {
+		return "", 0, err
+	}
+	if err := writeManifest(manifestPath, manifest, w.publicationOps()); err != nil {
+		return "", 0, err
+	}
+	return manifestPath, len(rows), nil
 }
-func writeAtomic[T any](path string, rows []T) (bool, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return false, err
+
+func (w *Writer) gitCommitValue() string {
+	if validGitCommit(w.gitCommit) {
+		return w.gitCommit
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".parquet-*")
+	return currentGitCommit()
+}
+
+func clonePartition(partition map[string]string) map[string]string {
+	clone := make(map[string]string, len(partition))
+	for key, value := range partition {
+		clone[key] = value
+	}
+	return clone
+}
+
+func writePart[T any](dir string, rows []T, ops publicationOps) (ManifestPart, error) {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return ManifestPart{}, err
+	}
+	tmp, err := os.CreateTemp(dir, ".part-*")
 	if err != nil {
-		return false, err
+		return ManifestPart{}, err
 	}
-	name := tmp.Name()
-	tmp.Close()
-	defer os.Remove(name)
-	if err := parquet.WriteFile(name, rows, parquet.Compression(&parquet.Snappy)); err != nil {
-		return false, err
+	tmpName := tmp.Name()
+	removeTemp := true
+	defer func() {
+		if removeTemp {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if err := tmp.Close(); err != nil {
+		return ManifestPart{}, err
 	}
-	b, err := os.ReadFile(name)
+	if err := parquet.WriteFile(tmpName, rows, parquet.Compression(&parquet.Snappy)); err != nil {
+		return ManifestPart{}, err
+	}
+	if err := os.Chmod(tmpName, 0o640); err != nil {
+		return ManifestPart{}, err
+	}
+	if err := ops.syncFile(tmpName); err != nil {
+		return ManifestPart{}, err
+	}
+	hash, err := sha256File(tmpName)
 	if err != nil {
-		return false, err
+		return ManifestPart{}, err
 	}
-	if old, e := os.ReadFile(path); e == nil && sha256.Sum256(old) == sha256.Sum256(b) && bytes.Equal(old, b) {
-		return false, nil
+	part := ManifestPart{Path: contentPartFilename(hash), SHA256: hash, RowCount: len(rows)}
+	partPath := filepath.Join(dir, part.Path)
+	if existingHash, statErr := sha256File(partPath); statErr == nil {
+		if existingHash != hash {
+			return ManifestPart{}, fmt.Errorf("immutable part path %s contains different content", partPath)
+		}
+		removeTemp = true
+		if err := ops.syncFile(partPath); err != nil {
+			return ManifestPart{}, err
+		}
+		return part, nil
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return ManifestPart{}, statErr
 	}
-	if err := os.Chmod(name, 0o640); err != nil {
-		return false, err
+	if err := ops.rename(tmpName, partPath); err != nil {
+		return ManifestPart{}, err
 	}
-	if err := os.Rename(name, path); err != nil {
-		return false, err
+	removeTemp = false
+	fileErr := ops.syncFile(partPath)
+	dirErr := ops.syncDir(dir)
+	if fileErr != nil {
+		return ManifestPart{}, fileErr
 	}
-	d, err := os.Open(filepath.Dir(path))
-	if err == nil {
-		err = d.Sync()
-		d.Close()
+	if dirErr != nil {
+		return ManifestPart{}, dirErr
 	}
-	return true, err
+	return part, nil
 }

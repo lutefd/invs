@@ -65,16 +65,16 @@ func TestPriceV1LosslessIdempotentAndQueryable(t *testing.T) {
 	if !before.ModTime().Equal(after.ModTime()) {
 		t.Fatal("idempotent write replaced file")
 	}
-	rows, err := parquet.ReadFile[PriceRow](path)
-	if err != nil || len(rows) != 1 {
-		t.Fatal(err)
+	rows := rowsFromManifest[PriceRow](t, path)
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d", len(rows))
 	}
 	r := rows[0]
 	if r.SchemaVersion != "1.0.0" || r.Open != "1.000000000000000001" || r.Interval != "1d" || r.PriceBasis != "raw" || r.DataSourceID != sourceID {
 		t.Fatalf("row=%+v", r)
 	}
 	if output := os.Getenv("INVS_PARQUET_TEST_OUTPUT"); output != "" {
-		b, err := os.ReadFile(path)
+		b, err := os.ReadFile(manifestPartPath(t, path))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -135,7 +135,7 @@ func TestWritersStoreCanonicalDecimalStrings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	priceRows, _ := parquet.ReadFile[PriceRow](pricePath)
+	priceRows := rowsFromManifest[PriceRow](t, pricePath)
 	if got := []string{priceRows[0].Open, priceRows[0].High, priceRows[0].Low, priceRows[0].Close, priceRows[0].Volume}; !equalStrings(got, []string{"1", "3", "1", "2.5", "10"}) {
 		t.Fatalf("price decimals=%v", got)
 	}
@@ -147,7 +147,7 @@ func TestWritersStoreCanonicalDecimalStrings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fundamentalRows, _ := parquet.ReadFile[FundamentalRow](fundamentalPath)
+	fundamentalRows := rowsFromManifest[FundamentalRow](t, fundamentalPath)
 	if fundamentalRows[0].Value != "123.5" {
 		t.Fatalf("fundamental value=%q", fundamentalRows[0].Value)
 	}
@@ -157,7 +157,7 @@ func TestWritersStoreCanonicalDecimalStrings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	economicRows, _ := parquet.ReadFile[EconomicRow](economicPath)
+	economicRows := rowsFromManifest[EconomicRow](t, economicPath)
 	if economicRows[0].Value != "7.25" {
 		t.Fatalf("economic value=%q", economicRows[0].Value)
 	}
@@ -172,7 +172,7 @@ func TestFundamentalNullablePhysicalFieldsAndConflict(t *testing.T) {
 	if err != nil || n != 1 {
 		t.Fatal(err)
 	}
-	rows, _ := parquet.ReadFile[FundamentalRow](path)
+	rows := rowsFromManifest[FundamentalRow](t, path)
 	if rows[0].HasSecurityID || rows[0].PeriodStartTime() != nil || !rows[0].HasCurrency || rows[0].Value != "123.5" {
 		t.Fatalf("row=%+v", rows[0])
 	}
@@ -195,9 +195,9 @@ func TestFundamentalNaturalKeyIncludesTaxonomyAndUnit(t *testing.T) {
 	if err != nil || n != 3 {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
-	rows, err := parquet.ReadFile[FundamentalRow](path)
-	if err != nil || len(rows) != 3 {
-		t.Fatalf("rows=%d err=%v", len(rows), err)
+	rows := rowsFromManifest[FundamentalRow](t, path)
+	if len(rows) != 3 {
+		t.Fatalf("rows=%d", len(rows))
 	}
 }
 
@@ -232,7 +232,7 @@ func TestMacroRevisionsNoOpUnchangedAndPreserveABA(t *testing.T) {
 	if _, _, err = w.WriteEconomics("X", []model.EconomicObservation{a2}); err != nil {
 		t.Fatal(err)
 	}
-	rows, _ := parquet.ReadFile[EconomicRow](path)
+	rows := rowsFromManifest[EconomicRow](t, path)
 	if len(rows) != 3 || rows[0].Revision != 0 || rows[1].Revision != 1 || rows[2].Revision != 2 {
 		t.Fatalf("rows=%+v", rows)
 	}
@@ -384,6 +384,35 @@ func TestTemporalAndProvenanceValidation(t *testing.T) {
 
 func pricePath(root string) string {
 	return filepath.Join(root, "prices", "source=yahoo", "security_id="+securityID, "data.parquet")
+}
+
+func manifestPartPath(t *testing.T, manifestPath string) string {
+	t.Helper()
+	manifest, err := ReadManifest(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Parts) != 1 {
+		t.Fatalf("parts=%d", len(manifest.Parts))
+	}
+	return filepath.Join(filepath.Dir(manifestPath), manifest.Parts[0].Path)
+}
+
+func rowsFromManifest[T any](t *testing.T, manifestPath string) []T {
+	t.Helper()
+	manifest, err := ReadManifest(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := make([]T, 0, manifest.RowCount)
+	for _, part := range manifest.Parts {
+		partRows, err := parquet.ReadFile[T](filepath.Join(filepath.Dir(manifestPath), part.Path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows = append(rows, partRows...)
+	}
+	return rows
 }
 
 func equalStrings(a, b []string) bool {
