@@ -1,0 +1,114 @@
+name: invs
+
+x-data-mount: &data-mount
+  type: bind
+  source: ./data
+  target: /data
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-market_research}
+      POSTGRES_USER: ${POSTGRES_USER:-market_research}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market_research_local}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    networks: [research]
+
+  collector:
+    build:
+      context: .
+      dockerfile: docker/collector.Dockerfile
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-market_research}:${POSTGRES_PASSWORD:-market_research_local}@postgres:5432/${POSTGRES_DB:-market_research}?sslmode=disable
+      INVS_DATA_DIR: /data
+      INVS_USER_AGENT: ${SEC_USER_AGENT:-personal-quant-research/0.1 contact@example.com}
+      FRED_API_KEY: ${FRED_API_KEY:-}
+    volumes:
+      - *data-mount
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # The collector is an explicit batch job: docker compose run --rm collector [args].
+    # Keeping it in a profile prevents a completed collection from looking unhealthy.
+    profiles: [collect]
+    networks: [research]
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: docker/jupyter.Dockerfile
+    environment:
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-}
+      PYTHONUNBUFFERED: "1"
+      HOME: /tmp/jupyter
+      JUPYTER_RUNTIME_DIR: /tmp/jupyter/runtime
+    command: ["jupyter-entrypoint"]
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    working_dir: /workspace
+    ports:
+      - "127.0.0.1:${JUPYTER_PORT:-8888}:8888"
+    volumes:
+      - ./python:/workspace
+      - *data-mount
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8888), timeout=2).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    networks: [research]
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      POSTGRES_DB: ${POSTGRES_DB:-market_research}
+      POSTGRES_USER: ${POSTGRES_USER:-market_research}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market_research_local}
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - type: bind
+        source: ./data
+        target: /data
+        read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    networks: [research]
+
+volumes:
+  postgres-data:
+  grafana-data:
+
+networks:
+  research:
+    driver: bridge

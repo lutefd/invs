@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+!.env.example
+data/**
+!data/raw/.gitkeep
+!data/normalized/.gitkeep
+!data/features/.gitkeep
+python/.venv
+python/**/__pycache__
+python/.pytest_cache
+python/.mypy_cache
+python/.ruff_cache
+python/.ipynb_checkpoints
+*.duckdb
+*.duckdb.wal

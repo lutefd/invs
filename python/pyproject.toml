@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "invs-research"
+version = "0.1.0"
+description = "DuckDB helpers for point-in-time investment research"
+requires-python = ">=3.12"
+dependencies = [
+  "duckdb>=1.3,<2",
+  "jupyterlab>=4.4,<5",
+  "pandas>=2.2,<3",
+  "pyarrow>=20,<22",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.4,<9", "ruff>=0.12,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["research"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

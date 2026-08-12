@@ -1,0 +1,64 @@
+{
+  "annotations": {"list": []},
+  "description": "Operational truth from PostgreSQL ingestion metadata. Empty panels mean no collector run has been registered.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Failures and partial runs in the selected interval.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showPercentChange": false, "textMode": "auto", "wideLayout": true},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*)::double precision AS value FROM ingestion_runs WHERE $__timeFilter(started_at) AND status IN ('failed', 'partial')", "refId": "A"}],
+      "title": "Failed / partial runs",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Records explicitly rejected by validation in the selected interval.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showPercentChange": false, "textMode": "auto", "wideLayout": true},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT coalesce(sum(records_rejected), 0)::double precision AS value FROM ingestion_runs WHERE $__timeFilter(started_at)", "refId": "A"}],
+      "title": "Rejected records",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Source freshness based on successful run completion, not source-observation freshness.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": true, "displayName": "hours_since_success"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ds.code AS source, max(ir.finished_at) FILTER (WHERE ir.status = 'succeeded') AS last_success, round((extract(epoch FROM now() - max(ir.finished_at) FILTER (WHERE ir.status = 'succeeded')) / 3600.0)::numeric, 1) AS hours_since_success FROM data_sources ds LEFT JOIN ingestion_runs ir ON ir.data_source_id = ds.id GROUP BY ds.code ORDER BY ds.code", "refId": "A"}],
+      "title": "Collector freshness",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 11, "w": 24, "x": 0, "y": 9},
+      "id": 4,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": true, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": true, "displayName": "started_at"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ir.started_at, ir.finished_at, ds.code AS source, ir.status::text, ir.records_received, ir.records_written, ir.records_rejected, ir.raw_payload_count, ir.error_message FROM ingestion_runs ir JOIN data_sources ds ON ds.id = ir.data_source_id WHERE $__timeFilter(ir.started_at) ORDER BY ir.started_at DESC LIMIT 100", "refId": "A"}],
+      "title": "Latest ingestion runs",
+      "type": "table"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "tags": ["research", "pipeline", "data-quality"],
+  "templating": {"list": []},
+  "time": {"from": "now-7d", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Pipeline health",
+  "uid": "pipeline-health",
+  "version": 1
+}
