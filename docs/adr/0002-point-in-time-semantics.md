@@ -14,8 +14,11 @@ receipt times are different facts. Conflating them introduces lookahead bias.
 Canonical records use UTC instants encoded as RFC 3339 strings. PostgreSQL uses
 `timestamptz`. Source-local timestamps are converted with an explicit IANA timezone;
 the original source value is retained in the raw artifact. A date-only source value
-must remain a date or carry documented market-calendar resolution; it must never be
-silently interpreted as midnight UTC.
+must remain a date or carry documented market-calendar resolution. For the price,
+fundamental, and economic observation schemas, it may be physically encoded in
+`observed_at` as UTC midnight only when `observed_precision` is `date`; that value is
+a civil-date reference, not an exact instant. Without that marker, midnight UTC must
+never be silently interpreted as a date-only value.
 
 Normalized Parquet stores canonical instants in UTC physical timestamp fields with
 microsecond precision. Any input instant with a non-zero sub-microsecond nanosecond
@@ -27,7 +30,9 @@ The temporal fields have non-overlapping meanings:
 
 - `observed_at`: when a measurement applies to the world. For a daily bar this is
   the interval close; for an economic value it is the observation/reference date;
-  for a fundamental it is normally the fiscal period end. It is not availability.
+  for a fundamental it is normally the fiscal period end. The optional
+  `observed_precision` marker is `date`, `second`, or `unknown`; omission in a valid
+  legacy v1 record reads as `unknown`. It is not availability.
 - `published_at`: earliest defensible instant the exact version became public. SEC
   acceptance time and an agency release time are examples. If a source exposes only
   a date, the normalizer records the precision and uses a conservative availability
@@ -63,6 +68,14 @@ In a live/paper replay, information also requires `ingested_at <= decision_at` s
 simulation matches what this installation actually possessed. `observed_at <=
 decision_at` is necessary for measurements, but never sufficient without
 `available_at <= decision_at`.
+
+`observed_precision` does not change this rule. A date-precision `observed_at` is a
+reference date encoded at UTC midnight, while `available_at` remains the conservative
+knowledge cutoff used by research. Provider mappings are FRED observation date to
+`date`, SEC period date to `date`, and Yahoo bar timestamp to `second`. Existing v1
+records may omit the optional marker; readers treat that omission as `unknown`.
+Present values outside the enum are invalid and adapters/readers fail closed rather
+than coercing them or guessing precision.
 
 Unknown `published_at` does not become a historical cutoff by inference. The source
 normalizer must instead supply an explicit conservative `available_at`; missing

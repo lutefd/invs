@@ -53,6 +53,35 @@ an explicit publication instant.
 All timestamps are UTC RFC 3339 values ending in `Z`. Financial decimals are strings
 so Go, Python, JSON, and Parquet conversions do not silently round them.
 
+### Observed-value precision
+
+`observed_precision` is optional on `price-bar`, `fundamental-observation`, and
+`economic-observation`. Its allowed values are `date`, `second`, and `unknown`.
+Omission is valid for legacy `schema_version: 1.0.0` records and readers interpret
+it as `unknown`; adding the field does not require a schema-version change. A present
+value outside this enum is invalid and must fail closed rather than being coerced or
+treated as `unknown`.
+
+`observed_at` may physically encode a civil date as UTC midnight only when
+`observed_precision: date` is present. In that case it is a reference date, not an
+exact instant. `observed_precision: second` identifies source precision at one
+second, while `unknown` means the source precision is unavailable. The marker does
+not change publication or availability semantics: point-in-time research continues
+to use `available_at` as the conservative knowledge cutoff, and `published_at`
+remains source metadata.
+
+The initial provider mappings are explicit:
+
+| Provider value | Source field | Canonical marker |
+| --- | --- | --- |
+| FRED | observation date | `date` |
+| SEC | period date | `date` |
+| Yahoo | bar timestamp | `second` |
+
+Adapters must preserve these mappings and fail closed on an invalid marker. They
+must not infer exact instants from a date-only value or silently reinterpret a
+malformed marker.
+
 ## Validation
 
 Run the dependency-free structural and reference check:

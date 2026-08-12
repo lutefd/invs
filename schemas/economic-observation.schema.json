@@ -17,6 +17,10 @@
       "$ref": "common.schema.json#/$defs/utcTimestamp",
       "$comment": "Reference period/date to which the measurement applies."
     },
+    "observed_precision": {
+      "$ref": "common.schema.json#/$defs/observedPrecision",
+      "$comment": "Optional in schema version 1.0.0; omission is read as unknown."
+    },
     "published_at": {
       "$ref": "common.schema.json#/$defs/utcTimestamp",
       "$comment": "Release time of this vintage, not the latest-vintage release time."

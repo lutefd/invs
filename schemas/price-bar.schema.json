@@ -15,6 +15,10 @@
       "$ref": "common.schema.json#/$defs/utcTimestamp",
       "$comment": "Exclusive close of the market interval represented by this bar."
     },
+    "observed_precision": {
+      "$ref": "common.schema.json#/$defs/observedPrecision",
+      "$comment": "Optional in schema version 1.0.0; omission is read as unknown."
+    },
     "published_at": {
       "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }],
       "$comment": "Earliest instant this exact bar/version was public; null bars are excluded from point-in-time backtests."

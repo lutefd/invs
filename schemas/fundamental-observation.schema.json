@@ -21,6 +21,10 @@
       "$ref": "common.schema.json#/$defs/utcTimestamp",
       "$comment": "Fiscal period end/instant to which the reported fact applies; never its availability time."
     },
+    "observed_precision": {
+      "$ref": "common.schema.json#/$defs/observedPrecision",
+      "$comment": "Optional in schema version 1.0.0; omission is read as unknown."
+    },
     "published_at": {
       "$ref": "common.schema.json#/$defs/utcTimestamp",
       "$comment": "Earliest public release or filing acceptance time for this exact vintage."

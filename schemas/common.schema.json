@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.invs.local/common.schema.json",
   "title": "Canonical common definitions",
-  "$comment": "All timestamps are UTC instants. observed_at is applicability, published_at is public availability, effective_at is legal/economic effect, and ingested_at is local receipt.",
+  "$comment": "All timestamps are UTC instants unless an observation's observed_precision=date explicitly marks observed_at as a civil-date reference encoded at UTC midnight. observed_at is applicability, published_at is public availability, effective_at is legal/economic effect, and ingested_at is local receipt.",
   "$defs": {
     "uuid": {
       "type": "string",
@@ -17,6 +17,11 @@
     "date": {
       "type": "string",
       "format": "date"
+    },
+    "observedPrecision": {
+      "type": "string",
+      "enum": ["date", "second", "unknown"],
+      "$comment": "Optional precision marker for observed_at. Omission is read as unknown for compatibility with valid legacy v1 records. date permits a civil date to be encoded at UTC midnight as a reference date, not an exact instant."
     },
     "sha256": {
       "type": "string",
