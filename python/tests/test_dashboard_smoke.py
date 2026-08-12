@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
@@ -40,15 +39,39 @@ def test_market_dashboard_is_strict_json_with_latest_snapshot_queries() -> None:
     assert smoke_sql([DASHBOARD]).endswith("ROLLBACK;")
 
 
-def test_duplicate_json_keys_are_rejected(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("payload", "key"),
+    [
+        ('{"panels": [], "panels": []}', "panels"),
+        ('{"panels": [{"targets": [], "targets": []}]}', "targets"),
+    ],
+)
+def test_duplicate_json_keys_are_rejected(
+    tmp_path: Path, payload: str, key: str
+) -> None:
     path = tmp_path / "duplicate.json"
-    path.write_text('{"panels": [], "panels": []}', encoding="utf-8")
+    path.write_text(payload, encoding="utf-8")
 
-    with pytest.raises(ValueError, match="duplicate JSON key: panels"):
+    with pytest.raises(ValueError, match=f"duplicate JSON key: {key}"):
         load_dashboard(path)
 
 
-def test_all_provisioned_dashboards_parse_as_json() -> None:
-    for path in DASHBOARD.parent.glob("*.json"):
-        document = load_dashboard(path)
-        assert json.dumps(document)
+def test_all_provisioned_dashboards_are_strict_json_and_explainable() -> None:
+    dashboards = sorted(DASHBOARD.parent.glob("*.json"))
+
+    assert dashboards
+    assert DASHBOARD.parent / "pipeline-health.json" in dashboards
+
+    sql = smoke_sql(dashboards)
+    assert sql.startswith("BEGIN;")
+    assert sql.endswith("ROLLBACK;")
+    assert "$__" not in sql
+
+    query_count = 0
+    for path in dashboards:
+        queries = dashboard_queries(load_dashboard(path))
+        assert queries
+        query_count += len(queries)
+        assert sql.count(f"-- {path.name} query") == len(queries)
+
+    assert sql.count("\nEXPLAIN ") == query_count

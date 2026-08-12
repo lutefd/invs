@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
+
+_TIME_FILTER = re.compile(r"\$__timeFilter\((?P<column>[A-Za-z_][A-Za-z0-9_.]*)\)")
+_SMOKE_TIME_RANGE = "BETWEEN now() - interval '7 days' AND now()"
 
 
 def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -26,15 +30,22 @@ def load_dashboard(path: Path) -> dict[str, Any]:
     return document
 
 
+def _expand_grafana_macros(query: str) -> str:
+    query = _TIME_FILTER.sub(
+        lambda match: f"{match.group('column')} {_SMOKE_TIME_RANGE}", query
+    )
+    if "$__" in query:
+        raise ValueError("query smoke does not support unresolved Grafana macros")
+    return query
+
+
 def dashboard_queries(document: dict[str, Any]) -> tuple[str, ...]:
     queries: list[str] = []
     for panel in document.get("panels", []):
         for target in panel.get("targets", []):
             query = target.get("rawSql")
             if isinstance(query, str) and query.strip():
-                if "$__" in query:
-                    raise ValueError("query smoke does not support unresolved Grafana macros")
-                queries.append(query.rstrip(";"))
+                queries.append(_expand_grafana_macros(query.rstrip(";")))
     if not queries:
         raise ValueError("dashboard contains no SQL queries")
     return tuple(queries)

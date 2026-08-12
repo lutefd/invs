@@ -6,6 +6,7 @@ COMPOSE = LOCAL_UID=$(LOCAL_UID) LOCAL_GID=$(LOCAL_GID) docker compose
 SOURCE ?= all
 RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
+DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
 .PHONY: setup config up migrate health urls ingest rerun test notebook dashboard-smoke validate down clean
 
@@ -61,8 +62,8 @@ notebook: config
 		--output /tmp/vertical-slice.executed.ipynb notebooks/vertical_slice.ipynb
 
 dashboard-smoke: migrate
-	@python3 python/research/dashboard_smoke.py docker/grafana/dashboards/market-overview.json >/dev/null
-	@python3 python/research/dashboard_smoke.py docker/grafana/dashboards/market-overview.json | \
+	@python3 python/research/dashboard_smoke.py $(DASHBOARDS) >/dev/null
+	@python3 python/research/dashboard_smoke.py $(DASHBOARDS) | \
 		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1'
 
 validate: test notebook dashboard-smoke
