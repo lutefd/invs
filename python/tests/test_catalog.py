@@ -389,6 +389,113 @@ def test_fresh_data_root_registers_typed_empty_views(tmp_path: Path) -> None:
     ).empty
 
 
+def test_point_in_time_inputs_applies_both_cutoffs_and_preserves_exact_close(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "normalized"
+    _write_price_parts(
+        root,
+        [
+            _price_select(
+                observed="2025-01-10 21:00:00Z",
+                available="2025-01-11 00:00:00Z",
+                close="100.123456789012345678",
+            ),
+            _price_select(
+                observed="2025-01-11 21:00:00Z",
+                available="2025-01-12 00:00:00Z",
+                close="200.000000000000000001",
+            ),
+            _price_select(
+                observed="2025-01-12 21:00:00Z",
+                available="2025-01-10 00:00:00Z",
+                close="300.000000000000000003",
+            ),
+        ],
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+
+    result = catalog.point_in_time_inputs(
+        decision_at="2025-01-11T00:00:00Z",
+        security_id=SECURITY_ID,
+    )
+
+    assert result.frame["close_value"].tolist() == ["100.123456789012345678"]
+    assert result.frame["observed_at"].astype(str).tolist() == [
+        "2025-01-10 21:00:00+00:00"
+    ]
+    assert result.frame["available_at"].astype(str).tolist() == [
+        "2025-01-11 00:00:00+00:00"
+    ]
+    assert str(result.maximum_input_availability) == "2025-01-11 00:00:00+00:00"
+
+
+def test_point_in_time_inputs_exposes_manifest_and_part_lineage(tmp_path: Path) -> None:
+    root = tmp_path / "normalized"
+    manifest_path = _write_price_parts(
+        root,
+        [
+            _price_select(observed="2025-01-10 21:00:00Z", close="100"),
+            _price_select(observed="2025-01-11 21:00:00Z", close="101"),
+        ],
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+
+    frame = catalog.point_in_time_inputs(
+        decision_at="2025-02-01T00:00:00Z",
+        security_id=SECURITY_ID,
+    ).frame
+
+    assert frame["manifest_path"].tolist() == [str(manifest_path.resolve())] * 2
+    assert frame["part_path"].nunique() == 2
+    for part_path, part_sha256 in zip(frame["part_path"], frame["part_sha256"], strict=True):
+        part = Path(part_path)
+        assert part.is_file()
+        assert part.name == f"part-{part_sha256}.parquet"
+        assert hashlib.sha256(part.read_bytes()).hexdigest() == part_sha256
+    assert frame["raw_payload_hash"].tolist() == ["a" * 64] * 2
+
+
+def test_point_in_time_inputs_returns_empty_for_missing_data(tmp_path: Path) -> None:
+    empty_catalog = ResearchCatalog(tmp_path / "empty").register()
+
+    empty = empty_catalog.point_in_time_inputs(
+        decision_at="2025-01-01T00:00:00Z",
+        security_id=SECURITY_ID,
+    )
+
+    assert empty.frame.empty
+    assert {"close_value", "observed_at", "available_at", "raw_payload_hash"}.issubset(
+        empty.frame.columns
+    )
+    assert empty.maximum_input_availability is None
+
+    _write_prices(tmp_path / "populated" / "normalized")
+    populated_catalog = ResearchCatalog(tmp_path / "populated").register()
+    missing_security = populated_catalog.point_in_time_inputs(
+        decision_at="2026-02-01T00:00:00Z",
+        security_id="missing-security",
+    )
+
+    assert missing_security.frame.empty
+    assert missing_security.maximum_input_availability is None
+
+
+def test_point_in_time_inputs_requires_decision_at_and_rejects_unsupported_dataset(
+    tmp_path: Path,
+) -> None:
+    catalog = ResearchCatalog(tmp_path).register()
+
+    with pytest.raises(TypeError, match="decision_at"):
+        catalog.point_in_time_inputs(security_id=SECURITY_ID)
+    with pytest.raises(ValueError, match="unsupported"):
+        catalog.point_in_time_inputs(
+            decision_at="2025-01-01T00:00:00Z",
+            security_id=SECURITY_ID,
+            dataset="fundamentals",
+        )
+
+
 def test_valid_manifest_registers_only_its_verified_parts(tmp_path: Path) -> None:
     root = tmp_path / "normalized"
     manifest_path = _write_prices(root)

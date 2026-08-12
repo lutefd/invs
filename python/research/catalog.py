@@ -52,6 +52,28 @@ class SecurityMapping:
 
 
 @dataclass(frozen=True)
+class PointInTimeInputs:
+    """Price inputs and provenance selected at one explicit decision timestamp.
+
+    ``frame`` is ordered by observation time and keeps ``close_value`` as the
+    canonical exact decimal string. ``maximum_input_availability`` is the
+    latest ``available_at`` in the returned frame, or ``None`` when no input is
+    eligible.
+    """
+
+    frame: Any
+    maximum_input_availability: Any
+    dataset: str
+    security_id: str
+    decision_at: str
+
+    @property
+    def max_available_at(self) -> Any:
+        """Compatibility spelling for the maximum eligible availability."""
+        return self.maximum_input_availability
+
+
+@dataclass(frozen=True)
 class _Field:
     name: str
     sql_type: str
@@ -701,6 +723,105 @@ class ResearchCatalog:
             raise TypeError("point_in_time_frame requires an explicit decision_at")
         return self.research_snapshot(**kwargs)
 
+    def point_in_time_inputs(
+        self,
+        *,
+        decision_at: str,
+        security_id: str,
+        dataset: str = "prices",
+    ) -> PointInTimeInputs:
+        """Return exact-string price inputs known at ``decision_at``.
+
+        The API deliberately takes an explicit ``security_id`` rather than a
+        current YAML mapping. Only ``prices`` is supported for now; other
+        dataset names fail closed until their historical identity and
+        availability contracts are implemented.
+        """
+        if dataset != "prices":
+            raise ValueError(
+                f"unsupported point_in_time_inputs dataset {dataset!r}; "
+                "only 'prices' is currently supported"
+            )
+        if decision_at is None or (isinstance(decision_at, str) and not decision_at.strip()):
+            raise ValueError("point_in_time_inputs requires an explicit decision_at")
+        if not isinstance(security_id, str) or not security_id:
+            raise ValueError("point_in_time_inputs requires an explicit security_id")
+
+        parameters: dict[str, object] = {
+            "decision_at": decision_at,
+            "security_id": security_id,
+        }
+        sql = f"""
+            WITH eligible AS (
+                SELECT *
+                FROM {_quote_identifier("_prices_lineage")}
+                WHERE security_id = $security_id
+                  AND available_at IS NOT NULL
+                  AND observed_at IS NOT NULL
+                  AND available_at <= CAST($decision_at AS TIMESTAMPTZ)
+                  AND observed_at <= CAST($decision_at AS TIMESTAMPTZ)
+            ),
+            selected AS (
+                SELECT *
+                FROM eligible
+                QUALIFY row_number() OVER (
+                    PARTITION BY source, security_id, interval, price_basis, observed_at
+                    ORDER BY
+                        available_at DESC,
+                        ingested_at DESC,
+                        raw_payload_hash DESC NULLS LAST,
+                        manifest_path DESC,
+                        part_path DESC
+                ) = 1
+            )
+            SELECT
+                source,
+                security_id,
+                interval,
+                price_basis,
+                currency,
+                observed_at,
+                CAST(observed_at AS DATE) AS trading_date,
+                observed_precision,
+                published_at,
+                has_published_at,
+                published_precision,
+                available_at,
+                ingested_at,
+                close AS close_value,
+                raw_payload_hash,
+                data_source_id,
+                ingestion_run_id,
+                raw_record_locator,
+                normalizer_version,
+                manifest_path,
+                part_path,
+                part_sha256
+            FROM selected
+            ORDER BY
+                observed_at,
+                source,
+                interval,
+                price_basis,
+                available_at,
+                ingested_at,
+                raw_payload_hash NULLS LAST,
+                manifest_path,
+                part_path,
+                raw_record_locator
+        """
+        frame = self.connection.execute(sql, parameters).fetchdf()
+        maximum_input_availability = (
+            None if frame.empty else frame["available_at"].max()
+        )
+        return PointInTimeInputs(
+            frame=frame,
+            maximum_input_availability=maximum_input_availability,
+            dataset=dataset,
+            security_id=security_id,
+            decision_at=str(decision_at),
+        )
+
     def filings_as_of(
         self,
         *,
@@ -777,6 +898,7 @@ class ResearchCatalog:
                 f"SELECT {projections} WHERE FALSE"
             )
             self._create_research_view(name)
+            self._create_lineage_view(name, dataset, (), {})
             self._statuses[name] = DatasetStatus(
                 name=name,
                 pattern=str(absolute_pattern),
@@ -788,11 +910,14 @@ class ResearchCatalog:
             return
 
         manifests = [_read_manifest(path, name) for path in manifest_paths]
-        verified_parts = [
-            part_path
-            for manifest in manifests
-            for part_path in self._verify_manifest_parts(manifest)
-        ]
+        verified_part_records: list[tuple[_Manifest, _ManifestPart, Path]] = []
+        for manifest in manifests:
+            verified_paths = self._verify_manifest_parts(manifest)
+            verified_part_records.extend(
+                (manifest, part, part_path)
+                for part, part_path in zip(manifest.parts, verified_paths, strict=True)
+            )
+        verified_parts = [record[2] for record in verified_part_records]
         expected_row_count = sum(manifest.row_count for manifest in manifests)
         observed_precision_by_path = self._validate_file_schemas(name, verified_parts, dataset)
         physical_view = f"_{name}_physical"
@@ -835,6 +960,12 @@ class ResearchCatalog:
             + f" FROM {_quote_identifier(physical_view)}"
         )
         self._create_research_view(name)
+        self._create_lineage_view(
+            name,
+            dataset,
+            verified_part_records,
+            observed_precision_by_path,
+        )
         row_count = self.connection.execute(
             f"SELECT count(*) FROM {_quote_identifier(canonical_view)}"
         ).fetchone()[0]
@@ -1104,4 +1235,51 @@ class ResearchCatalog:
             """
         self.connection.execute(
             f"CREATE OR REPLACE VIEW {_quote_identifier(name)} AS {sql}"
+        )
+
+    def _create_lineage_view(
+        self,
+        name: str,
+        dataset: _Dataset,
+        part_records: Iterable[tuple[_Manifest, _ManifestPart, Path]],
+        observed_precision_by_path: dict[Path, bool],
+    ) -> None:
+        """Create a private row-to-manifest/part view for provenance-aware inputs."""
+        lineage_view = _quote_identifier(f"_{name}_lineage")
+        lineage_fields = (
+            "CAST(NULL AS VARCHAR) AS manifest_path",
+            "CAST(NULL AS VARCHAR) AS part_path",
+            "CAST(NULL AS VARCHAR) AS part_sha256",
+        )
+        records = tuple(part_records)
+        if not records:
+            canonical = _quote_identifier(f"{name}_canonical")
+            self.connection.execute(
+                f"CREATE OR REPLACE VIEW {lineage_view} AS SELECT "
+                f"*, {', '.join(lineage_fields)} FROM {canonical} WHERE FALSE"
+            )
+            return
+
+        canonical_fields = self._canonical_projections(name, dataset.fields)
+        projections = []
+        for manifest, part, path in records:
+            physical = self._part_compatibility_projection(
+                path,
+                dataset,
+                observed_precision_by_path[path],
+            )
+            projections.append(
+                "SELECT "
+                + ", ".join(
+                    [
+                        *canonical_fields,
+                        f"{_quote_literal(str(manifest.path))} AS manifest_path",
+                        f"{_quote_literal(str(path.resolve()))} AS part_path",
+                        f"{_quote_literal(part.sha256)} AS part_sha256",
+                    ]
+                )
+                + f" FROM ({physical}) AS part"
+            )
+        self.connection.execute(
+            f"CREATE OR REPLACE VIEW {lineage_view} AS " + " UNION ALL ".join(projections)
         )
