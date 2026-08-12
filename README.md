@@ -2,7 +2,7 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-The current vertical slice covers Yahoo daily prices, SEC company facts, and FRED macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; they remain explicitly empty until a successful collection publishes accepted observations.
+The current vertical slice covers Yahoo daily prices, SEC company facts, and FRED macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; run finalization publishes accepted price/macro candidates to those projections in the same PostgreSQL transaction that closes the run. A partial run may publish successful entities while a parse-error entity publishes no snapshot.
 
 ## Requirements
 
@@ -78,9 +78,9 @@ make notebook
 
 The notebook loads the configured universe to map a price `security_id` to its SEC `issuer_id`; it never pairs independently selected identifiers. Its explicit decision timestamp produces an “as known then” snapshot: the latest price revision for each observed session and the latest eligible SEC/FRED observations whose conservative `available_at` is not later than that decision. Missing pre-ingestion datasets produce typed empty views and an explanatory no-data result.
 
-The DuckDB catalog accepts canonical Parquet schema `1.0.0` only. Its `prices_canonical`, `fundamentals_canonical`, and `macroeconomics_canonical` views preserve exact UTF-8 decimal values, presence flags, and collection provenance. The shorter `prices`, `fundamentals`, and `macroeconomics` research views add `DECIMAL(38,18)` and `DOUBLE` projections for analysis. The exact string columns remain available as `*_value` or `value_text`; use them whenever rounding is unacceptable. Legacy files without `schema_version`, numeric physical decimal columns, unsupported versions, and malformed decimal strings fail closed with actionable schema errors instead of being silently coerced.
+The DuckDB catalog accepts canonical Parquet schema `1.0.0` only. Its `prices_canonical`, `fundamentals_canonical`, and `macroeconomics_canonical` views preserve exact UTF-8 decimal values, presence flags, and collection provenance. The shorter `prices`, `fundamentals`, and `macroeconomics` research views add `DECIMAL(38,18)` and `DOUBLE` projections for analysis. The exact string columns remain available as `*_value` or `value_text`; use them whenever rounding is unacceptable. Canonical readers discover only committed `manifest.json` files, validate each manifest and its listed parts, and read only content-named immutable `part-<sha256>.parquet` files. `data.parquet`, unlisted Parquet files, and recursive Parquet glob results are not canonical input. Legacy files without `schema_version`, numeric physical decimal columns, unsupported versions, malformed decimal strings, or invalid manifests fail closed with actionable schema errors instead of being silently coerced.
 
-Legacy normalized data is handled by an explicit archive/reset policy. The collector validates `data/normalized/` before starting a run and refuses to touch a pre-v1 or otherwise incompatible Parquet file. Move the incompatible normalized tree to a recoverable archive location, keep `data/raw/` intact, and reingest so v1 provenance is obtained from the PostgreSQL source/run catalog. No attempted migration invents missing lineage.
+Legacy normalized data is handled by an explicit archive/reset policy. The collector validates `data/normalized/` before starting a run and refuses to touch a pre-v1 tree, `data.parquet` or other Parquet files without a manifest, or an invalid manifest/part pair. Do not migrate those files in place: move the complete normalized tree to a recoverable archive location, recreate an empty `data/normalized/`, keep `data/raw/` and the PostgreSQL source/run catalog intact, and reingest. This reset obtains v1 provenance from the new run; no attempted migration invents missing lineage.
 
 This does not claim a historical backtest. Yahoo and current FRED backfills are only known to this system when collected, so v0 cannot reconstruct what their provider data looked like on past trading dates. A backtest must vary decision timestamps and use sources with defensible historical availability/vintage data.
 
@@ -108,13 +108,15 @@ Run all of those checks and build every local image:
 make validate
 ```
 
+These checks do not make fresh live acceptance green. The prior fresh FRED acceptance run orphaned before the bounded snapshot-finalization fix, so fresh acceptance remains pending a post-fix FRED run. If that run is still queued or running after the process has stopped, only an operator may cancel it with an explicit reason; the collector does not automatically cancel orphan active runs.
+
 Validate the provisioned market dashboard as strict JSON and ask PostgreSQL to plan every dashboard query against the migrated schema:
 
 ```sh
 make dashboard-smoke
 ```
 
-The market dashboard shows configured securities even when their Yahoo snapshot is absent, exposes an explicit no-snapshot row for FRED, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED series still live only in YAML, so the dashboard deliberately reports FRED source-level presence rather than claiming per-series coverage.
+The market dashboard shows configured securities even when no accepted Yahoo snapshot exists, exposes an explicit no-snapshot row for FRED, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED series still live only in YAML, so the dashboard deliberately reports FRED source-level presence rather than claiming per-series coverage.
 
 Stop containers while retaining PostgreSQL and Grafana volumes:
 
@@ -133,7 +135,7 @@ Runtime data under `data/` is bind-mounted and is not removed by either command.
 ## Storage truth
 
 - `data/raw/`: preserved provider responses and fetch metadata.
-- `data/normalized/`: canonical Parquet queried recursively by DuckDB.
+- `data/normalized/`: manifest-committed canonical Parquet partitions. Readers open `manifest.json`, verify its row counts and hashes, and read only the listed content-named immutable parts; they do not discover `data.parquet` or arbitrary Parquet files by glob.
 - PostgreSQL: security/source metadata, ingestion-run observability, and replaceable latest-only price/macro projections; never authoritative history.
 - Grafana: operational readiness, current snapshot values, coverage gaps, and pipeline health. Missing snapshots stay visible and are never replaced by synthetic observations.
 

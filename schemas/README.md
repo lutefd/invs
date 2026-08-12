@@ -5,6 +5,36 @@ normalized records. `common.schema.json` owns shared lossless scalar and provena
 definitions. All entity schemas reject unknown fields and pin a major contract with
 `schema_version`.
 
+## Normalized publication boundary
+
+Canonical normalized Parquet is published through a versioned `manifest.json` for each
+dataset partition. The manifest carries the schema and normalizer versions, source and
+run provenance, partition identity, total `row_count`, and a `parts` list. Each listed
+part has its own row count and SHA-256, and its path must be the matching immutable
+content name `part-<sha256>.parquet`:
+
+```text
+data/normalized/<dataset>/source=<source>/<entity-key>=<value>/
+  manifest.json
+  part-<sha256>.parquet
+```
+
+`manifest.json` is the sole canonical reader pointer. A reader validates the manifest,
+checks every listed part's hash and row count, and reads only those listed parts.
+`data.parquet`, unlisted Parquet files, and recursive `**/*.parquet` discovery are not
+valid alternatives. Old parts may remain physically present after a new manifest is
+published, but they are not committed data unless a manifest lists them.
+
+The collector fails closed on legacy or incompatible normalized output. The explicit
+recovery is to archive the complete `data/normalized/` tree in a recoverable location,
+leave `data/raw/` and PostgreSQL run/source metadata intact, recreate an empty
+normalized tree, and reingest. No migration invents missing provenance.
+
+Provider bytes are retained in the raw store before a parse/schema error is finalized
+when the adapter returns them. Such a response emits no normalized schema instance or
+latest-only operational snapshot; accepted rows retain `raw_payload_hash` and
+`raw_record_locator` so their evidence remains addressable.
+
 ## Time and knowledge
 
 | Field | Meaning | Determines historical availability? |
