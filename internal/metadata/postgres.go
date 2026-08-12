@@ -112,16 +112,23 @@ WHERE (
 
 const finishRunSQL = `
 UPDATE ingestion_runs
-SET status=$2::ingestion_run_status,
+SET status=$3::ingestion_run_status,
+	finished_at=$4,
+	records_received=$5,
+	records_written=$6,
+	records_rejected=$7,
+	raw_payload_count=$8,
+	raw_bytes=$9,
+	error_message=$10,
+	cursor=$11::jsonb
+WHERE id=$1 AND data_source_id=$2 AND status IN ('running','queued')`
+
+const cancelRunSQL = `
+UPDATE ingestion_runs
+SET status='cancelled'::ingestion_run_status,
 	finished_at=$3,
-	records_received=$4,
-	records_written=$5,
-	records_rejected=$6,
-	raw_payload_count=$7,
-	raw_bytes=$8,
-	error_message=$9,
-	cursor=$10::jsonb
-WHERE id=$1 AND status IN ('running','queued')`
+	error_message=$4
+WHERE id=$1 AND data_source_id=$2 AND status IN ('running','queued')`
 
 type source struct {
 	code, name, kind, baseURL string
@@ -316,6 +323,66 @@ func macroSnapshotIsNewer(candidate, current model.EconomicObservation) bool {
 	return snapshotRawPayloadHash(candidate.RawPayloadHash, candidate.Provenance.RawPayloadHash) > snapshotRawPayloadHash(current.RawPayloadHash, current.Provenance.RawPayloadHash)
 }
 
+// collapseLatestPrices applies the same precedence order as the SQL upsert,
+// retaining one candidate per security before a transaction performs any SQL.
+// The first-seen key order makes the reduced batch deterministic without
+// affecting which candidate wins.
+func collapseLatestPrices(prices []model.PriceBar) []model.PriceBar {
+	if len(prices) < 2 {
+		return prices
+	}
+
+	latest := make(map[string]model.PriceBar, len(prices))
+	order := make([]string, 0, len(prices))
+	for _, candidate := range prices {
+		current, ok := latest[candidate.SecurityID]
+		if !ok {
+			order = append(order, candidate.SecurityID)
+			latest[candidate.SecurityID] = candidate
+			continue
+		}
+		if priceSnapshotIsNewer(candidate, current) {
+			latest[candidate.SecurityID] = candidate
+		}
+	}
+
+	reduced := make([]model.PriceBar, 0, len(order))
+	for _, securityID := range order {
+		reduced = append(reduced, latest[securityID])
+	}
+	return reduced
+}
+
+// collapseLatestMacros applies the same precedence order as the SQL upsert,
+// retaining one candidate per series before a transaction performs any SQL.
+// In particular, observation time wins before revision, so a high-revision
+// historical row cannot displace a newer observation for the same series.
+func collapseLatestMacros(macros []model.EconomicObservation) []model.EconomicObservation {
+	if len(macros) < 2 {
+		return macros
+	}
+
+	latest := make(map[string]model.EconomicObservation, len(macros))
+	order := make([]string, 0, len(macros))
+	for _, candidate := range macros {
+		current, ok := latest[candidate.SeriesID]
+		if !ok {
+			order = append(order, candidate.SeriesID)
+			latest[candidate.SeriesID] = candidate
+			continue
+		}
+		if macroSnapshotIsNewer(candidate, current) {
+			latest[candidate.SeriesID] = candidate
+		}
+	}
+
+	reduced := make([]model.EconomicObservation, 0, len(order))
+	for _, seriesID := range order {
+		reduced = append(reduced, latest[seriesID])
+	}
+	return reduced
+}
+
 func compareTime(a, b time.Time) int {
 	if a.After(b) {
 		return 1
@@ -351,6 +418,15 @@ func validateSnapshotLineage(run Run, prices []model.PriceBar, macros []model.Ec
 	return nil
 }
 
+func prepareFinalizationSnapshots(run Run, prices []model.PriceBar, macros []model.EconomicObservation) ([]model.PriceBar, []model.EconomicObservation, error) {
+	// Validate the complete input first. Otherwise a mismatched candidate that
+	// loses the latest-only comparison could be silently discarded.
+	if err := validateSnapshotLineage(run, prices, macros); err != nil {
+		return nil, nil, err
+	}
+	return collapseLatestPrices(prices), collapseLatestMacros(macros), nil
+}
+
 func runErrorMessage(err error) *string {
 	if err == nil {
 		return nil
@@ -369,11 +445,12 @@ func runErrorMessage(err error) *string {
 // raw_payload_hash. In both cases the larger value at the first differing field
 // wins, so older candidates cannot replace the current projection.
 func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Time, m Metrics, prices []model.PriceBar, macros []model.EconomicObservation) error {
+	prices, macros, err := prepareFinalizationSnapshots(run, prices, macros)
+	if err != nil {
+		return err
+	}
 	if r == nil {
 		return nil
-	}
-	if err := validateSnapshotLineage(run, prices, macros); err != nil {
-		return err
 	}
 
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -442,7 +519,7 @@ func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Tim
 	}
 
 	cursor, _ := json.Marshal(m.Cursor)
-	tag, err := tx.Exec(ctx, finishRunSQL, run.ID, classify(m), finished.UTC(), m.Received, m.Written, m.Rejected, m.RawPayloads, m.RawBytes, runErrorMessage(m.Err), cursor)
+	tag, err := tx.Exec(ctx, finishRunSQL, run.ID, run.DataSourceID, classify(m), finished.UTC(), m.Received, m.Written, m.Rejected, m.RawPayloads, m.RawBytes, runErrorMessage(m.Err), cursor)
 	if err != nil {
 		return err
 	}
@@ -454,4 +531,41 @@ func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Tim
 
 func (r *Repository) FinishRun(ctx context.Context, run Run, finished time.Time, m Metrics) error {
 	return r.FinalizeRun(ctx, run, finished, m, nil, nil)
+}
+
+func operatorCancellationMessage(reason string) (*string, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return nil, errors.New("operator cancellation reason is required")
+	}
+	return runErrorMessage(fmt.Errorf("operator cancellation: %s", reason)), nil
+}
+
+// CancelRun is an explicit operator recovery action for an orphaned active
+// run. It only changes running or queued rows to cancelled, records the
+// operator-supplied reason, and never publishes or deletes snapshot data. It
+// is deliberately not called by StartRun or any automatic timeout path.
+func (r *Repository) CancelRun(ctx context.Context, run Run, finished time.Time, reason string) error {
+	message, err := operatorCancellationMessage(reason)
+	if err != nil {
+		return err
+	}
+	if r == nil {
+		return errors.New("PostgreSQL metadata repository is required to cancel a run")
+	}
+	if finished.IsZero() {
+		return errors.New("run cancellation finish time is required")
+	}
+	if !run.StartedAt.IsZero() && finished.Before(run.StartedAt) {
+		return fmt.Errorf("run cancellation finish time %s precedes start time %s", finished.UTC().Format(time.RFC3339Nano), run.StartedAt.UTC().Format(time.RFC3339Nano))
+	}
+
+	tag, err := r.pool.Exec(ctx, cancelRunSQL, run.ID, run.DataSourceID, finished.UTC(), message)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("run %s is not an active run for data source %s", run.ID, run.DataSourceID)
+	}
+	return nil
 }

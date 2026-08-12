@@ -3,6 +3,7 @@ package metadata
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -151,6 +152,84 @@ func TestMacroSnapshotOrdering(t *testing.T) {
 	}
 }
 
+func TestCollapseLatestMacrosLargeHistoricalBatch(t *testing.T) {
+	const historicalRows = 17090
+	run := Run{ID: "run-1", DataSourceID: "source-1"}
+	baseAt := time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)
+	macros := make([]model.EconomicObservation, 0, historicalRows+5)
+	for i := 0; i < historicalRows; i++ {
+		revision := 0
+		if i == 0 {
+			// A high revision on an old observation must not beat a newer
+			// observation for the same series.
+			revision = 999
+		}
+		macros = append(macros, testMacroObservation(run, "series-a", baseAt.AddDate(0, 0, i), revision))
+	}
+
+	latestAt := baseAt.AddDate(0, 0, historicalRows-1)
+	macros = append(macros,
+		// Same observation revisions are ordered after observation time.
+		testMacroObservation(run, "series-a", latestAt, 2),
+		testMacroObservation(run, "series-a", latestAt, 3),
+		// Even a larger revision on an older observation must lose.
+		testMacroObservation(run, "series-a", latestAt.AddDate(0, 0, -1), 1000),
+		testMacroObservation(run, "series-b", baseAt, 1),
+		testMacroObservation(run, "series-b", baseAt, 2),
+	)
+
+	reduced := collapseLatestMacros(macros)
+	if len(reduced) != 2 {
+		t.Fatalf("collapseLatestMacros returned %d candidates, want one per series (2)", len(reduced))
+	}
+	winners := make(map[string]model.EconomicObservation, len(reduced))
+	for _, candidate := range reduced {
+		winners[candidate.SeriesID] = candidate
+	}
+	if got := winners["series-a"]; got.Revision != 3 || !got.Temporal.ObservedAt.Equal(latestAt) {
+		t.Fatalf("series-a winner = observation %s revision %d, want observation %s revision 3", got.Temporal.ObservedAt, got.Revision, latestAt)
+	}
+	if got := winners["series-b"]; got.Revision != 2 {
+		t.Fatalf("series-b winner revision = %d, want 2", got.Revision)
+	}
+}
+
+func TestPrepareFinalizationSnapshotsValidatesBeforeCollapse(t *testing.T) {
+	run := Run{ID: "run-1", DataSourceID: "source-1"}
+	valid := testMacroObservation(run, "series-a", time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC), 2)
+	olderMismatched := testMacroObservation(run, "series-a", valid.Temporal.ObservedAt.Add(-24*time.Hour), 0)
+	olderMismatched.Provenance.DataSourceID = "other-source"
+
+	prices, macros, err := prepareFinalizationSnapshots(run, nil, []model.EconomicObservation{valid, olderMismatched})
+	if err == nil {
+		t.Fatal("prepareFinalizationSnapshots accepted a mismatched candidate that would be collapsed")
+	}
+	if prices != nil || macros != nil {
+		t.Fatalf("failed preparation returned snapshots: prices=%v macros=%v", prices, macros)
+	}
+
+	prices, macros, err = prepareFinalizationSnapshots(run, nil, []model.EconomicObservation{valid, testMacroObservation(run, "series-a", valid.Temporal.ObservedAt, 3)})
+	if err != nil {
+		t.Fatalf("matching lineage returned error: %v", err)
+	}
+	if len(prices) != 0 || len(macros) != 1 || macros[0].Revision != 3 {
+		t.Fatalf("prepared snapshots = %d prices, %d macros revision %d; want 0 prices, 1 macro revision 3", len(prices), len(macros), macros[0].Revision)
+	}
+}
+
+func TestOperatorCancellationMessageRequiresIntent(t *testing.T) {
+	if _, err := operatorCancellationMessage(" \t"); err == nil {
+		t.Fatal("blank cancellation reason returned nil error")
+	}
+	message, err := operatorCancellationMessage("acceptance run was orphaned")
+	if err != nil {
+		t.Fatalf("operatorCancellationMessage returned error: %v", err)
+	}
+	if message == nil || *message != "operator cancellation: acceptance run was orphaned" {
+		t.Fatalf("cancellation message = %v", message)
+	}
+}
+
 func TestValidateSnapshotLineage(t *testing.T) {
 	run := Run{ID: "run-1", DataSourceID: "source-1"}
 	price := model.PriceBar{Provenance: model.Provenance{DataSourceID: run.DataSourceID, IngestionRunID: run.ID}}
@@ -162,5 +241,22 @@ func TestValidateSnapshotLineage(t *testing.T) {
 	price.Provenance.IngestionRunID = "other-run"
 	if err := validateSnapshotLineage(run, []model.PriceBar{price}, nil); err == nil {
 		t.Fatal("mismatched price lineage returned nil error")
+	}
+}
+
+func testMacroObservation(run Run, seriesID string, observedAt time.Time, revision int) model.EconomicObservation {
+	return model.EconomicObservation{
+		SeriesID:       seriesID,
+		Revision:       revision,
+		RawPayloadHash: strings.Repeat("a", 64),
+		Temporal: model.Temporal{
+			ObservedAt:  observedAt,
+			AvailableAt: observedAt.Add(time.Hour),
+			IngestedAt:  observedAt.Add(2 * time.Hour),
+		},
+		Provenance: model.Provenance{
+			DataSourceID:   run.DataSourceID,
+			IngestionRunID: run.ID,
+		},
 	}
 }
