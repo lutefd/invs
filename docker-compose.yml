@@ -36,8 +36,10 @@ services:
       INVS_DATA_DIR: /data
       INVS_USER_AGENT: ${SEC_USER_AGENT:-personal-quant-research/0.1 contact@example.com}
       FRED_API_KEY: ${FRED_API_KEY:-}
+      INVS_CONFIG: /tmp/invs-config.yaml
     volumes:
       - *data-mount
+      - ${INVS_CONFIG_FILE:-./config/config.example.yaml}:/tmp/invs-config.yaml:ro
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     depends_on:
       postgres:
@@ -54,8 +56,11 @@ services:
     environment:
       JUPYTER_TOKEN: ${JUPYTER_TOKEN:-}
       PYTHONUNBUFFERED: "1"
-      HOME: /tmp/jupyter
-      JUPYTER_RUNTIME_DIR: /tmp/jupyter/runtime
+      PYTHONPATH: /workspace
+      HOME: /tmp
+      JUPYTER_RUNTIME_DIR: /tmp/jupyter-runtime
+      INVS_CONFIG: /tmp/invs-config.yaml
+      INVS_DATA_ROOT: /data
     command: ["jupyter-entrypoint"]
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     working_dir: /workspace
@@ -64,6 +69,7 @@ services:
     volumes:
       - ./python:/workspace
       - *data-mount
+      - ${INVS_CONFIG_FILE:-./config/config.example.yaml}:/tmp/invs-config.yaml:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8888), timeout=2).close()"]
       interval: 10s

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Final
 
 import duckdb
+import yaml
 
 
 class DatasetSchemaError(ValueError):
@@ -30,6 +31,16 @@ class DatasetStatus:
 
 
 @dataclass(frozen=True)
+class SecurityMapping:
+    """Configured link between the price security and SEC issuer identifiers."""
+
+    security_id: str
+    issuer_id: str
+    ticker: str | None = None
+    legal_name: str | None = None
+
+
+@dataclass(frozen=True)
 class _Field:
     name: str
     sql_type: str
@@ -41,52 +52,64 @@ _DATASETS: Final[dict[str, tuple[str, tuple[_Field, ...]]]] = {
     "prices": (
         "prices/**/*.parquet",
         (
-            _Field("security_id", "VARCHAR", ("security_id", "asset_id"), True),
-            _Field("trading_date", "DATE", ("trading_date", "date", "observed_at"), True),
-            _Field("observed_at", "TIMESTAMPTZ", ("observed_at",)),
-            _Field("close", "DOUBLE", ("close", "close_price"), True),
-            _Field("currency", "VARCHAR", ("currency",)),
-            _Field("source", "VARCHAR", ("source", "source_code", "provider")),
-            _Field("published_at", "TIMESTAMPTZ", ("published_at", "available_at")),
-            _Field("available_at", "TIMESTAMPTZ", ("available_at", "published_at"), True),
-            _Field("ingested_at", "TIMESTAMPTZ", ("ingested_at",)),
+            _Field("source", "VARCHAR", ("source",), True),
+            _Field("security_id", "VARCHAR", ("security_id",), True),
+            _Field("currency", "VARCHAR", ("currency",), True),
+            _Field("observed_at", "TIMESTAMPTZ", ("observed_at",), True),
+            _Field("trading_date", "DATE", ("observed_at",), True),
+            _Field("published_at", "TIMESTAMPTZ", ("published_at",), True),
+            _Field("published_precision", "VARCHAR", ("published_precision",), True),
+            _Field("available_at", "TIMESTAMPTZ", ("available_at",), True),
+            _Field("ingested_at", "TIMESTAMPTZ", ("ingested_at",), True),
+            _Field("open", "DOUBLE", ("open",), True),
+            _Field("high", "DOUBLE", ("high",), True),
+            _Field("low", "DOUBLE", ("low",), True),
+            _Field("close", "DOUBLE", ("close",), True),
+            _Field("volume", "BIGINT", ("volume",), True),
+            _Field("raw_payload_hash", "VARCHAR", ("raw_payload_hash",), True),
         ),
     ),
     "fundamentals": (
         "fundamentals/**/*.parquet",
         (
+            _Field("source", "VARCHAR", ("source",), True),
             _Field("issuer_id", "VARCHAR", ("issuer_id",), True),
-            _Field("concept", "VARCHAR", ("concept", "metric", "fact_name"), True),
-            _Field("value", "DOUBLE", ("value", "numeric_value"), True),
-            _Field("period_end", "DATE", ("period_end", "observed_at"), True),
-            _Field("published_at", "TIMESTAMPTZ", ("published_at", "filed_at"), True),
-            _Field("available_at", "TIMESTAMPTZ", ("available_at", "published_at"), True),
-            _Field("unit", "VARCHAR", ("unit", "currency")),
-            _Field("source", "VARCHAR", ("source", "source_code", "provider")),
-            _Field("revision", "VARCHAR", ("revision", "accession_number")),
-            _Field("ingested_at", "TIMESTAMPTZ", ("ingested_at",)),
-            _Field("period_start", "DATE", ("period_start",)),
-            _Field("has_period_start", "BOOLEAN", ("has_period_start",)),
+            _Field("taxonomy", "VARCHAR", ("taxonomy",), True),
+            _Field("concept", "VARCHAR", ("concept",), True),
+            _Field("unit", "VARCHAR", ("unit",), True),
+            _Field("observed_at", "TIMESTAMPTZ", ("observed_at",), True),
+            _Field("published_at", "TIMESTAMPTZ", ("published_at",), True),
+            _Field("published_precision", "VARCHAR", ("published_precision",), True),
+            _Field("available_at", "TIMESTAMPTZ", ("available_at",), True),
+            _Field("ingested_at", "TIMESTAMPTZ", ("ingested_at",), True),
+            _Field("period_start", "DATE", ("period_start",), True),
+            _Field("has_period_start", "BOOLEAN", ("has_period_start",), True),
+            _Field("period_end", "DATE", ("period_end",), True),
+            _Field("value", "DOUBLE", ("value",), True),
+            _Field("accession_number", "VARCHAR", ("accession_number",), True),
+            _Field("form", "VARCHAR", ("form",), True),
+            _Field("fiscal_year", "INTEGER", ("fiscal_year",), True),
+            _Field("fiscal_period", "VARCHAR", ("fiscal_period",), True),
+            _Field("frame", "VARCHAR", ("frame",), True),
+            _Field("raw_payload_hash", "VARCHAR", ("raw_payload_hash",), True),
         ),
     ),
     "macroeconomics": (
         "macroeconomics/**/*.parquet",
         (
-            _Field("series_id", "VARCHAR", ("series_id", "indicator_id"), True),
-            _Field(
-                "observation_date",
-                "DATE",
-                ("observation_date", "observed_at", "period_end"),
-                True,
-            ),
-            _Field("value", "DOUBLE", ("value", "numeric_value"), True),
-            _Field("published_at", "TIMESTAMPTZ", ("published_at", "vintage_date"), True),
-            _Field("available_at", "TIMESTAMPTZ", ("available_at", "published_at"), True),
-            _Field("source", "VARCHAR", ("source", "source_code", "provider")),
-            _Field("revision", "VARCHAR", ("revision", "vintage_date")),
-            _Field("ingested_at", "TIMESTAMPTZ", ("ingested_at",)),
-            _Field("vintage_at", "TIMESTAMPTZ", ("vintage_at",)),
-            _Field("has_vintage_at", "BOOLEAN", ("has_vintage_at",)),
+            _Field("source", "VARCHAR", ("source",), True),
+            _Field("series_id", "VARCHAR", ("series_id",), True),
+            _Field("unit", "VARCHAR", ("unit",), True),
+            _Field("observed_at", "TIMESTAMPTZ", ("observed_at",), True),
+            _Field("observation_date", "DATE", ("observed_at",), True),
+            _Field("published_at", "TIMESTAMPTZ", ("published_at",), True),
+            _Field("published_precision", "VARCHAR", ("published_precision",), True),
+            _Field("available_at", "TIMESTAMPTZ", ("available_at",), True),
+            _Field("ingested_at", "TIMESTAMPTZ", ("ingested_at",), True),
+            _Field("value", "DOUBLE", ("value",), True),
+            _Field("vintage_at", "TIMESTAMPTZ", ("vintage_at",), True),
+            _Field("has_vintage_at", "BOOLEAN", ("has_vintage_at",), True),
+            _Field("raw_payload_hash", "VARCHAR", ("raw_payload_hash",), True),
         ),
     ),
 }
@@ -98,6 +121,43 @@ def _quote_literal(value: str) -> str:
 
 def _quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
+
+
+def load_security_mappings(config_path: str | Path) -> tuple[SecurityMapping, ...]:
+    """Read the collector universe and preserve its issuer/security relationship."""
+    path = Path(config_path).expanduser().resolve()
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as error:
+        raise ValueError(f"cannot read collector configuration {path}: {error}") from error
+    universe = document.get("universe")
+    if not isinstance(universe, list):
+        raise TypeError(f"collector configuration {path} must contain a universe list")
+    mappings: list[SecurityMapping] = []
+    pairs: set[tuple[str, str]] = set()
+    for index, item in enumerate(universe):
+        if not isinstance(item, dict):
+            raise TypeError(f"universe[{index}] must be an object")
+        security_id, issuer_id = item.get("security_id"), item.get("issuer_id")
+        if not isinstance(security_id, str) or not isinstance(issuer_id, str):
+            raise TypeError(f"universe[{index}] requires string security_id and issuer_id")
+        pair = (security_id, issuer_id)
+        if pair in pairs:
+            raise ValueError(f"duplicate universe mapping {security_id} -> {issuer_id}")
+        pairs.add(pair)
+        mappings.append(
+            SecurityMapping(
+                security_id=security_id,
+                issuer_id=issuer_id,
+                ticker=item.get("ticker") if isinstance(item.get("ticker"), str) else None,
+                legal_name=(
+                    item.get("legal_name")
+                    if isinstance(item.get("legal_name"), str)
+                    else None
+                ),
+            )
+        )
+    return tuple(mappings)
 
 
 class ResearchCatalog:
@@ -127,29 +187,52 @@ class ResearchCatalog:
     def missing(self) -> tuple[str, ...]:
         return tuple(item.name for item in self.status() if not item.available)
 
-    def point_in_time_frame(
+    def available_mappings(
+        self, mappings: Iterable[SecurityMapping]
+    ) -> tuple[SecurityMapping, ...]:
+        """Return configured mappings with both price and fundamental observations."""
+        price_ids = {
+            row[0]
+            for row in self.connection.execute(
+                "SELECT DISTINCT security_id FROM prices WHERE security_id IS NOT NULL"
+            ).fetchall()
+        }
+        issuer_ids = {
+            row[0]
+            for row in self.connection.execute(
+                "SELECT DISTINCT issuer_id FROM fundamentals WHERE issuer_id IS NOT NULL"
+            ).fetchall()
+        }
+        return tuple(
+            mapping
+            for mapping in mappings
+            if mapping.security_id in price_ids and mapping.issuer_id in issuer_ids
+        )
+
+    def research_snapshot(
         self,
         *,
-        security_id: str,
-        issuer_id: str,
+        decision_at: str,
+        mapping: SecurityMapping,
         fundamental_concept: str,
         macro_series_id: str,
         start: str | None = None,
         end: str | None = None,
     ):
-        """Join prices to the latest information public at each price observation.
+        """Return price history and latest facts as known at one decision timestamp.
 
-        The query uses as-of joins on ``available_at``. Price securities and SEC
-        issuers are distinct identifiers; callers must supply their security-master
-        mapping explicitly. Returned values can never have an availability timestamp
-        after ``known_at``.
+        Price revisions are collapsed per observed session to the latest version
+        available by ``decision_at``. Fundamentals and macro values are likewise the
+        latest eligible deterministic revision at that decision timestamp. This is a
+        research snapshot, not a historical backtest whose decision time varies by row.
         """
         clauses = ["security_id = $security_id"]
         parameters: dict[str, object] = {
-            "security_id": security_id,
-            "issuer_id": issuer_id,
+            "security_id": mapping.security_id,
+            "issuer_id": mapping.issuer_id,
             "fundamental_concept": fundamental_concept,
             "macro_series_id": macro_series_id,
+            "decision_at": decision_at,
         }
         if start is not None:
             clauses.append("trading_date >= CAST($start AS DATE)")
@@ -160,12 +243,15 @@ class ResearchCatalog:
 
         sql = f"""
             WITH selected_prices AS (
-                SELECT *, COALESCE(
-                    available_at,
-                    CAST(trading_date AS TIMESTAMP) + INTERVAL 1 DAY
-                ) AS known_at
+                SELECT *, CAST($decision_at AS TIMESTAMPTZ) AS known_at
                 FROM prices
                 WHERE {' AND '.join(clauses)}
+                  AND available_at <= CAST($decision_at AS TIMESTAMPTZ)
+                  AND observed_at <= CAST($decision_at AS TIMESTAMPTZ)
+                QUALIFY row_number() OVER (
+                    PARTITION BY security_id, observed_at
+                    ORDER BY available_at DESC, ingested_at DESC, raw_payload_hash DESC
+                ) = 1
             ),
             selected_fundamentals AS (
                 SELECT * FROM fundamentals
@@ -194,13 +280,42 @@ class ResearchCatalog:
                 m.published_at AS macro_published_at,
                 m.available_at AS macro_available_at
             FROM selected_prices p
-            ASOF LEFT JOIN selected_fundamentals f
-              ON p.known_at >= f.available_at
-            ASOF LEFT JOIN selected_macro m
-              ON p.known_at >= m.available_at
+            LEFT JOIN LATERAL (
+                SELECT * FROM selected_fundamentals candidate
+                WHERE candidate.available_at <= CAST($decision_at AS TIMESTAMPTZ)
+                  AND candidate.observed_at <= CAST($decision_at AS TIMESTAMPTZ)
+                  AND candidate.period_end <= CAST($decision_at AS DATE)
+                ORDER BY
+                    candidate.available_at DESC,
+                    candidate.period_end DESC,
+                    candidate.published_at DESC,
+                    candidate.accession_number DESC,
+                    candidate.ingested_at DESC,
+                    candidate.raw_payload_hash DESC
+                LIMIT 1
+            ) f ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT * FROM selected_macro candidate
+                WHERE candidate.available_at <= CAST($decision_at AS TIMESTAMPTZ)
+                  AND candidate.observed_at <= CAST($decision_at AS TIMESTAMPTZ)
+                ORDER BY
+                    candidate.available_at DESC,
+                    candidate.observed_at DESC,
+                    candidate.published_at DESC,
+                    candidate.vintage_at DESC NULLS LAST,
+                    candidate.ingested_at DESC,
+                    candidate.raw_payload_hash DESC
+                LIMIT 1
+            ) m ON TRUE
             ORDER BY p.trading_date
         """
         return self.connection.execute(sql, parameters).fetchdf()
+
+    def point_in_time_frame(self, **kwargs):
+        """Compatibility alias for :meth:`research_snapshot`; decision_at is required."""
+        if "decision_at" not in kwargs:
+            raise TypeError("point_in_time_frame requires an explicit decision_at")
+        return self.research_snapshot(**kwargs)
 
     def _register_dataset(
         self,
@@ -268,7 +383,7 @@ class ResearchCatalog:
 
         # parquet-go encodes nullable logical primitives as value + presence flag.
         # Decode its epoch sentinel at this boundary so research never sees it as data.
-        if name == "fundamentals" and "has_period_start" in columns:
+        if name == "fundamentals":
             projections = [
                 "CASE WHEN TRY_CAST(\"has_period_start\" AS BOOLEAN) "
                 "THEN TRY_CAST(\"period_start\" AS DATE) END AS \"period_start\""
@@ -276,7 +391,7 @@ class ResearchCatalog:
                 else projection
                 for projection in projections
             ]
-        if name == "macroeconomics" and "has_vintage_at" in columns:
+        if name == "macroeconomics":
             projections = [
                 "CASE WHEN TRY_CAST(\"has_vintage_at\" AS BOOLEAN) "
                 "THEN TRY_CAST(\"vintage_at\" AS TIMESTAMPTZ) END AS \"vintage_at\""

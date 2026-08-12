@@ -31,7 +31,7 @@
     },
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Source freshness based on successful run completion, not source-observation freshness.",
+      "description": "Source freshness is based on successful run completion, not source-observation freshness. A successful rerun with records_written = 0 is an expected idempotent no-change result.",
       "fieldConfig": {"defaults": {}, "overrides": []},
       "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
       "id": 3,
@@ -60,5 +60,5 @@
   "timezone": "browser",
   "title": "Pipeline health",
   "uid": "pipeline-health",
-  "version": 1
+  "version": 2
 }

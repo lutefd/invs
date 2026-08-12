@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+config/config.local.yaml
 
 # Runtime data
 data/raw/**
@@ -36,4 +37,3 @@ __pycache__/
 .idea/
 .vscode/
 .DS_Store
-

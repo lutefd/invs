@@ -10,12 +10,12 @@
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
       "description": "A source is ready only after a successful collection. Actual normalized observations remain in Parquet and are queried through DuckDB/Jupyter.",
-      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "max": 3, "min": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 1}, {"color": "green", "value": 3}]}}, "overrides": []},
       "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
       "id": 1,
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showPercentChange": false, "textMode": "auto", "wideLayout": true},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*)::double precision AS value FROM data_sources ds WHERE ds.enabled AND ds.code IN ('prices', 'marketdata', 'sec', 'fred') AND EXISTS (SELECT 1 FROM ingestion_runs ir WHERE ir.data_source_id = ds.id AND ir.status = 'succeeded')", "refId": "A"}],
-      "title": "Ready vertical-slice sources",
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT count(*)::double precision AS value FROM data_sources ds WHERE ds.enabled AND ds.code IN ('yahoo', 'sec', 'fred') AND EXISTS (SELECT 1 FROM ingestion_runs ir WHERE ir.data_source_id = ds.id AND ir.status = 'succeeded')", "refId": "A"}],
+      "title": "Successful sources (of 3)",
       "type": "stat"
     },
     {
@@ -25,7 +25,7 @@
       "gridPos": {"h": 9, "w": 16, "x": 8, "y": 0},
       "id": 2,
       "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": true, "displayName": "last_success"}]},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ds.code AS source, ds.name, max(ir.finished_at) FILTER (WHERE ir.status = 'succeeded') AS last_success, coalesce(sum(ir.records_written) FILTER (WHERE ir.status = 'succeeded' AND ir.finished_at >= now() - interval '30 days'), 0) AS records_written_30d FROM data_sources ds LEFT JOIN ingestion_runs ir ON ir.data_source_id = ds.id WHERE ds.code IN ('prices', 'marketdata', 'sec', 'fred') OR ds.source_kind::text IN ('market_data', 'filings', 'macro') GROUP BY ds.code, ds.name ORDER BY ds.code", "refId": "A"}],
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT ds.code AS source, ds.name, max(ir.finished_at) FILTER (WHERE ir.status = 'succeeded') AS last_success, coalesce(sum(ir.records_written) FILTER (WHERE ir.status = 'succeeded' AND ir.finished_at >= now() - interval '30 days'), 0) AS records_written_30d FROM data_sources ds LEFT JOIN ingestion_runs ir ON ir.data_source_id = ds.id WHERE ds.code IN ('yahoo', 'sec', 'fred') GROUP BY ds.code, ds.name ORDER BY ds.code", "refId": "A"}],
       "title": "Market-data input readiness (no synthetic fallback)",
       "type": "table"
     },
@@ -50,5 +50,5 @@
   "timezone": "browser",
   "title": "Market data overview",
   "uid": "market-overview",
-  "version": 1
+  "version": 2
 }

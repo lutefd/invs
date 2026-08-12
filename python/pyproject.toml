@@ -12,6 +12,7 @@ dependencies = [
   "jupyterlab>=4.4,<5",
   "pandas>=2.2,<3",
   "pyarrow>=20,<22",
+  "pyyaml>=6,<7",
 ]
 
 [project.optional-dependencies]

@@ -15,7 +15,9 @@ RUN apk add --no-cache ca-certificates tzdata && \
 COPY --from=build /out/collector /usr/local/bin/collector
 COPY --chmod=0444 config/config.example.yaml /etc/invs/config.yaml
 COPY docker/collector-entrypoint.sh /usr/local/bin/collector-entrypoint
-RUN chmod 0755 /usr/local/bin/collector-entrypoint && mkdir -p /data && chown collector:collector /data
+RUN chmod 0755 /etc/invs /usr/local/bin/collector-entrypoint && \
+    chmod 0444 /etc/invs/config.yaml && \
+    mkdir -p /data && chown collector:collector /data
 USER collector
 WORKDIR /data
 ENTRYPOINT ["collector-entrypoint"]
