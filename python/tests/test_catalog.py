@@ -165,33 +165,50 @@ def _write_fundamentals(root: Path, *, sentinel: bool = False) -> Path:
     )
 
 
-def _write_macro(root: Path, *, sentinel: bool = False) -> Path:
-    vintage_at = "TIMESTAMPTZ '1970-01-01 00:00:00Z'" if sentinel else (
-        "TIMESTAMPTZ '2025-01-15 13:00:00Z'"
+def _macro_select(
+    *,
+    observed: str = "2025-01-01 00:00:00Z",
+    published: str = "2025-01-15 13:00:00Z",
+    available: str = "2025-01-15 13:00:00Z",
+    ingested: str = "2025-03-01 00:00:00Z",
+    value: str = "2.100000000000000001",
+    revision: int = 0,
+    raw_hash: str = "c" * 64,
+    vintage_at: str = "2025-01-15 13:00:00Z",
+    has_vintage: bool = True,
+) -> str:
+    physical_vintage = (
+        f"TIMESTAMPTZ '{vintage_at}'"
+        if has_vintage
+        else "TIMESTAMPTZ '1970-01-01 00:00:00Z'"
     )
-    has_vintage = "false" if sentinel else "true"
-    directory = root / "macroeconomics" / "source=fred" / "series_id=GDP"
-    _write_parquet(
-        directory / "macroeconomics.parquet",
-        f"""
+    return f"""
         SELECT
           '1.0.0'::VARCHAR AS schema_version, 'fred'::VARCHAR AS source,
           'GDP'::VARCHAR AS series_id, 'US'::VARCHAR AS geography,
           'Index'::VARCHAR AS unit, 'quarterly'::VARCHAR AS frequency,
           ''::VARCHAR AS seasonal_adjustment, false AS has_seasonal_adjustment,
-          TIMESTAMPTZ '2025-01-01 00:00:00Z' AS observed_at,
-          TIMESTAMPTZ '2025-01-15 13:00:00Z' AS published_at,
+          TIMESTAMPTZ '{observed}' AS observed_at,
+          TIMESTAMPTZ '{published}' AS published_at,
           'second'::VARCHAR AS published_precision,
-          TIMESTAMPTZ '2025-01-15 13:00:00Z' AS available_at,
-          TIMESTAMPTZ '2025-03-01 00:00:00Z' AS ingested_at,
-          '2.100000000000000001'::VARCHAR AS value, true AS has_value,
-          0::INTEGER AS revision, {vintage_at} AS vintage_at,
-          {has_vintage} AS has_vintage_at, repeat('c', 64)::VARCHAR AS raw_payload_hash,
+          TIMESTAMPTZ '{available}' AS available_at,
+          TIMESTAMPTZ '{ingested}' AS ingested_at,
+          '{value}'::VARCHAR AS value, true AS has_value,
+          {revision}::INTEGER AS revision, {physical_vintage} AS vintage_at,
+          {'true' if has_vintage else 'false'} AS has_vintage_at,
+          '{raw_hash}'::VARCHAR AS raw_payload_hash,
           '{SOURCE_ID}'::VARCHAR AS data_source_id,
           '{RUN_ID}'::VARCHAR AS ingestion_run_id,
           'csv/date=2025-01-01'::VARCHAR AS raw_record_locator,
           'go-v1'::VARCHAR AS normalizer_version
-        """,
+    """
+
+
+def _write_macro_rows(root: Path, queries: list[str]) -> Path:
+    directory = root / "macroeconomics" / "source=fred" / "series_id=GDP"
+    _write_parquet(
+        directory / "macroeconomics.parquet",
+        "\nUNION ALL\n".join(queries),
     )
     return _write_manifest(
         directory / "manifest.json",
@@ -200,6 +217,13 @@ def _write_macro(root: Path, *, sentinel: bool = False) -> Path:
         source="fred",
         partition_key="series_id",
         partition_value="GDP",
+    )
+
+
+def _write_macro(root: Path, *, sentinel: bool = False) -> Path:
+    return _write_macro_rows(
+        root,
+        [_macro_select(has_vintage=not sentinel)],
     )
 
 
@@ -340,6 +364,111 @@ def test_deterministic_point_in_time_snapshot_excludes_future_observations(
     assert frame["macro_value_text"].tolist() == ["2.100000000000000001"] * 2
 
 
+def test_available_at_is_cutoff_even_when_published_at_is_earlier(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "normalized"
+    _write_prices(root)
+    _write_fundamentals(root)
+    _write_macro_rows(
+        root,
+        [
+            _macro_select(
+                published="2025-01-01 00:00:00Z",
+                available="2025-03-05 00:00:00Z",
+                ingested="2025-03-06 00:00:00Z",
+                value="99.000000000000000099",
+                raw_hash="f" * 64,
+            ),
+            _macro_select(
+                value="2.100000000000000001",
+                raw_hash="c" * 64,
+            ),
+        ],
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+
+    frame = catalog.research_snapshot(
+        decision_at="2025-02-11T00:00:00Z",
+        mapping=SecurityMapping(SECURITY_ID, ISSUER_ID),
+        fundamental_concept="Revenue",
+        macro_series_id="GDP",
+    )
+
+    assert frame["macro_value_text"].tolist() == ["2.100000000000000001"] * 2
+    assert frame["macro_available_at"].astype(str).str.startswith(
+        "2025-01-15"
+    ).all()
+
+
+def test_macro_selection_matches_go_postgres_precedence_order(tmp_path: Path) -> None:
+    root = tmp_path / "normalized"
+    _write_prices(root)
+    _write_fundamentals(root)
+    _write_macro_rows(
+        root,
+        [
+            _macro_select(
+                observed="2025-01-01 00:00:00Z",
+                available="2025-01-30 00:00:00Z",
+                ingested="2025-01-31 00:00:00Z",
+                value="1.000000000000000001",
+                revision=99,
+                raw_hash="f" * 64,
+            ),
+            _macro_select(
+                observed="2025-01-02 00:00:00Z",
+                available="2025-01-02 00:00:00Z",
+                ingested="2025-01-03 00:00:00Z",
+                value="2.000000000000000002",
+                raw_hash="a" * 64,
+            ),
+            _macro_select(
+                observed="2025-01-02 00:00:00Z",
+                available="2025-01-03 00:00:00Z",
+                ingested="2025-01-04 00:00:00Z",
+                value="3.000000000000000003",
+                revision=1,
+                raw_hash="b" * 64,
+            ),
+            _macro_select(
+                observed="2025-01-02 00:00:00Z",
+                available="2025-01-05 00:00:00Z",
+                ingested="2025-01-06 00:00:00Z",
+                value="4.000000000000000004",
+                revision=1,
+                raw_hash="c" * 64,
+            ),
+            _macro_select(
+                observed="2025-01-02 00:00:00Z",
+                available="2025-01-05 00:00:00Z",
+                ingested="2025-01-07 00:00:00Z",
+                value="5.000000000000000005",
+                revision=1,
+                raw_hash="d" * 64,
+            ),
+            _macro_select(
+                observed="2025-01-02 00:00:00Z",
+                available="2025-01-05 00:00:00Z",
+                ingested="2025-01-07 00:00:00Z",
+                value="6.000000000000000006",
+                revision=1,
+                raw_hash="e" * 64,
+            ),
+        ],
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+
+    frame = catalog.research_snapshot(
+        decision_at="2025-02-01T00:00:00Z",
+        mapping=SecurityMapping(SECURITY_ID, ISSUER_ID),
+        fundamental_concept="Revenue",
+        macro_series_id="GDP",
+    )
+
+    assert frame["macro_value_text"].tolist() == ["6.000000000000000006"]
+
+
 def test_price_revisions_are_selected_as_known_at_decision_time(tmp_path: Path) -> None:
     root = tmp_path / "normalized"
     manifest_path = _write_prices(root)
@@ -447,7 +576,9 @@ def test_physical_sentinels_are_exposed_as_sql_null(tmp_path: Path) -> None:
     ).fetchone() == (None, None)
 
 
-def test_configured_mapping_is_loaded_and_not_cross_joined(tmp_path: Path) -> None:
+def test_current_yaml_mapping_is_loaded_without_historical_resolution(
+    tmp_path: Path,
+) -> None:
     config = tmp_path / "config.yaml"
     config.write_text(
         f"""
@@ -460,6 +591,10 @@ universe:
         encoding="utf-8",
     )
 
-    assert load_security_mappings(config) == (
+    mappings = load_security_mappings(config)
+
+    assert mappings == (
         SecurityMapping(SECURITY_ID, ISSUER_ID, "AAPL", "Apple Inc."),
     )
+    assert "current YAML" in (load_security_mappings.__doc__ or "")
+    assert "not historical" in (SecurityMapping.__doc__ or "")

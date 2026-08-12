@@ -75,15 +75,25 @@ snapshot data.
 
 ## Point-in-time query boundary
 
-Research access is split into two explicit modes:
+Research access is split into an explicit point-in-time mode and a present-day
+convenience mode:
 
-- `as_of(decision_at)` filters versions by public `published_at` and reconstructs the
-  identifier/universe state valid at that time.
+- `research_snapshot(decision_at)` requires both `available_at <= decision_at` and
+  `observed_at <= decision_at`. `available_at` is the explicit conservative knowledge
+  cutoff used by research; it may incorporate source publication precision and any
+  documented source-specific delay. `published_at` remains source metadata and is not
+  silently substituted as the query cutoff.
+- The current YAML `universe` entries provide the configured `security_id` to
+  `issuer_id` links used by this research slice. They are current configuration
+  mappings, not historical identifier resolution, and are not reconstructed by
+  `decision_at`.
 - `latest()` is a present-day convenience view and is forbidden in backtest code.
 
-Live replay also checks `ingested_at`; historical research does not pretend the local
-installation existed in the past. Adjustments and derived features carry their input
-knowledge cutoff.
+Macro latest-row selection uses the same total order as PostgreSQL finalization:
+`observed_at DESC`, `revision DESC`, `available_at DESC`, `ingested_at DESC`, then
+`raw_payload_hash DESC`. Live replay may additionally check `ingested_at`; historical
+research does not pretend the local installation existed in the past. Adjustments and
+derived features carry their input knowledge cutoff.
 
 ## Storage layout
 

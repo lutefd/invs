@@ -3,7 +3,8 @@
 The public ``*_canonical`` views preserve lossless decimal strings and provenance.
 The shorter research views add explicitly lossy DECIMAL/DOUBLE projections for
 analysis. Only manifest-listed parts are committed inputs; legacy or stray files
-without a manifest are ignored.
+without a manifest are ignored. Point-in-time eligibility uses the explicit,
+conservative ``available_at`` cutoff; ``published_at`` remains source metadata.
 """
 
 from __future__ import annotations
@@ -37,7 +38,12 @@ class DatasetStatus:
 
 @dataclass(frozen=True)
 class SecurityMapping:
-    """Configured link between the price security and SEC issuer identifiers."""
+    """Current YAML configuration link, not historical identifier resolution.
+
+    The mapping connects the configured price security to the configured SEC
+    issuer for a research run. It does not claim that this relationship was
+    valid at every historical ``decision_at``.
+    """
 
     security_id: str
     issuer_id: str
@@ -433,7 +439,12 @@ def _sha256_file(path: Path) -> str:
 
 
 def load_security_mappings(config_path: str | Path) -> tuple[SecurityMapping, ...]:
-    """Read the collector universe and preserve its issuer/security relationship."""
+    """Load current YAML security-to-issuer configuration mappings.
+
+    These mappings are a present configuration input, not a historical
+    identifier-resolution system; point-in-time queries do not version them by
+    ``decision_at``.
+    """
     path = Path(config_path).expanduser().resolve()
     try:
         document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -528,7 +539,13 @@ class ResearchCatalog:
         start: str | None = None,
         end: str | None = None,
     ):
-        """Return price history and latest facts known at one decision timestamp."""
+        """Return facts eligible at one decision timestamp.
+
+        ``available_at`` is the conservative research knowledge cutoff and is
+        required to be no later than ``decision_at`` along with ``observed_at``.
+        ``published_at`` is retained source metadata and is not a substitute
+        cutoff for this API.
+        """
         clauses = ["security_id = $security_id"]
         parameters: dict[str, object] = {
             "security_id": mapping.security_id,
@@ -606,11 +623,9 @@ class ResearchCatalog:
                 WHERE candidate.available_at <= CAST($decision_at AS TIMESTAMPTZ)
                   AND candidate.observed_at <= CAST($decision_at AS TIMESTAMPTZ)
                 ORDER BY
-                    candidate.available_at DESC,
                     candidate.observed_at DESC,
                     candidate.revision DESC,
-                    candidate.published_at DESC,
-                    candidate.vintage_at DESC NULLS LAST,
+                    candidate.available_at DESC,
                     candidate.ingested_at DESC,
                     candidate.raw_payload_hash DESC
                 LIMIT 1

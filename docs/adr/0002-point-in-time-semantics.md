@@ -17,6 +17,12 @@ the original source value is retained in the raw artifact. A date-only source va
 must remain a date or carry documented market-calendar resolution; it must never be
 silently interpreted as midnight UTC.
 
+Normalized Parquet stores canonical instants in UTC physical timestamp fields with
+microsecond precision. Any input instant with a non-zero sub-microsecond nanosecond
+remainder is rejected before conversion; it is never silently truncated. Exact
+microsecond values round-trip unchanged. Date-only fields such as `period_start` and
+`period_end` remain day fields and are not subject to this instant-precision rule.
+
 The temporal fields have non-overlapping meanings:
 
 - `observed_at`: when a measurement applies to the world. For a daily bar this is
@@ -39,23 +45,29 @@ older vintage.
 
 ## Availability rule
 
-A simulation has one monotonically increasing `decision_at` instant. A record is
-eligible only when all of the following hold:
+A simulation has one monotonically increasing `decision_at` instant. This research
+slice uses the normalized `available_at` field as its conservative knowledge cutoff.
+The field is computed or supplied by the source normalizer under a documented
+availability policy. A record is eligible only when all of the following hold:
 
 ```text
-published_at is known
-published_at <= decision_at
+available_at is known
+available_at <= decision_at
+observed_at <= decision_at
+published_at is retained source metadata, not the research cutoff
 ingested_at is ignored for historical knowledge, except in live replay
-the selected vintage is the latest version published on or before decision_at
+the selected vintage is the latest eligible version under the query's total order
 ```
 
 In a live/paper replay, information also requires `ingested_at <= decision_at` so the
 simulation matches what this installation actually possessed. `observed_at <=
-decision_at` is necessary for measurements, but never sufficient.
+decision_at` is necessary for measurements, but never sufficient without
+`available_at <= decision_at`.
 
-Unknown `published_at` means unavailable to a point-in-time backtest unless a
-source-specific, documented conservative availability policy supplies it. It must
-not default to `observed_at`, `period_end`, or `ingested_at`.
+Unknown `published_at` does not become a historical cutoff by inference. The source
+normalizer must instead supply an explicit conservative `available_at`; missing
+`available_at` means unavailable to a point-in-time backtest. It must not default to
+`observed_at`, `period_end`, or `ingested_at`.
 
 Trading signals computed after a market close may first trade at the next executable
 session unless the strategy and input publication times prove an earlier execution
@@ -68,12 +80,12 @@ backtest and are stored with its result.
   `latest`, which is forbidden in backtests).
 - Adjusted prices must identify their adjustment method and knowledge cutoff.
   Future splits/dividends may not alter bars visible to an earlier decision.
-- Universe membership and identifier resolution use versions valid at `decision_at`,
-  not today's ticker or constituents.
-- Fundamental and economic queries select vintages by `published_at`, including
-  restatements and ALFRED-style revisions.
-- Derived features record the maximum publication timestamp of every input. Their
-  `available_at` is at least that maximum plus the declared computation delay.
+- The current YAML security-to-issuer mappings are configuration inputs only; this
+  slice does not pretend they provide historical identifier resolution.
+- Fundamental and economic queries select eligible vintages by `available_at`, with
+  `observed_at` also gated by `decision_at`; `published_at` remains source metadata.
+- Derived features record the maximum input knowledge cutoff. Their `available_at` is
+  at least that maximum plus the declared computation delay.
 - Tests use adversarial fixtures where a later revision differs materially from its
   first release.
 
