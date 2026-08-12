@@ -2,6 +2,8 @@ package metadata
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +17,109 @@ import (
 )
 
 type Repository struct{ pool *pgxpool.Pool }
+
+const RunInputsSchemaVersion = "1"
+
+// RunMetadata is the typed JSON document persisted in ingestion_runs.metadata.
+// CollectorSource is retained as a small compatibility field for existing
+// operational queries; RunInputs is the auditable replay boundary.
+type RunMetadata struct {
+	CollectorSource string    `json:"collector_source"`
+	RunInputs       RunInputs `json:"run_inputs"`
+}
+
+// RunInputs contains only effective, non-secret provider inputs. The hash is
+// calculated over the same payload with CanonicalJSONSHA256 omitted.
+type RunInputs struct {
+	SchemaVersion       string         `json:"schema_version"`
+	Source              string         `json:"source"`
+	Provider            ProviderInputs `json:"provider"`
+	CanonicalJSONSHA256 string         `json:"canonical_json_sha256"`
+}
+
+type ProviderInputs struct {
+	Name                    string            `json:"name"`
+	Kind                    string            `json:"kind"`
+	ConfiguredUniverseCount int               `json:"configured_universe_count,omitempty"`
+	ConfiguredSeriesCount   int               `json:"configured_series_count,omitempty"`
+	SecurityRequests        []SecurityRequest `json:"security_requests,omitempty"`
+	IssuerRequests          []IssuerRequest   `json:"issuer_requests,omitempty"`
+	SeriesIDs               []string          `json:"series_ids,omitempty"`
+	Series                  []BCBSeriesInput  `json:"series,omitempty"`
+	Format                  string            `json:"format,omitempty"`
+	Vintage                 string            `json:"vintage,omitempty"`
+}
+
+type SecurityRequest struct {
+	SecurityID   string `json:"security_id"`
+	VendorSymbol string `json:"vendor_symbol"`
+	Currency     string `json:"currency"`
+	Start        string `json:"start"`
+	End          string `json:"end"`
+	Interval     string `json:"interval"`
+	Events       string `json:"events"`
+}
+
+type IssuerRequest struct {
+	IssuerID   string   `json:"issuer_id"`
+	SecurityID string   `json:"security_id"`
+	CIK        int64    `json:"cik"`
+	Resources  []string `json:"resources"`
+}
+
+type BCBSeriesInput struct {
+	Code               string `json:"code"`
+	Geography          string `json:"geography"`
+	Unit               string `json:"unit"`
+	Frequency          string `json:"frequency"`
+	SeasonalAdjustment string `json:"seasonal_adjustment"`
+	Start              string `json:"start"`
+	End                string `json:"end"`
+}
+
+type canonicalRunInputs struct {
+	SchemaVersion string         `json:"schema_version"`
+	Source        string         `json:"source"`
+	Provider      ProviderInputs `json:"provider"`
+}
+
+// NewRunMetadata validates and hashes effective collector inputs. Keeping the
+// hash calculation at the metadata boundary ensures every StartRun caller
+// persists the same deterministic representation.
+func NewRunMetadata(inputs RunInputs) (RunMetadata, error) {
+	if strings.TrimSpace(inputs.SchemaVersion) == "" {
+		return RunMetadata{}, errors.New("run input schema version is required")
+	}
+	if inputs.SchemaVersion != RunInputsSchemaVersion {
+		return RunMetadata{}, fmt.Errorf("unsupported run input schema version %q", inputs.SchemaVersion)
+	}
+	if strings.TrimSpace(inputs.Source) == "" {
+		return RunMetadata{}, errors.New("run input source is required")
+	}
+	if strings.TrimSpace(inputs.Provider.Name) == "" {
+		return RunMetadata{}, errors.New("run input provider name is required")
+	}
+	if strings.TrimSpace(inputs.Provider.Kind) == "" {
+		return RunMetadata{}, errors.New("run input provider kind is required")
+	}
+
+	canonical, err := json.Marshal(canonicalRunInputs{
+		SchemaVersion: inputs.SchemaVersion,
+		Source:        inputs.Source,
+		Provider:      inputs.Provider,
+	})
+	if err != nil {
+		return RunMetadata{}, fmt.Errorf("canonicalize run inputs: %w", err)
+	}
+	hash := sha256.Sum256(canonical)
+	expectedHash := hex.EncodeToString(hash[:])
+	if inputs.CanonicalJSONSHA256 != "" && inputs.CanonicalJSONSHA256 != expectedHash {
+		return RunMetadata{}, fmt.Errorf("run input canonical JSON SHA-256 %q does not match %q", inputs.CanonicalJSONSHA256, expectedHash)
+	}
+	inputs.CanonicalJSONSHA256 = expectedHash
+	return RunMetadata{CollectorSource: inputs.Source, RunInputs: inputs}, nil
+}
+
 type Run struct {
 	ID, DataSourceID, Source, RunKey, Status string
 	StartedAt                                time.Time
@@ -136,6 +241,14 @@ SET status='cancelled'::ingestion_run_status,
 	error_message=$4
 WHERE id=$1 AND data_source_id=$2 AND status IN ('running','queued')`
 
+const startRunSQL = `
+INSERT INTO ingestion_runs(data_source_id,run_key,status,started_at,metadata)
+SELECT id,$2::text,'running',$3::timestamptz,$4::jsonb
+FROM data_sources
+WHERE code=$1::text
+ON CONFLICT(data_source_id,run_key) DO NOTHING
+RETURNING id::text,data_source_id::text,status::text,started_at`
+
 const lookupRunBySourceAndKeySQL = `
 SELECT r.id::text, r.data_source_id::text, s.code, r.run_key, r.status::text, r.started_at
 FROM ingestion_runs r
@@ -253,9 +366,23 @@ func (r *Repository) EnrichSECIssuer(ctx context.Context, issuer model.Issuer, s
 	return err
 }
 
-func (r *Repository) StartRun(ctx context.Context, source, runKey string, started time.Time) (Run, error) {
+func (r *Repository) StartRun(ctx context.Context, source, runKey string, started time.Time, inputs RunInputs) (Run, error) {
 	if r == nil {
 		return Run{}, errors.New("PostgreSQL metadata repository is required for canonical collection")
+	}
+	if strings.TrimSpace(source) == "" {
+		return Run{}, errors.New("run source is required")
+	}
+	if inputs.Source != source {
+		return Run{}, fmt.Errorf("run input source %q does not match run source %q", inputs.Source, source)
+	}
+	runMetadata, err := NewRunMetadata(inputs)
+	if err != nil {
+		return Run{}, err
+	}
+	metadataJSON, err := json.Marshal(runMetadata)
+	if err != nil {
+		return Run{}, fmt.Errorf("encode run metadata: %w", err)
 	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -263,7 +390,7 @@ func (r *Repository) StartRun(ctx context.Context, source, runKey string, starte
 	}
 	defer tx.Rollback(ctx)
 	var run Run
-	err = tx.QueryRow(ctx, `INSERT INTO ingestion_runs(data_source_id,run_key,status,started_at,metadata) SELECT id,$2::text,'running',$3::timestamptz,jsonb_build_object('collector_source',$1::text) FROM data_sources WHERE code=$1::text ON CONFLICT(data_source_id,run_key) DO NOTHING RETURNING id::text,data_source_id::text,status::text,started_at`, source, runKey, started.UTC()).Scan(&run.ID, &run.DataSourceID, &run.Status, &run.StartedAt)
+	err = tx.QueryRow(ctx, startRunSQL, source, runKey, started.UTC(), metadataJSON).Scan(&run.ID, &run.DataSourceID, &run.Status, &run.StartedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, `SELECT r.id::text,r.data_source_id::text,r.status::text,r.started_at FROM ingestion_runs r JOIN data_sources s ON s.id=r.data_source_id WHERE s.code=$1 AND r.run_key=$2 FOR UPDATE`, source, runKey).Scan(&run.ID, &run.DataSourceID, &run.Status, &run.StartedAt)
 		if err != nil {

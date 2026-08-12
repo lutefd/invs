@@ -46,7 +46,7 @@ type httpGetter interface {
 
 type metadataStore interface {
 	EnrichSECIssuer(context.Context, model.Issuer, string) error
-	StartRun(context.Context, string, string, time.Time) (metadata.Run, error)
+	StartRun(context.Context, string, string, time.Time, metadata.RunInputs) (metadata.Run, error)
 	FinalizeRun(context.Context, metadata.Run, time.Time, metadata.Metrics, []model.PriceBar, []model.EconomicObservation) error
 }
 
@@ -265,7 +265,7 @@ func (a *app) run(ctx context.Context, source string) error {
 func (a *app) collectSEC(ctx context.Context) error {
 	c := sec.NewClient(a.http)
 	m := metrics{Source: "sec", StartedAt: a.nowUTC(), Cursor: map[string]any{}}
-	run, skip, err := a.start(ctx, &m)
+	run, skip, err := a.start(ctx, &m, secRunInputs(a.cfg.Universe))
 	if err != nil {
 		return err
 	}
@@ -344,7 +344,7 @@ func (a *app) collectPrices(ctx context.Context) error {
 			return fmt.Errorf("prices.end: %w", err)
 		}
 	}
-	run, skip, runErr := a.start(ctx, &m)
+	run, skip, runErr := a.start(ctx, &m, pricesRunInputs(a.cfg.Universe, start, end))
 	if runErr != nil {
 		return runErr
 	}
@@ -401,7 +401,7 @@ func (a *app) collectPrices(ctx context.Context) error {
 func (a *app) collectFRED(ctx context.Context) error {
 	c := fred.NewClient(a.http)
 	m := metrics{Source: "fred", StartedAt: a.nowUTC(), Cursor: map[string]any{}}
-	run, skip, err := a.start(ctx, &m)
+	run, skip, err := a.start(ctx, &m, fredRunInputs(a.cfg.Providers.FRED.Series))
 	if err != nil {
 		return err
 	}
@@ -466,7 +466,7 @@ func (a *app) collectBCB(ctx context.Context) error {
 			"series":           seriesCursor,
 		},
 	}
-	run, skip, err := a.start(ctx, &m)
+	run, skip, err := a.start(ctx, &m, bcbRunInputs(configuredSeries))
 	if err != nil {
 		return err
 	}
@@ -604,12 +604,105 @@ func bcbLogicalKey(series config.BCBSeries) string {
 	return "bcb/series/" + strings.TrimSpace(series.Code) + "/start/" + start + "/end/" + end
 }
 
-func (a *app) start(ctx context.Context, m *metrics) (metadata.Run, bool, error) {
+func secRunInputs(universe []config.Security) metadata.RunInputs {
+	requests := make([]metadata.IssuerRequest, 0, len(universe))
+	for _, security := range universe {
+		requests = append(requests, metadata.IssuerRequest{
+			IssuerID:   security.IssuerID,
+			SecurityID: security.SecurityID,
+			CIK:        security.CIK,
+			Resources:  []string{"submissions", "companyfacts"},
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "sec",
+		Provider: metadata.ProviderInputs{
+			Name:                    "sec",
+			Kind:                    "fundamentals",
+			ConfiguredUniverseCount: len(universe),
+			IssuerRequests:          requests,
+		},
+	}
+}
+
+func pricesRunInputs(universe []config.Security, start, end time.Time) metadata.RunInputs {
+	requests := make([]metadata.SecurityRequest, 0, len(universe))
+	for _, security := range universe {
+		requests = append(requests, metadata.SecurityRequest{
+			SecurityID:   security.SecurityID,
+			VendorSymbol: security.YahooSymbol,
+			Currency:     security.Currency,
+			Start:        start.UTC().Format("2006-01-02"),
+			End:          end.UTC().Format("2006-01-02"),
+			Interval:     "1d",
+			Events:       "history",
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "yahoo",
+		Provider: metadata.ProviderInputs{
+			Name:                    "yahoo",
+			Kind:                    "market_data",
+			ConfiguredUniverseCount: len(universe),
+			SecurityRequests:        requests,
+		},
+	}
+}
+
+func fredRunInputs(series []string) metadata.RunInputs {
+	seriesIDs := make([]string, 0, len(series))
+	for _, seriesID := range series {
+		seriesIDs = append(seriesIDs, strings.TrimSpace(seriesID))
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "fred",
+		Provider: metadata.ProviderInputs{
+			Name:                  "fred",
+			Kind:                  "macro",
+			ConfiguredSeriesCount: len(seriesIDs),
+			SeriesIDs:             seriesIDs,
+			Format:                "csv",
+			Vintage:               "current",
+		},
+	}
+}
+
+func bcbRunInputs(series []config.BCBSeries) metadata.RunInputs {
+	configured := make([]metadata.BCBSeriesInput, 0, len(series))
+	for _, item := range series {
+		configured = append(configured, metadata.BCBSeriesInput{
+			Code:               strings.TrimSpace(item.Code),
+			Geography:          strings.TrimSpace(item.Geography),
+			Unit:               strings.TrimSpace(item.Unit),
+			Frequency:          strings.TrimSpace(item.Frequency),
+			SeasonalAdjustment: strings.TrimSpace(item.SeasonalAdjustment),
+			Start:              strings.TrimSpace(item.Start),
+			End:                strings.TrimSpace(item.End),
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "bcb",
+		Provider: metadata.ProviderInputs{
+			Name:                  "bcb",
+			Kind:                  "macro",
+			ConfiguredSeriesCount: len(configured),
+			Series:                configured,
+			Format:                "csv",
+			Vintage:               "current",
+		},
+	}
+}
+
+func (a *app) start(ctx context.Context, m *metrics, inputs metadata.RunInputs) (metadata.Run, bool, error) {
 	if a.metadata == nil {
 		return metadata.Run{}, false, errors.New("PostgreSQL metadata repository is required for canonical collection")
 	}
 	m.StartedAt = canonicalTime(m.StartedAt)
-	run, err := a.metadata.StartRun(ctx, m.Source, a.batchKey+"/"+m.Source, m.StartedAt)
+	run, err := a.metadata.StartRun(ctx, m.Source, a.batchKey+"/"+m.Source, m.StartedAt, inputs)
 	if err != nil {
 		return metadata.Run{}, false, err
 	}

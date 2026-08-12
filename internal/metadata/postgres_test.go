@@ -2,6 +2,9 @@ package metadata
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -18,6 +21,70 @@ func TestClassify(t *testing.T) {
 	for _, c := range cases {
 		if got := classify(c.m); got != c.want {
 			t.Fatalf("got %s want %s", got, c.want)
+		}
+	}
+}
+
+func TestNewRunMetadataHashesCanonicalInputs(t *testing.T) {
+	inputs := RunInputs{
+		SchemaVersion: RunInputsSchemaVersion,
+		Source:        "yahoo",
+		Provider: ProviderInputs{
+			Name:                    "yahoo",
+			Kind:                    "market_data",
+			ConfiguredUniverseCount: 1,
+			SecurityRequests: []SecurityRequest{{
+				SecurityID: "security-1", VendorSymbol: "AAPL", Currency: "USD",
+				Start: "2024-01-01", End: "2024-12-31", Interval: "1d", Events: "history",
+			}},
+		},
+	}
+
+	got, err := NewRunMetadata(inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := json.Marshal(canonicalRunInputs{
+		SchemaVersion: inputs.SchemaVersion,
+		Source:        inputs.Source,
+		Provider:      inputs.Provider,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedDigest := sha256.Sum256(canonical)
+	if got.RunInputs.CanonicalJSONSHA256 != hex.EncodeToString(expectedDigest[:]) {
+		t.Fatalf("canonical JSON SHA-256 = %q, want %q", got.RunInputs.CanonicalJSONSHA256, hex.EncodeToString(expectedDigest[:]))
+	}
+	if got.CollectorSource != inputs.Source || got.RunInputs.Source != inputs.Source {
+		t.Fatalf("run metadata source = %+v, want %q", got, inputs.Source)
+	}
+
+	repeated, err := NewRunMetadata(inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repeated.RunInputs.CanonicalJSONSHA256 != got.RunInputs.CanonicalJSONSHA256 {
+		t.Fatal("identical run inputs produced different hashes")
+	}
+}
+
+func TestNewRunMetadataRejectsMismatchedProvidedHash(t *testing.T) {
+	inputs := RunInputs{
+		SchemaVersion:       RunInputsSchemaVersion,
+		Source:              "fred",
+		Provider:            ProviderInputs{Name: "fred", Kind: "macro", SeriesIDs: []string{"DGS10"}},
+		CanonicalJSONSHA256: strings.Repeat("0", 64),
+	}
+	if _, err := NewRunMetadata(inputs); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("NewRunMetadata error = %v, want hash mismatch", err)
+	}
+}
+
+func TestStartRunSQLPersistsTypedMetadata(t *testing.T) {
+	for _, fragment := range []string{"metadata)", "$4::jsonb", "ON CONFLICT(data_source_id,run_key) DO NOTHING"} {
+		if !strings.Contains(startRunSQL, fragment) {
+			t.Fatalf("startRunSQL missing %q: %s", fragment, startRunSQL)
 		}
 	}
 }

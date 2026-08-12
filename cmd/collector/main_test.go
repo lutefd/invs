@@ -246,6 +246,7 @@ type collectorMetadataFake struct {
 	run           metadata.Run
 	onFinalize    func(metadata.Metrics, []model.PriceBar, []model.EconomicObservation)
 	onStart       func(time.Time)
+	onStartInputs func(metadata.RunInputs)
 	onFinish      func(time.Time)
 	finalizeError error
 }
@@ -333,6 +334,77 @@ func TestNormalCollectionFlagsRemainUnchanged(t *testing.T) {
 	}
 }
 
+func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T) {
+	universe := []config.Security{{
+		IssuerID: "issuer-1", SecurityID: "security-1", CIK: 320193,
+		YahooSymbol: "AAPL", Currency: "USD",
+	}}
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
+
+	secInputs := secRunInputs(universe)
+	if secInputs.Source != "sec" || secInputs.Provider.ConfiguredUniverseCount != 1 || len(secInputs.Provider.IssuerRequests) != 1 {
+		t.Fatalf("SEC run inputs = %+v", secInputs)
+	}
+	if got := secInputs.Provider.IssuerRequests[0]; got.IssuerID != "issuer-1" || got.SecurityID != "security-1" || got.CIK != 320193 || !reflect.DeepEqual(got.Resources, []string{"submissions", "companyfacts"}) {
+		t.Fatalf("SEC issuer request = %+v", got)
+	}
+
+	priceInputs := pricesRunInputs(universe, start, end)
+	if got := priceInputs.Provider.SecurityRequests[0]; got.SecurityID != "security-1" || got.VendorSymbol != "AAPL" || got.Currency != "USD" || got.Start != "2024-01-01" || got.End != "2024-12-31" || got.Interval != "1d" || got.Events != "history" {
+		t.Fatalf("Yahoo security request = %+v", got)
+	}
+
+	fredInputs := fredRunInputs([]string{" DGS10 ", "CPIAUCSL"})
+	if fredInputs.Provider.ConfiguredSeriesCount != 2 || !reflect.DeepEqual(fredInputs.Provider.SeriesIDs, []string{"DGS10", "CPIAUCSL"}) || fredInputs.Provider.Vintage != "current" {
+		t.Fatalf("FRED run inputs = %+v", fredInputs)
+	}
+
+	bcbInputs := bcbRunInputs([]config.BCBSeries{{
+		Code: " 432 ", Geography: " BR ", Unit: " percent ", Frequency: " daily ",
+		SeasonalAdjustment: " not_adjusted ", Start: " 2024-01-01 ", End: " 2024-12-31 ",
+	}})
+	if got := bcbInputs.Provider.Series[0]; got.Code != "432" || got.Geography != "BR" || got.Unit != "percent" || got.Frequency != "daily" || got.SeasonalAdjustment != "not_adjusted" || got.Start != "2024-01-01" || got.End != "2024-12-31" {
+		t.Fatalf("BCB series input = %+v", got)
+	}
+
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, bcbInputs} {
+		got, err := metadata.NewRunMetadata(inputs)
+		if err != nil {
+			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
+		}
+		if got.RunInputs.CanonicalJSONSHA256 == "" {
+			t.Fatalf("%s run input hash is empty", inputs.Source)
+		}
+	}
+}
+
+func TestCollectorPassesRunInputsToStartRun(t *testing.T) {
+	payload := []byte("observation_date,DGS10\n2024-01-02,4.25\n")
+	raw := &orderingRawStore{}
+	run := testRun()
+	var startedInputs metadata.RunInputs
+	app := &app{
+		cfg:        config.Config{Providers: config.Providers{FRED: config.FREDProvider{Enabled: true, Series: []string{"DGS10"}}}},
+		raw:        raw,
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedHash: hashPayload(payload), expectedSource: "fred", locatorPrefix: "csv/date="},
+		http:       collectorHTTPFake{responses: map[string][]byte{"fredgraph.csv": payload}},
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{
+			run:           run,
+			onStartInputs: func(inputs metadata.RunInputs) { startedInputs = inputs },
+		},
+		batchKey: "run-inputs-test",
+	}
+
+	if err := app.run(context.Background(), "fred"); err != nil {
+		t.Fatal(err)
+	}
+	if startedInputs.Source != "fred" || startedInputs.Provider.Name != "fred" || !reflect.DeepEqual(startedInputs.Provider.SeriesIDs, []string{"DGS10"}) {
+		t.Fatalf("StartRun inputs = %+v", startedInputs)
+	}
+}
+
 func TestCancelOrphanRunDoesNotUseProviderOrCollectionStores(t *testing.T) {
 	store := &operatorMetadataFake{run: metadata.Run{ID: testRunID, DataSourceID: testDataSource, Source: "fred", RunKey: "orphaned-batch/fred", Status: "queued"}}
 	options := cancellationOptions{enabled: true, source: "fred", runKey: "orphaned-batch/fred", reason: "worker stopped before fetch"}
@@ -349,9 +421,12 @@ func (f collectorMetadataFake) EnrichSECIssuer(context.Context, model.Issuer, st
 	return nil
 }
 
-func (f collectorMetadataFake) StartRun(_ context.Context, source, runKey string, startedAt time.Time) (metadata.Run, error) {
+func (f collectorMetadataFake) StartRun(_ context.Context, source, runKey string, startedAt time.Time, inputs metadata.RunInputs) (metadata.Run, error) {
 	if f.onStart != nil {
 		f.onStart(startedAt)
+	}
+	if f.onStartInputs != nil {
+		f.onStartInputs(inputs)
 	}
 	run := f.run
 	run.Source = source
