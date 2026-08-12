@@ -25,10 +25,12 @@ checks every listed part's hash and row count, and reads only those listed parts
 valid alternatives. Old parts may remain physically present after a new manifest is
 published, but they are not committed data unless a manifest lists them.
 
-The collector fails closed on legacy or incompatible normalized output. The explicit
-recovery is to archive the complete `data/normalized/` tree in a recoverable location,
-leave `data/raw/` and PostgreSQL run/source metadata intact, recreate an empty
-normalized tree, and reingest. No migration invents missing provenance.
+The collector fails closed on unmanaged normalized output: pre-contract or
+pre-manifest files that lack the required schema, provenance, or manifest contract,
+as well as other incompatible output. The explicit recovery is to archive the
+complete `data/normalized/` tree in a recoverable location, leave `data/raw/` and
+PostgreSQL run/source metadata intact, recreate an empty normalized tree, and
+reingest. No migration invents missing provenance.
 
 Provider bytes are retained in the raw store before a parse/schema error is finalized
 when the adapter returns them. Such a response emits no normalized schema instance or
@@ -57,10 +59,13 @@ so Go, Python, JSON, and Parquet conversions do not silently round them.
 
 `observed_precision` is optional on `price-bar`, `fundamental-observation`, and
 `economic-observation`. Its allowed values are `date`, `second`, and `unknown`.
-Omission is valid for legacy `schema_version: 1.0.0` records and readers interpret
-it as `unknown`; adding the field does not require a schema-version change. A present
-value outside this enum is invalid and must fail closed rather than being coerced or
-treated as `unknown`.
+Omission is valid for earlier valid `schema_version: 1.0.0` records and readers
+interpret it as `unknown`; adding the field does not require a schema-version change.
+An earlier valid v1 Parquet part may therefore omit `observed_precision` when it is
+listed by a valid manifest and carries the required schema and provenance. That
+compatibility case is distinct from unmanaged pre-contract or pre-manifest files,
+which are rejected and handled by archive/reset. A present value outside this enum
+is invalid and must fail closed rather than being coerced or treated as `unknown`.
 
 `observed_at` may physically encode a civil date as UTC midnight only when
 `observed_precision: date` is present. In that case it is a reference date, not an

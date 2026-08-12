@@ -31,8 +31,12 @@ The temporal fields have non-overlapping meanings:
 - `observed_at`: when a measurement applies to the world. For a daily bar this is
   the interval close; for an economic value it is the observation/reference date;
   for a fundamental it is normally the fiscal period end. The optional
-  `observed_precision` marker is `date`, `second`, or `unknown`; omission in a valid
-  legacy v1 record reads as `unknown`. It is not availability.
+  `observed_precision` marker is `date`, `second`, or `unknown`; omission in an
+  earlier valid v1 record reads as `unknown`. It is not availability. An earlier valid
+  v1 Parquet part may omit the optional marker when it is listed by a valid manifest
+  and carries the required schema and provenance; that is distinct from an unmanaged
+  pre-contract or pre-manifest file, which is rejected and handled by archive/reset
+  with raw evidence retained.
 - `published_at`: earliest defensible instant the exact version became public. SEC
   acceptance time and an agency release time are examples. If a source exposes only
   a date, the normalizer records the precision and uses a conservative availability
@@ -72,8 +76,8 @@ decision_at` is necessary for measurements, but never sufficient without
 `observed_precision` does not change this rule. A date-precision `observed_at` is a
 reference date encoded at UTC midnight, while `available_at` remains the conservative
 knowledge cutoff used by research. Provider mappings are FRED observation date to
-`date`, SEC period date to `date`, and Yahoo bar timestamp to `second`. Existing v1
-records may omit the optional marker; readers treat that omission as `unknown`.
+`date`, SEC period date to `date`, and Yahoo bar timestamp to `second`. Earlier valid
+v1 records may omit the optional marker; readers treat that omission as `unknown`.
 Present values outside the enum are invalid and adapters/readers fail closed rather
 than coercing them or guessing precision.
 

@@ -1,7 +1,8 @@
-# V0 architecture
+# V1/v0 foundation architecture
 
-The first vertical slice collects daily US equity prices, SEC company metadata and
-fundamentals, and FRED macro series. It preserves source bytes, publishes canonical
+This is the first actively developed v1/v0 foundation. The first vertical slice
+collects daily US equity prices, SEC company metadata and fundamentals, and FRED
+macro series. It preserves source bytes, publishes canonical
 Parquet through immutable manifests, registers operational metadata in PostgreSQL,
 and publishes accepted latest-only price/macro projections for Grafana. It exposes
 canonical history through DuckDB/Jupyter. It intentionally does not include a feature
@@ -126,8 +127,11 @@ implementation-neutral so an S3-compatible RawStore can replace the filesystem.
   retained without fabricating accepted output.
 - Latest-only PostgreSQL snapshots are replaceable operational projections, never
   authoritative history.
-- Legacy normalized trees fail closed and require a recoverable archive/reset before
-  reingestion; raw evidence is retained.
+- Unmanaged pre-contract or pre-manifest normalized data that lacks the required
+  schema, provenance, or manifest contract fails closed and requires a recoverable
+  archive/reset before reingestion; raw evidence is retained. Earlier valid v1
+  Parquet parts may omit optional `observed_precision` when listed by a valid
+  manifest, which is distinct from unmanaged pre-contract data.
 - Orphan queued/running runs require explicit operator cancellation and a reason.
 - Every normalized row traces to a raw SHA-256 and ingestion run.
 - All instants are UTC; source-local parsing is explicit.
