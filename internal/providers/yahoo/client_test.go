@@ -1,0 +1,31 @@
+package yahoo
+
+import (
+	"testing"
+	"time"
+)
+
+func TestParseNormalizesExchangeCloseAndRejectsMissing(t *testing.T) {
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600,1719927000],"indicators":{"quote":[{"open":[10,null],"high":[12,null],"low":[9,null],"close":[11,null],"volume":[100,null]}]}}],"error":null}}`)
+	ingested := time.Date(2024, 7, 3, 22, 0, 0, 0, time.UTC)
+	bars, received, rejected, err := parse(b, "security-1", "USD", ingested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || received != 2 || rejected != 1 {
+		t.Fatalf("bars=%v received=%d rejected=%d", bars, received, rejected)
+	}
+	want := time.Date(2024, 7, 1, 20, 0, 0, 0, time.UTC)
+	if !bars[0].Temporal.ObservedAt.Equal(want) || bars[0].Source != "yahoo" {
+		t.Fatalf("bar=%+v", bars[0])
+	}
+}
+
+func TestParseRejectsIncompleteTradingDay(t *testing.T) {
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600],"indicators":{"quote":[{"open":[10],"high":[12],"low":[9],"close":[11],"volume":[100]}]}}],"error":null}}`)
+	// Noon UTC is before the 16:00 New York close (20:00 UTC during DST).
+	bars, received, rejected, err := parse(b, "security-1", "USD", time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC))
+	if err != nil || len(bars) != 0 || received != 1 || rejected != 1 {
+		t.Fatalf("bars=%v received=%d rejected=%d err=%v", bars, received, rejected, err)
+	}
+}

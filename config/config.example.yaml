@@ -1,0 +1,27 @@
+data_dir: ./data
+user_agent: "invs/0.1 research@example.com"
+http:
+  timeout: 30s
+  requests_per_second: 5
+  burst: 1
+  max_attempts: 4
+  initial_backoff: 500ms
+providers:
+  sec:
+    enabled: true
+  prices:
+    enabled: true
+    start: 2020-01-01
+  fred:
+    enabled: true
+    series: [DGS10, CPIAUCSL]
+universe:
+  - issuer_id: issuer-apple
+    security_id: security-aapl-us
+    legal_name: Apple Inc.
+    cik: 320193
+    ticker: AAPL
+    yahoo_symbol: AAPL
+    exchange: NASDAQ
+    mic: XNAS
+    currency: USD

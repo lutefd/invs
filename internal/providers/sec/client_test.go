@@ -1,0 +1,48 @@
+package sec
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+)
+
+type fakeGetter struct{ responses map[string][]byte }
+
+func (f fakeGetter) Get(_ context.Context, u string) ([]byte, error) {
+	for suffix, b := range f.responses {
+		if strings.HasSuffix(u, suffix) {
+			return b, nil
+		}
+	}
+	return nil, context.Canceled
+}
+
+func TestCollectCompanyNormalizesAndDeduplicates(t *testing.T) {
+	sub := []byte(`{"name":"Example Corp","stateOfIncorporation":"DE","sicDescription":"Widgets","filings":{"recent":{"accessionNumber":["0001","0001"],"filingDate":["2024-02-02","2024-02-02"],"acceptanceDateTime":["2024-02-02T21:03:04.000Z","2024-02-02T21:03:04.000Z"],"form":["10-K","10-K"],"primaryDocument":["x.htm","x.htm"]}}}`)
+	facts := []byte(`{"cik":1,"facts":{"us-gaap":{"Revenue":{"label":"Revenue","units":{"USD":[{"start":"2023-01-01","end":"2023-12-31","val":123.5,"accn":"0001","fy":2023,"fp":"FY","form":"10-K","filed":"2024-02-02"},{"start":"2023-01-01","end":"2023-12-31","val":123.5,"accn":"0001","fy":2023,"fp":"FY","form":"10-K","filed":"2024-02-02"}]}}}}}`)
+	c := NewClient(fakeGetter{responses: map[string][]byte{"submissions/CIK0000000001.json": sub, "companyfacts/CIK0000000001.json": facts}})
+	c.now = func() time.Time { return time.Date(2024, 2, 3, 12, 0, 0, 0, time.UTC) }
+	r, err := c.CollectCompany(context.Background(), "issuer-1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Filings) != 1 || len(r.Facts) != 1 || r.RecordsReceived != 4 {
+		t.Fatalf("unexpected result: %+v", r)
+	}
+	f := r.Facts[0]
+	if f.Temporal.PublishedPrecision != "date" || !f.Temporal.AvailableAt.Equal(time.Date(2024, 2, 3, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("unsafe availability: %+v", f.Temporal)
+	}
+	if f.Value != 123.5 || f.IssuerID != "issuer-1" || f.RawPayloadHash == "" {
+		t.Fatalf("bad fact: %+v", f)
+	}
+}
+
+func TestInvalidFactTimestampRejected(t *testing.T) {
+	facts := []byte(`{"facts":{"us-gaap":{"Revenue":{"units":{"USD":[{"end":"bad","val":1,"accn":"1","filed":"2024-01-01"}]}}}}}`)
+	got, received, rejected, err := parseCompanyFacts(facts, "issuer", time.Now())
+	if err != nil || len(got) != 0 || received != 1 || rejected != 1 {
+		t.Fatalf("got=%v received=%d rejected=%d err=%v", got, received, rejected, err)
+	}
+}
