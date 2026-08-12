@@ -356,7 +356,8 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 }
 
 func priceRow(o model.PriceBar) (PriceRow, error) {
-	if err := validateTemporal(o.Temporal, !o.Temporal.PublishedAt.IsZero()); err != nil {
+	observedAt, publishedAt, availableAt, ingestedAt, err := temporalMicros(o.Temporal, !o.Temporal.PublishedAt.IsZero())
+	if err != nil {
 		return PriceRow{}, err
 	}
 	if err := validateProvenance(o.Provenance, o.RawPayloadHash); err != nil {
@@ -403,16 +404,17 @@ func priceRow(o model.PriceBar) (PriceRow, error) {
 	if compareDecimal(low, high) > 0 || compareDecimal(open, low) < 0 || compareDecimal(open, high) > 0 || compareDecimal(closeValue, low) < 0 || compareDecimal(closeValue, high) > 0 {
 		return PriceRow{}, errors.New("invalid OHLC invariant")
 	}
-	r := PriceRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SecurityID: o.SecurityID, Interval: o.Interval, PriceBasis: o.PriceBasis, Currency: o.Currency, ObservedAt: micros(o.Temporal.ObservedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), Open: open, High: high, Low: low, Close: closeValue, Volume: volume, HasVolume: o.Volume != ""}
+	r := PriceRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SecurityID: o.SecurityID, Interval: o.Interval, PriceBasis: o.PriceBasis, Currency: o.Currency, ObservedAt: observedAt, PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: availableAt, IngestedAt: ingestedAt, Open: open, High: high, Low: low, Close: closeValue, Volume: volume, HasVolume: o.Volume != ""}
 	if !o.Temporal.PublishedAt.IsZero() {
-		r.PublishedAt = micros(o.Temporal.PublishedAt)
+		r.PublishedAt = publishedAt
 		r.HasPublishedAt = true
 	}
 	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
 	return r, nil
 }
 func fundamentalRow(o model.FundamentalObservation) (FundamentalRow, error) {
-	if err := validateTemporal(o.Temporal, true); err != nil {
+	observedAt, publishedAt, availableAt, ingestedAt, err := temporalMicros(o.Temporal, true)
+	if err != nil {
 		return FundamentalRow{}, err
 	}
 	if err := validateProvenance(o.Provenance, o.RawPayloadHash); err != nil {
@@ -450,12 +452,13 @@ func fundamentalRow(o model.FundamentalObservation) (FundamentalRow, error) {
 			return FundamentalRow{}, errors.New("period_start after period_end")
 		}
 	}
-	r := FundamentalRow{SchemaVersion: model.SchemaVersion, Source: o.Source, IssuerID: o.IssuerID, SecurityID: o.SecurityID, HasSecurityID: o.SecurityID != "", Taxonomy: o.Taxonomy, Concept: o.Concept, Unit: o.Unit, Currency: o.Currency, HasCurrency: o.Currency != "", ObservedAt: micros(o.Temporal.ObservedAt), PublishedAt: micros(o.Temporal.PublishedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), PeriodStart: start, HasPeriodStart: hasStart, PeriodEnd: days(o.PeriodEnd), Value: value, HasValue: o.Value != "", Revision: int32(o.Revision), AccessionNumber: o.AccessionNumber, Form: o.Form, FiscalYear: int32(o.FiscalYear), FiscalPeriod: o.FiscalPeriod, Frame: o.Frame}
+	r := FundamentalRow{SchemaVersion: model.SchemaVersion, Source: o.Source, IssuerID: o.IssuerID, SecurityID: o.SecurityID, HasSecurityID: o.SecurityID != "", Taxonomy: o.Taxonomy, Concept: o.Concept, Unit: o.Unit, Currency: o.Currency, HasCurrency: o.Currency != "", ObservedAt: observedAt, PublishedAt: publishedAt, PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: availableAt, IngestedAt: ingestedAt, PeriodStart: start, HasPeriodStart: hasStart, PeriodEnd: days(o.PeriodEnd), Value: value, HasValue: o.Value != "", Revision: int32(o.Revision), AccessionNumber: o.AccessionNumber, Form: o.Form, FiscalYear: int32(o.FiscalYear), FiscalPeriod: o.FiscalPeriod, Frame: o.Frame}
 	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
 	return r, nil
 }
 func economicRow(o model.EconomicObservation) (EconomicRow, error) {
-	if err := validateTemporal(o.Temporal, true); err != nil {
+	observedAt, publishedAt, availableAt, ingestedAt, err := temporalMicros(o.Temporal, true)
+	if err != nil {
 		return EconomicRow{}, err
 	}
 	if err := validateProvenance(o.Provenance, o.RawPayloadHash); err != nil {
@@ -474,9 +477,12 @@ func economicRow(o model.EconomicObservation) (EconomicRow, error) {
 	if err != nil {
 		return EconomicRow{}, err
 	}
-	r := EconomicRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SeriesID: o.SeriesID, Geography: o.Geography, Unit: o.Unit, Frequency: o.Frequency, SeasonalAdjustment: o.SeasonalAdjustment, HasSeasonalAdjustment: o.SeasonalAdjustment != "", ObservedAt: micros(o.Temporal.ObservedAt), PublishedAt: micros(o.Temporal.PublishedAt), PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: micros(o.Temporal.AvailableAt), IngestedAt: micros(o.Temporal.IngestedAt), Value: value, HasValue: o.Value != "", Revision: int32(o.Revision)}
+	r := EconomicRow{SchemaVersion: model.SchemaVersion, Source: o.Source, SeriesID: o.SeriesID, Geography: o.Geography, Unit: o.Unit, Frequency: o.Frequency, SeasonalAdjustment: o.SeasonalAdjustment, HasSeasonalAdjustment: o.SeasonalAdjustment != "", ObservedAt: observedAt, PublishedAt: publishedAt, PublishedPrecision: string(o.Temporal.PublishedPrecision), AvailableAt: availableAt, IngestedAt: ingestedAt, Value: value, HasValue: o.Value != "", Revision: int32(o.Revision)}
 	if o.VintageAt != nil {
-		r.VintageAt = micros(*o.VintageAt)
+		r.VintageAt, err = micros(*o.VintageAt)
+		if err != nil {
+			return EconomicRow{}, fmt.Errorf("vintage_at: %w", err)
+		}
 		r.HasVintageAt = true
 	}
 	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
@@ -574,8 +580,33 @@ func sourceOfPrices(obs []model.PriceBar) string {
 	}
 	return obs[0].Source
 }
-func micros(t time.Time) int64 { return t.UTC().UnixMicro() }
-func days(t time.Time) int32   { return int32(t.UTC().Unix() / 86400) }
+func temporalMicros(t model.Temporal, publishedRequired bool) (observed, published, available, ingested int64, err error) {
+	if err = validateTemporal(t, publishedRequired); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if observed, err = micros(t.ObservedAt); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("observed_at: %w", err)
+	}
+	if !t.PublishedAt.IsZero() {
+		if published, err = micros(t.PublishedAt); err != nil {
+			return 0, 0, 0, 0, fmt.Errorf("published_at: %w", err)
+		}
+	}
+	if available, err = micros(t.AvailableAt); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("available_at: %w", err)
+	}
+	if ingested, err = micros(t.IngestedAt); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("ingested_at: %w", err)
+	}
+	return observed, published, available, ingested, nil
+}
+func micros(t time.Time) (int64, error) {
+	if t.Nanosecond()%int(time.Microsecond) != 0 {
+		return 0, errors.New("timestamp has sub-microsecond precision")
+	}
+	return t.UTC().UnixMicro(), nil
+}
+func days(t time.Time) int32 { return int32(t.UTC().Unix() / 86400) }
 func priceKey(r PriceRow) string {
 	return strings.Join([]string{r.Source, r.SecurityID, r.Interval, fmt.Sprint(r.ObservedAt), r.PriceBasis}, "\x1f")
 }

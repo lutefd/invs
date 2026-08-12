@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,7 +46,107 @@ func provenance(at time.Time) model.Provenance {
 	return model.Provenance{DataSourceID: sourceID, IngestionRunID: runID, RawPayloadHash: rawHash, IngestedAt: at, NormalizerVersion: model.NormalizerVersion}
 }
 func price(at time.Time) model.PriceBar {
+	at = at.Truncate(time.Microsecond)
 	return model.PriceBar{Source: "yahoo", SecurityID: securityID, Interval: "1d", PriceBasis: "raw", Currency: "USD", Temporal: model.Temporal{ObservedAt: at, PublishedAt: at.Add(time.Hour), AvailableAt: at.Add(time.Hour), IngestedAt: at.Add(2 * time.Hour), PublishedPrecision: model.PrecisionSecond}, Open: "1.000000000000000001", High: "3", Low: "1", Close: "2", Volume: "10", RawPayloadHash: rawHash, Provenance: provenance(at.Add(2 * time.Hour))}
+}
+
+func TestParquetRejectsSubMicrosecondTimestamps(t *testing.T) {
+	at := time.Date(2024, 1, 2, 20, 0, 0, 123456000, time.UTC)
+	cases := []struct {
+		name  string
+		input func() error
+	}{
+		{"observed_at", func() error {
+			bar := price(at)
+			bar.Temporal.ObservedAt = at.Add(time.Nanosecond)
+			_, err := priceRow(bar)
+			return err
+		}},
+		{"published_at", func() error {
+			bar := price(at)
+			bar.Temporal.PublishedAt = at.Add(time.Nanosecond)
+			_, err := priceRow(bar)
+			return err
+		}},
+		{"available_at", func() error {
+			bar := price(at)
+			bar.Temporal.AvailableAt = at.Add(time.Hour + time.Nanosecond)
+			_, err := priceRow(bar)
+			return err
+		}},
+		{"ingested_at", func() error {
+			bar := price(at)
+			bar.Temporal.IngestedAt = at.Add(2*time.Hour + time.Nanosecond)
+			_, err := priceRow(bar)
+			return err
+		}},
+		{"vintage_at", func() error {
+			vintage := at.Add(3*time.Hour + time.Nanosecond)
+			o := model.EconomicObservation{Source: "fred", SeriesID: "X", Geography: "US", Frequency: "monthly", Unit: "Index", Value: "1", VintageAt: &vintage, Temporal: model.Temporal{ObservedAt: at, PublishedAt: at.Add(time.Hour), AvailableAt: at.Add(time.Hour), IngestedAt: at.Add(2 * time.Hour)}, RawPayloadHash: rawHash, Provenance: provenance(at.Add(2 * time.Hour))}
+			_, err := economicRow(o)
+			return err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.input()
+			if err == nil || !strings.Contains(err.Error(), "sub-microsecond") {
+				t.Fatalf("err=%v, want sub-microsecond precision rejection", err)
+			}
+		})
+	}
+}
+
+func TestParquetExactMicrosecondTimestampsRoundTrip(t *testing.T) {
+	at := time.Date(2024, 1, 2, 20, 0, 0, 123456000, time.UTC)
+	bar := price(at)
+	w, err := NewWriter(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pricePath, _, err := w.WritePrices(securityID, []model.PriceBar{bar})
+	if err != nil {
+		t.Fatal(err)
+	}
+	priceRows := rowsFromManifest[PriceRow](t, pricePath)
+	if len(priceRows) != 1 {
+		t.Fatalf("price rows=%d, want 1", len(priceRows))
+	}
+	storedPrice := priceRows[0]
+	priceWant := []time.Time{bar.Temporal.ObservedAt, bar.Temporal.PublishedAt, bar.Temporal.AvailableAt, bar.Temporal.IngestedAt}
+	priceGot := []time.Time{time.UnixMicro(storedPrice.ObservedAt).UTC(), time.UnixMicro(storedPrice.PublishedAt).UTC(), time.UnixMicro(storedPrice.AvailableAt).UTC(), time.UnixMicro(storedPrice.IngestedAt).UTC()}
+	for i := range priceWant {
+		if !priceGot[i].Equal(priceWant[i]) {
+			t.Fatalf("price timestamp %d: got %s want %s", i, priceGot[i], priceWant[i])
+		}
+	}
+
+	vintage := at.Add(3 * time.Hour)
+	economic := model.EconomicObservation{Source: "fred", SeriesID: "X", Geography: "US", Frequency: "monthly", Unit: "Index", Value: "1", VintageAt: &vintage, Temporal: bar.Temporal, RawPayloadHash: rawHash, Provenance: bar.Provenance}
+	economicPath, _, err := w.WriteEconomics("X", []model.EconomicObservation{economic})
+	if err != nil {
+		t.Fatal(err)
+	}
+	economicRows := rowsFromManifest[EconomicRow](t, economicPath)
+	if len(economicRows) != 1 {
+		t.Fatalf("economic rows=%d, want 1", len(economicRows))
+	}
+	if got := economicRows[0].VintageTime(); got == nil || !got.Equal(vintage) {
+		t.Fatalf("vintage timestamp: got %v want %s", got, vintage)
+	}
+}
+
+func TestDateOnlyPeriodFieldsRemainDayPrecision(t *testing.T) {
+	periodEnd := time.Date(2023, 12, 31, 23, 59, 59, 123456789, time.UTC)
+	pub := time.Date(2024, 1, 2, 21, 0, 0, 0, time.UTC)
+	o := model.FundamentalObservation{Source: "sec", IssuerID: issuerID, Taxonomy: "us-gaap", Concept: "Revenue", Unit: "USD", Value: "1", PeriodEnd: periodEnd, FiscalPeriod: "FY", Temporal: model.Temporal{ObservedAt: time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC), PublishedAt: pub, AvailableAt: pub, IngestedAt: pub.Add(time.Hour)}, RawPayloadHash: rawHash, Provenance: provenance(pub.Add(time.Hour))}
+	r, err := fundamentalRow(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.PeriodEnd != days(periodEnd) {
+		t.Fatalf("period_end=%d want %d", r.PeriodEnd, days(periodEnd))
+	}
 }
 
 func TestPriceV1LosslessIdempotentAndQueryable(t *testing.T) {
