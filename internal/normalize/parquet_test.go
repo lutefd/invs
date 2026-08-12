@@ -433,6 +433,71 @@ func TestFundamentalNaturalKeyIncludesTaxonomyAndUnit(t *testing.T) {
 	}
 }
 
+func TestFundamentalNaturalKeySeparatesSECFilingIdentity(t *testing.T) {
+	root := t.TempDir()
+	w, _ := NewWriter(root)
+	end := time.Date(2008, 9, 27, 0, 0, 0, 0, time.UTC)
+	published := time.Date(2010, 1, 27, 0, 0, 0, 0, time.UTC)
+	first := model.FundamentalObservation{Source: "sec", IssuerID: issuerID, Taxonomy: "us-gaap", Concept: "CashAndCashEquivalentsAtCarryingValue", Unit: "USD", Currency: "USD", Value: "11875000000", PeriodEnd: end, AccessionNumber: "0001193125-10-012085", Form: "10-Q", FiscalYear: 2010, FiscalPeriod: "Q1", Temporal: model.Temporal{ObservedAt: end, PublishedAt: published, AvailableAt: published, IngestedAt: published.Add(time.Hour)}, RawPayloadHash: rawHash, Provenance: provenance(published.Add(time.Hour))}
+	second := first
+	second.AccessionNumber = "0001193125-10-012091"
+	second.Form = "10-K/A"
+	second.FiscalYear = 2009
+	second.FiscalPeriod = "FY"
+	second.Frame = "CY2008Q3I"
+
+	path, n, err := w.WriteFundamentals(issuerID, []model.FundamentalObservation{first, second})
+	if err != nil || n != 2 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	rows := rowsFromManifest[FundamentalRow](t, path)
+	if len(rows) != 2 {
+		t.Fatalf("rows=%d want 2", len(rows))
+	}
+	if rows[0].AccessionNumber == rows[1].AccessionNumber || rows[0].Frame == rows[1].Frame {
+		t.Fatalf("filing identity was not preserved: %+v", rows)
+	}
+	if rows[0].PublishedAt != rows[1].PublishedAt || rows[0].PeriodEnd != rows[1].PeriodEnd {
+		t.Fatalf("test facts do not share the colliding dimensions: %+v", rows)
+	}
+}
+
+func TestFundamentalExactSECRetryIsIdempotent(t *testing.T) {
+	root := t.TempDir()
+	w, _ := NewWriter(root)
+	end := time.Date(2008, 9, 27, 0, 0, 0, 0, time.UTC)
+	published := time.Date(2010, 1, 27, 0, 0, 0, 0, time.UTC)
+	fact := model.FundamentalObservation{Source: "sec", IssuerID: issuerID, Taxonomy: "us-gaap", Concept: "CashAndCashEquivalentsAtCarryingValue", Unit: "USD", Currency: "USD", Value: "11875000000", PeriodEnd: end, AccessionNumber: "0001193125-10-012091", Form: "10-K/A", FiscalYear: 2009, FiscalPeriod: "FY", Frame: "CY2008Q3I", Temporal: model.Temporal{ObservedAt: end, PublishedAt: published, AvailableAt: published, IngestedAt: published.Add(time.Hour)}, RawPayloadHash: rawHash, Provenance: provenance(published.Add(time.Hour))}
+	path, n, err := w.WriteFundamentals(issuerID, []model.FundamentalObservation{fact})
+	if err != nil || n != 1 {
+		t.Fatalf("initial n=%d err=%v", n, err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	retry := fact
+	retry.Temporal.IngestedAt = published.Add(2 * time.Hour)
+	retry.Provenance.IngestedAt = retry.Temporal.IngestedAt
+	retry.Provenance.IngestionRunID = "b2468ace-1357-4bdf-9024-6e2f59b9527a"
+	gotPath, n, err := w.WriteFundamentals(issuerID, []model.FundamentalObservation{retry})
+	if err != nil || n != 0 || gotPath != path {
+		t.Fatalf("retry path=%q n=%d err=%v", gotPath, n, err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !before.ModTime().Equal(after.ModTime()) {
+		t.Fatal("idempotent retry replaced manifest")
+	}
+	rows := rowsFromManifest[FundamentalRow](t, path)
+	if len(rows) != 1 || rows[0].AccessionNumber != fact.AccessionNumber || rows[0].Frame != fact.Frame {
+		t.Fatalf("retry duplicated or changed fact: %+v", rows)
+	}
+}
+
 func TestMacroRevisionsNoOpUnchangedAndPreserveABA(t *testing.T) {
 	w, _ := NewWriter(t.TempDir())
 	observed := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -492,6 +557,58 @@ func TestMacroRevisionsNoOpUnchangedAndPreserveABA(t *testing.T) {
 	rows := rowsFromManifest[EconomicRow](t, path)
 	if len(rows) != 3 || rows[0].Revision != 0 || rows[1].Revision != 1 || rows[2].Revision != 2 {
 		t.Fatalf("rows=%+v", rows)
+	}
+}
+
+func TestWriteEconomicsSupportsBCBPartitionIdentity(t *testing.T) {
+	root := t.TempDir()
+	w, _ := NewWriter(root)
+	observed := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+	published := observed.Add(24 * time.Hour)
+	fact := model.EconomicObservation{Source: "bcb", SeriesID: "432", Geography: "BR", Unit: "percent", Frequency: "monthly", Value: "1.25", Temporal: model.Temporal{ObservedAt: observed, PublishedAt: published, AvailableAt: published, IngestedAt: published.Add(time.Hour)}, RawPayloadHash: rawHash, Provenance: provenance(published.Add(time.Hour))}
+	path, n, err := w.WriteEconomics(fact.SeriesID, []model.EconomicObservation{fact})
+	if err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	wantPath := filepath.Join(root, "macroeconomics", "source=bcb", "series_id=432", ManifestFilename)
+	if path != wantPath {
+		t.Fatalf("path=%q want %q", path, wantPath)
+	}
+	manifest, err := ReadManifest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Source != "bcb" || manifest.Partition["source"] != "bcb" || manifest.Partition["series_id"] != fact.SeriesID {
+		t.Fatalf("manifest identity=%+v source=%q", manifest.Partition, manifest.Source)
+	}
+	rows := rowsFromManifest[EconomicRow](t, path)
+	if len(rows) != 1 || rows[0].Source != "bcb" || rows[0].SeriesID != fact.SeriesID {
+		t.Fatalf("rows=%+v", rows)
+	}
+	if _, n, err := w.WriteEconomics(fact.SeriesID, []model.EconomicObservation{fact}); err != nil || n != 0 {
+		t.Fatalf("retry n=%d err=%v", n, err)
+	}
+	if err := w.ValidateExisting(); err != nil {
+		t.Fatalf("ValidateExisting: %v", err)
+	}
+}
+
+func TestWriteEconomicsEmptyInputIsNoOp(t *testing.T) {
+	root := t.TempDir()
+	w, _ := NewWriter(root)
+	path, n, err := w.WriteEconomics("432", nil)
+	if err != nil || path != "" || n != 0 {
+		t.Fatalf("path=%q n=%d err=%v, want empty no-op", path, n, err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("normalized root entries=%v, want none", entries)
+	}
+	if err := w.ValidateExisting(); err != nil {
+		t.Fatalf("ValidateExisting: %v", err)
 	}
 }
 

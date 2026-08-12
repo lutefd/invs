@@ -297,22 +297,29 @@ func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObser
 // input slice is unchanged when validation, conflict detection, or publishing
 // fails.
 func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation) (string, int, error) {
-	dir, err := w.partition("macroeconomics", "source=fred", "series_id="+seriesID)
+	if len(obs) == 0 {
+		return "", 0, nil
+	}
+	source := sourceOfEconomics(obs)
+	if !validEconomicSource(source) {
+		return "", 0, fmt.Errorf("unsupported economic source %q", source)
+	}
+	dir, err := w.partition("macroeconomics", "source="+source, "series_id="+seriesID)
 	if err != nil {
 		return "", 0, err
 	}
 	for _, o := range obs {
-		if o.SeriesID != seriesID || o.Source != "fred" {
+		if o.SeriesID != seriesID || o.Source != source {
 			return "", 0, errors.New("economic observation/path identity mismatch")
 		}
 	}
-	partition := map[string]string{"dataset": "macroeconomics", "source": "fred", "series_id": seriesID}
+	partition := map[string]string{"dataset": "macroeconomics", "source": source, "series_id": seriesID}
 	existing, err := readCommitted[EconomicRow](dir, partition)
 	if err != nil {
 		return "", 0, fmt.Errorf("read existing macroeconomics: %w", err)
 	}
 	for _, r := range existing {
-		if r.Source != "fred" || r.SeriesID != seriesID {
+		if r.Source != source || r.SeriesID != seriesID {
 			return "", 0, fmt.Errorf("read existing macroeconomics: %w: partition identity mismatch", ErrMigrationRequired)
 		}
 	}
@@ -482,6 +489,9 @@ func economicRow(o model.EconomicObservation) (EconomicRow, error) {
 	if !o.Provenance.IngestedAt.Equal(o.Temporal.IngestedAt) {
 		return EconomicRow{}, errors.New("provenance/temporal ingested_at mismatch")
 	}
+	if !validEconomicSource(o.Source) {
+		return EconomicRow{}, fmt.Errorf("unsupported economic source %q", o.Source)
+	}
 	if o.Geography == "" || !validFrequency(o.Frequency) {
 		return EconomicRow{}, errors.New("invalid macro geography/frequency")
 	}
@@ -623,6 +633,20 @@ func sourceOfPrices(obs []model.PriceBar) string {
 	}
 	return obs[0].Source
 }
+func sourceOfEconomics(obs []model.EconomicObservation) string {
+	if len(obs) == 0 {
+		return "unknown"
+	}
+	return obs[0].Source
+}
+func validEconomicSource(source string) bool {
+	switch source {
+	case "fred", "bcb":
+		return true
+	default:
+		return false
+	}
+}
 func temporalMicros(t model.Temporal, publishedRequired bool) (observed, published, available, ingested int64, err error) {
 	if err = validateTemporal(t, publishedRequired); err != nil {
 		return 0, 0, 0, 0, err
@@ -654,7 +678,7 @@ func priceKey(r PriceRow) string {
 	return strings.Join([]string{r.Source, r.SecurityID, r.Interval, fmt.Sprint(r.ObservedAt), r.PriceBasis}, "\x1f")
 }
 func fundamentalKey(r FundamentalRow) string {
-	return strings.Join([]string{r.Source, r.IssuerID, r.SecurityID, r.Taxonomy, r.Concept, r.Unit, fmt.Sprint(r.HasPeriodStart), fmt.Sprint(r.PeriodStart), fmt.Sprint(r.PeriodEnd), fmt.Sprint(r.PublishedAt), fmt.Sprint(r.Revision)}, "\x1f")
+	return strings.Join([]string{r.Source, r.IssuerID, r.SecurityID, r.Taxonomy, r.Concept, r.Unit, fmt.Sprint(r.HasPeriodStart), fmt.Sprint(r.PeriodStart), fmt.Sprint(r.PeriodEnd), fmt.Sprint(r.PublishedAt), fmt.Sprint(r.Revision), r.AccessionNumber, r.Form, r.Frame}, "\x1f")
 }
 func economicKey(r EconomicRow) string {
 	return strings.Join([]string{r.Source, r.SeriesID, fmt.Sprint(r.ObservedAt), fmt.Sprint(r.PublishedAt), fmt.Sprint(r.Revision)}, "\x1f")
@@ -1032,6 +1056,9 @@ func validateStoredFundamental(r FundamentalRow) error {
 func validateStoredEconomic(r EconomicRow) error {
 	if err := validateStoredCommon(r.SchemaVersion, r.Source, r.RawPayloadHash, r.DataSourceID, r.IngestionRunID, r.NormalizerVersion); err != nil {
 		return err
+	}
+	if !validEconomicSource(r.Source) {
+		return fmt.Errorf("unsupported economic source %q", r.Source)
 	}
 	if r.SeriesID == "" || r.Geography == "" || r.Unit == "" || !validFrequency(r.Frequency) || r.Revision < 0 {
 		return errors.New("invalid economic domain fields")

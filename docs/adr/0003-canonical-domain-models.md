@@ -47,7 +47,7 @@ UUIDs are opaque and stable. A deterministic domain natural key is also specifie
 idempotent writes:
 
 - price: `(source, security, interval, observed_at, price_basis)`
-- fundamental: `(source, entity, concept, period, published_at, revision)`
+- fundamental: `(source, entity, concept, period, published_at, revision, accession_number, form, frame)`
 - economic: `(source, series, observed_at, published_at, revision)`
 - filing: `(source, accession/document identifier)`
 - corporate action: `(source, source_event_id)`
