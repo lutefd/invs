@@ -12,6 +12,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/luisdourado/invs/internal/model"
 	"github.com/luisdourado/invs/internal/normalize"
 	"github.com/luisdourado/invs/internal/providers/bcb"
+	"github.com/luisdourado/invs/internal/providers/cvm"
 	"github.com/luisdourado/invs/internal/providers/fred"
 	"github.com/luisdourado/invs/internal/providers/sec"
 	"github.com/luisdourado/invs/internal/providers/yahoo"
@@ -54,6 +57,7 @@ type normalizedStore interface {
 	WritePrices(string, []model.PriceBar) (string, int, error)
 	WriteFundamentals(string, []model.FundamentalObservation) (string, int, error)
 	WriteEconomics(string, []model.EconomicObservation) (string, int, error)
+	WriteFilings(string, []model.Filing) (string, int, error)
 }
 
 type operatorMetadataStore interface {
@@ -94,7 +98,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, prices, fred, or bcb")
+	source := flag.String("source", "all", "collector source: all, sec, prices, fred, bcb, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -222,7 +226,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "bcb": true}
+	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "bcb": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -237,6 +241,9 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "bcb" && !a.cfg.Providers.BCB.Enabled {
 		return errors.New("BCB provider is disabled")
+	}
+	if source == "cvm" && !a.cfg.Providers.CVM.Enabled {
+		return errors.New("CVM provider is disabled")
 	}
 	var errs []error
 	if (source == "all" || source == "sec") && a.cfg.Providers.SEC.Enabled {
@@ -256,6 +263,11 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "bcb") && a.cfg.Providers.BCB.Enabled {
 		if err := a.collectBCB(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "cvm") && a.cfg.Providers.CVM.Enabled {
+		if err := a.collectCVM(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -577,6 +589,294 @@ func (a *app) collectBCB(ctx context.Context) error {
 	}
 	collectErr := errors.Join(errs...)
 	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, snapshots))
+}
+
+func (a *app) collectCVM(ctx context.Context) error {
+	provider := a.cfg.Providers.CVM
+	years := append([]int(nil), provider.IPE.Years...)
+	sort.Ints(years)
+	c := cvm.NewClient(a.http)
+	m := metrics{
+		Source:    "cvm",
+		StartedAt: a.nowUTC(),
+		Cursor: map[string]any{
+			"provider":           "cvm",
+			"cad_enabled":        provider.CAD,
+			"ipe_years":          years,
+			"cad_policy":         "current_snapshot_ingestion_only",
+			"filing_source":      "cvm_ipe",
+			"resources_returned": 0,
+		},
+	}
+	run, skip, err := a.start(ctx, &m, cvmRunInputs(provider, a.cfg.Universe))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+
+	result, collectErr := c.Collect(ctx, cvm.Request{IncludeCAD: provider.CAD, IPEYears: years})
+	m.Received += result.RecordsReceived
+	m.Rejected += result.RecordsRejected
+	m.Cursor["resources_returned"] = len(result.Resources)
+	m.Cursor["records_received"] = result.RecordsReceived
+	m.Cursor["records_rejected"] = result.RecordsRejected
+	m.Cursor["ipe_rows_returned"] = len(result.IPE)
+	m.Cursor["cad_rows_returned"] = len(result.CAD)
+
+	resourceHashes, rawErr := a.storeCVMResources(ctx, &m, result.Resources)
+	if rawErr != nil {
+		collectErr = errors.Join(collectErr, rawErr)
+	}
+	if collectErr != nil {
+		m.Cursor["canonical_publication"] = "skipped_due_to_source_or_raw_error"
+		if provider.CAD {
+			a.log.Info("CVM CAD current snapshot retained as raw evidence; canonical publication skipped", "rows", len(result.CAD), "policy", "ingestion_only")
+		}
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+
+	var errs []error
+	if provider.CAD {
+		// The current CAD extract is not versioned issuer history. There is no
+		// honest latest-only CAD projection in the existing metadata boundary,
+		// so retain its raw evidence and make the non-publication explicit.
+		m.Rejected += len(result.CAD)
+		m.Cursor["cad_status"] = "ingestion_only_not_published"
+		m.Cursor["cad_rows_not_published"] = len(result.CAD)
+		a.log.Info("CVM CAD current snapshot retained as raw evidence; canonical publication skipped", "rows", len(result.CAD), "policy", "ingestion_only")
+		errs = append(errs, fmt.Errorf("CVM CAD current snapshot is ingestion-only; %d rows were not published", len(result.CAD)))
+	}
+
+	byCode, ambiguousCodes := cvmIssuerMappings(a.cfg.Universe)
+	byIssuer := make(map[string][]model.Filing)
+	matched, unmatched := 0, 0
+	for _, row := range result.IPE {
+		security, ok := byCode[row.CVMCode]
+		if !ok || ambiguousCodes[row.CVMCode] {
+			unmatched++
+			continue
+		}
+		rawHash, hashErr := cvmRawHashForRow(row, resourceHashes)
+		if hashErr != nil {
+			m.Rejected++
+			errs = append(errs, hashErr)
+			continue
+		}
+		filing, filingErr := cvmFiling(security.IssuerID, row, rawHash, run)
+		if filingErr != nil {
+			m.Rejected++
+			errs = append(errs, fmt.Errorf("CVM IPE %s: %w", row.SourceDocumentID, filingErr))
+			continue
+		}
+		byIssuer[security.IssuerID] = append(byIssuer[security.IssuerID], filing)
+		matched++
+	}
+	if unmatched > 0 {
+		m.Rejected += unmatched
+		errs = append(errs, fmt.Errorf("%d CVM IPE rows had no unique exact configured CVM-code mapping", unmatched))
+	}
+	m.Cursor["ipe_rows_matched"] = matched
+	m.Cursor["ipe_rows_unmatched"] = unmatched
+	m.Cursor["issuers_with_filings"] = len(byIssuer)
+
+	issuerIDs := make([]string, 0, len(byIssuer))
+	for issuerID := range byIssuer {
+		issuerIDs = append(issuerIDs, issuerID)
+	}
+	sort.Strings(issuerIDs)
+	for _, issuerID := range issuerIDs {
+		filings := byIssuer[issuerID]
+		path, n, writeErr := a.normalized.WriteFilings(issuerID, filings)
+		if writeErr != nil {
+			errs = append(errs, fmt.Errorf("CVM IPE issuer %s: %w", issuerID, writeErr))
+			continue
+		}
+		m.OutputRows += n
+		m.Cursor["last_issuer_id"] = issuerID
+		a.log.Info("normalized dataset", "source", "cvm_ipe", "issuer_id", issuerID, "path", path, "rows", len(filings), "rows_changed", n)
+	}
+	if result.RecordsRejected > 0 {
+		errs = append(errs, fmt.Errorf("%d CVM source records rejected", result.RecordsRejected))
+	}
+	collectErr = errors.Join(errs...)
+	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+}
+
+func (a *app) storeCVMResources(ctx context.Context, m *metrics, resources []cvm.RawResource) (map[string]string, error) {
+	hashes := make(map[string]string, len(resources))
+	var errs []error
+	for _, resource := range resources {
+		attributes := cvmRawAttributes(resource)
+		objectKey := rawKey("cvm", string(resource.Kind), resource.Key, resource.Bytes, m.StartedAt, cvmResourceExtension(resource))
+		storedHash, err := a.storeRaw(ctx, m, objectKey, resource.Bytes, storage.RawMetadata{
+			Source:      "cvm",
+			ContentType: resource.ContentType,
+			FetchedAt:   m.StartedAt,
+			Attributes:  attributes,
+		}, cvmLogicalKey(resource), "cvm", resource.SHA256)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("CVM resource %s: %w", resource.Key, err))
+			continue
+		}
+		hashes[resource.Key] = storedHash
+	}
+	return hashes, errors.Join(errs...)
+}
+
+func cvmRawAttributes(resource cvm.RawResource) map[string]string {
+	attributes := map[string]string{
+		"resource_key":   resource.Key,
+		"resource_kind":  string(resource.Kind),
+		"source_url":     resource.URL,
+		"parser_version": resource.ParserVersion,
+		"adapter_sha256": resource.SHA256,
+		"content_type":   resource.ContentType,
+	}
+	if resource.Year != 0 {
+		attributes["year"] = strconv.Itoa(resource.Year)
+	}
+	for key, value := range resource.ParserMetadata {
+		attributes[key] = value
+	}
+	return attributes
+}
+
+func cvmLogicalKey(resource cvm.RawResource) string {
+	return resource.Key
+}
+
+func cvmResourceExtension(resource cvm.RawResource) string {
+	switch resource.Kind {
+	case cvm.ResourceCAD:
+		return "csv"
+	case cvm.ResourceIPEMetadata:
+		return "txt"
+	case cvm.ResourceIPEArchive:
+		return "zip"
+	default:
+		return "bin"
+	}
+}
+
+func cvmIssuerMappings(universe []config.Security) (map[string]config.Security, map[string]bool) {
+	byCode := make(map[string]config.Security)
+	ambiguous := make(map[string]bool)
+	for _, security := range universe {
+		code := strings.TrimSpace(security.CVMCode)
+		if code == "" {
+			continue
+		}
+		if _, exists := byCode[code]; exists {
+			ambiguous[code] = true
+			continue
+		}
+		byCode[code] = security
+	}
+	return byCode, ambiguous
+}
+
+func cvmRunInputs(provider config.CVMProvider, universe []config.Security) metadata.RunInputs {
+	years := append([]int(nil), provider.IPE.Years...)
+	sort.Ints(years)
+	resources := make([]string, 0, len(years)+1)
+	if provider.CAD {
+		resources = append(resources, "cad")
+	}
+	for _, year := range years {
+		resources = append(resources, fmt.Sprintf("ipe:%04d", year))
+	}
+	requests := make([]metadata.IssuerRequest, 0, len(universe))
+	for _, security := range universe {
+		requestResources := append([]string(nil), resources...)
+		requestResources = append(requestResources, "cvm_code:"+strings.TrimSpace(security.CVMCode))
+		requests = append(requests, metadata.IssuerRequest{
+			IssuerID:   security.IssuerID,
+			SecurityID: security.SecurityID,
+			CIK:        security.CIK,
+			Resources:  requestResources,
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "cvm",
+		Provider: metadata.ProviderInputs{
+			Name:                    "cvm",
+			Kind:                    "filings",
+			ConfiguredUniverseCount: len(universe),
+			IssuerRequests:          requests,
+			Format:                  "cad_csv+ipe_metadata_zip",
+			Vintage:                 "current",
+		},
+	}
+}
+
+func cvmRawHashForRow(row cvm.IPERow, resourceHashes map[string]string) (string, error) {
+	prefix := "zip/year="
+	if !strings.HasPrefix(row.RawRecordLocator, prefix) {
+		return "", fmt.Errorf("CVM IPE %s has invalid raw record locator %q", row.SourceDocumentID, row.RawRecordLocator)
+	}
+	rest := strings.TrimPrefix(row.RawRecordLocator, prefix)
+	slash := strings.IndexByte(rest, '/')
+	if slash <= 0 {
+		return "", fmt.Errorf("CVM IPE %s has invalid raw record locator %q", row.SourceDocumentID, row.RawRecordLocator)
+	}
+	year, err := strconv.Atoi(rest[:slash])
+	if err != nil {
+		return "", fmt.Errorf("CVM IPE %s has invalid raw record locator %q: %w", row.SourceDocumentID, row.RawRecordLocator, err)
+	}
+	key := fmt.Sprintf("cvm/ipe/year=%04d", year)
+	hash := resourceHashes[key]
+	if hash == "" {
+		return "", fmt.Errorf("CVM IPE %s has no stored raw resource for %s", row.SourceDocumentID, key)
+	}
+	return hash, nil
+}
+
+func cvmFiling(issuerID string, row cvm.IPERow, rawHash string, run metadata.Run) (model.Filing, error) {
+	if strings.TrimSpace(row.DownloadURL) == "" {
+		return model.Filing{}, errors.New("document URL is required for canonical publication")
+	}
+	ingestedAt := canonicalTime(row.IngestedAt)
+	temporal := model.Temporal{
+		AvailableAt:        canonicalTime(row.AvailableAt),
+		IngestedAt:         ingestedAt,
+		PublishedPrecision: model.PrecisionUnknown,
+		ObservedPrecision:  model.TimePrecision(row.ObservedPrecision),
+	}
+	if row.ObservedAt != nil {
+		temporal.ObservedAt = canonicalTime(*row.ObservedAt)
+	}
+	if temporal.ObservedPrecision == "" {
+		temporal.ObservedPrecision = model.PrecisionUnknown
+	}
+	filing := model.Filing{
+		ID:               uuid.NewSHA1(uuid.NameSpaceURL, []byte("cvm_ipe:"+issuerID+":"+row.SourceDocumentID)).String(),
+		Source:           "cvm_ipe",
+		IssuerID:         issuerID,
+		SourceDocumentID: row.SourceDocumentID,
+		DocumentURL:      row.DownloadURL,
+		AccessionNumber:  row.AccessionNumber,
+		FormType:         row.FormType,
+		Category:         row.Category,
+		DocumentType:     row.Type,
+		Species:          row.Species,
+		Subject:          row.Subject,
+		PresentationType: row.PresentationType,
+		FilingDate:       canonicalTime(row.DeliveryDate),
+		PeriodEnd:        row.ReferenceDate,
+		Temporal:         temporal,
+		RawPayloadHash:   rawHash,
+		Provenance:       model.Provenance{RawPayloadHash: rawHash, RawRecordLocator: row.RawRecordLocator, IngestedAt: ingestedAt, NormalizerVersion: model.NormalizerVersion},
+	}
+	if err := stampProvenance(run, rawHash, &filing.RawPayloadHash, &filing.Provenance, filing.Temporal); err != nil {
+		return model.Filing{}, err
+	}
+	if err := filing.Validate(); err != nil {
+		return model.Filing{}, err
+	}
+	return filing, nil
 }
 
 func bcbRawAttributes(series config.BCBSeries) map[string]string {
