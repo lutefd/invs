@@ -59,14 +59,14 @@ func (c *Client) CollectCompany(ctx context.Context, issuerID string, cik int64)
 	if err != nil {
 		return CompanyResult{}, fmt.Errorf("SEC submissions CIK %d: %w", cik, err)
 	}
-	factBytes, err := c.http.Get(ctx, factsURL)
-	if err != nil {
-		return CompanyResult{}, fmt.Errorf("SEC companyfacts CIK %d: %w", cik, err)
-	}
 	rawDocuments := []RawDocument{
 		{Kind: "submissions", Data: subBytes, SHA256: digest(subBytes)},
-		{Kind: "companyfacts", Data: factBytes, SHA256: digest(factBytes)},
 	}
+	factBytes, err := c.http.Get(ctx, factsURL)
+	if err != nil {
+		return CompanyResult{Raw: rawDocuments}, fmt.Errorf("SEC companyfacts CIK %d: %w", cik, err)
+	}
+	rawDocuments = append(rawDocuments, RawDocument{Kind: "companyfacts", Data: factBytes, SHA256: digest(factBytes)})
 	ingested := c.now().UTC()
 	issuer, filings, receivedFilings, rejectedFilings, err := parseSubmissions(subBytes, issuerID, cik, ingested)
 	if err != nil {

@@ -5,14 +5,23 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 )
 
-type fakeGetter struct{ responses map[string][]byte }
+type fakeGetter struct {
+	responses map[string][]byte
+	failures  map[string]error
+}
 
 func (f fakeGetter) Get(_ context.Context, u string) ([]byte, error) {
+	for suffix, err := range f.failures {
+		if strings.HasSuffix(u, suffix) {
+			return nil, err
+		}
+	}
 	for suffix, b := range f.responses {
 		if strings.HasSuffix(u, suffix) {
 			return b, nil
@@ -115,5 +124,45 @@ func TestCollectCompanyRetainsRawOnParseError(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCollectCompanyRetainsSubmissionsOnCompanyFactsTransportError(t *testing.T) {
+	submissions := []byte(`{"cik":"0000000001","name":"Example Corp","filings":{"recent":{}}}`)
+	transportErr := errors.New("companyfacts unavailable")
+	c := NewClient(fakeGetter{
+		responses: map[string][]byte{
+			"submissions/CIK0000000001.json": submissions,
+		},
+		failures: map[string]error{
+			"companyfacts/CIK0000000001.json": transportErr,
+		},
+	})
+
+	r, err := c.CollectCompany(context.Background(), "issuer-1", 1)
+	if !errors.Is(err, transportErr) {
+		t.Fatalf("err=%v want wrapped transport error", err)
+	}
+	if len(r.Raw) != 1 {
+		t.Fatalf("raw documents=%d want 1", len(r.Raw))
+	}
+	got := r.Raw[0]
+	if got.Kind != "submissions" || !bytes.Equal(got.Data, submissions) || got.SHA256 != sha256Hex(submissions) {
+		t.Fatalf("raw=%+v want submissions payload with SHA-256 %s", got, sha256Hex(submissions))
+	}
+}
+
+func TestCollectCompanyReturnsNoRawOnSubmissionsTransportError(t *testing.T) {
+	transportErr := errors.New("submissions unavailable")
+	c := NewClient(fakeGetter{failures: map[string]error{
+		"submissions/CIK0000000001.json": transportErr,
+	}})
+
+	r, err := c.CollectCompany(context.Background(), "issuer-1", 1)
+	if !errors.Is(err, transportErr) {
+		t.Fatalf("err=%v want wrapped transport error", err)
+	}
+	if len(r.Raw) != 0 {
+		t.Fatalf("raw documents=%d want 0", len(r.Raw))
 	}
 }
