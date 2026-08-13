@@ -76,10 +76,20 @@ decision_at` is necessary for measurements, but never sufficient without
 `observed_precision` does not change this rule. A date-precision `observed_at` is a
 reference date encoded at UTC midnight, while `available_at` remains the conservative
 knowledge cutoff used by research. Provider mappings are FRED observation date to
-`date`, SEC period date to `date`, and Yahoo bar timestamp to `second`. Earlier valid
+`date`, ALFRED observation and vintage dates to `date`, SEC period date to `date`,
+and Yahoo bar timestamp to `second`. Earlier valid
 v1 records may omit the optional marker; readers treat that omission as `unknown`.
 Present values outside the enum are invalid and adapters/readers fail closed rather
 than coercing them or guessing precision.
+
+ALFRED is the historical macro exception to installation-time-only FRED pulls. The
+collector requests the complete supported real-time left boundary and a configured
+closed right boundary using observations-by-real-time-period output. A row's
+`realtime_start` is encoded as date-precision `published_at` and `vintage_at`.
+Because the API supplies no intraday release time or timezone, `available_at` is
+that UTC date plus 36 hours. This is a deliberate fail-closed platform policy, not
+an API claim. Research must also name `macro_source`; identically named FRED and
+ALFRED series are never merged implicitly.
 
 Unknown `published_at` does not become a historical cutoff by inference. The source
 normalizer must instead supply an explicit conservative `available_at`; missing

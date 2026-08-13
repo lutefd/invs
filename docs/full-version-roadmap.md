@@ -43,7 +43,7 @@ empty repository. The following should be treated as existing contracts to exten
 not systems to replace:
 
 - Go collectors and provider adapters for Yahoo daily prices, SEC company facts,
-  FRED, BCB SGS, and staged CVM data.
+  FRED, ALFRED historical vintages, BCB SGS, and staged CVM data.
 - Immutable raw objects, per-run raw manifests, SHA-256 verification, and raw-first
   collector ordering.
 - PostgreSQL identities, versioned security identifiers, source configuration,
@@ -69,8 +69,9 @@ The following baseline limitations drive the version order:
 
 - Current Yahoo, FRED, and BCB backfills do not establish historical knowledge
   availability.
-- ALFRED vintages, corporate actions, historical universe membership, exchange
-  calendars, and historical identifier resolution are absent.
+- ALFRED vintage ingestion and exact-boundary fixture selection are implemented but
+  not live-accepted; corporate actions, historical universe membership, exchange
+  calendars, and historical identifier resolution remain absent.
 - B3 market data and broad Brazilian instrument discovery are not yet admitted.
 - SEC filing metadata is not yet a canonical dataset, and CVM CAD is intentionally
   raw-only.

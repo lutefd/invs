@@ -104,6 +104,7 @@ The collector accepts these source names:
 make ingest SOURCE=prices
 make ingest SOURCE=sec
 make ingest SOURCE=fred
+make ingest SOURCE=alfred
 make ingest SOURCE=bcb
 make ingest SOURCE=cvm
 make ingest SOURCE=all
@@ -193,6 +194,43 @@ Set `FRED_API_KEY` in `.env` only when the selected FRED endpoint requires it.
 Non-finite values are rejected. Current downloads receive conservative
 ingestion availability, not a reconstructed historical vintage date. Use the
 canonical macro revision and vintage fields when analyzing the series.
+
+### ALFRED historical macro vintages
+
+ALFRED uses the official [FRED series observations API](https://fred.stlouisfed.org/docs/api/fred/series_observations.html)
+with `output_type=1`; the [ALFRED help](https://alfred.stlouisfed.org/help)
+describes the archival vintage role. Configure
+explicit semantic dimensions, a closed `realtime_end`, and optional observation
+bounds. The adapter always requests from `1776-07-04` so the API cannot clip row
+vintage starts to an operator-selected left boundary:
+
+```yaml
+providers:
+  alfred:
+    enabled: true
+    series:
+      - id: CPIAUCSL
+        geography: US
+        unit: index_1982_1984_100
+        frequency: monthly
+        seasonal_adjustment: seasonally_adjusted
+        realtime_end: 2026-08-11
+        observation_start: 2018-01-01
+        observation_end: 2026-07-01
+```
+
+Set the 32-character lowercase alphanumeric `FRED_API_KEY` in `.env`, then run:
+
+```sh
+make ingest SOURCE=alfred RUN_KEY=alfred-cpi-2026-08-11
+```
+
+Every JSON page is stored before canonical publication and each row retains its
+page hash. The row real-time start becomes date-precision `published_at` and
+`vintage_at`; `available_at` is deliberately set 36 hours later because the API
+does not document an intraday release time or timezone. Revisions are deterministic
+zero-based ordinals per observation date. A source `.` is retained as an explicit
+null vintage rather than dropped. ALFRED and current FRED remain separate sources.
 
 ### BCB SGS macro series
 
@@ -489,6 +527,7 @@ snapshot = catalog.research_snapshot(
     decision_at="2026-08-12T21:00:00Z",
     mapping=mapping,
     fundamental_concept="RevenueFromContractWithCustomerExcludingAssessedTax",
+    macro_source="fred",
     macro_series_id="DGS10",
     start="2024-01-01",
     end="2026-08-12",

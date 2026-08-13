@@ -1,8 +1,8 @@
 # V1/v0 foundation architecture
 
 This is the first actively developed v1/v0 foundation. The first vertical slice
-collects daily US equity prices, SEC company metadata and fundamentals, and FRED
-and BCB macro series. It preserves source bytes, publishes canonical
+collects daily US equity prices, SEC company metadata and fundamentals, current
+FRED/BCB macro series, and bounded ALFRED historical vintages. It preserves source bytes, publishes canonical
 Parquet through immutable manifests, registers operational metadata in PostgreSQL,
 and publishes accepted latest-only price/macro projections for Grafana. It exposes
 canonical history through DuckDB/Jupyter and a closed, deterministic `market-basic`
@@ -47,7 +47,7 @@ claim is part of this foundation until unattended access, a captured fixture, an
 the required market-data policy boundary are established.
 
 ```text
-SEC / FRED / BCB / Yahoo / CVM provider
+SEC / FRED / ALFRED / BCB / Yahoo / CVM provider
             |
             v
  collector + source adapter -----> PostgreSQL
@@ -116,8 +116,8 @@ snapshot data.
 
 Fresh PostgreSQL volumes apply the forward migrations in order: `000001_core_metadata`,
 `000002_latest_observation_snapshots`, `000003_observed_precision`, and
-`000004_run_inputs`. Existing initialized volumes use `make migrate`, which conditionally
-applies missing `000002`–`000004` changes in order; its schema checks make rerunning the
+`000004_run_inputs`, and `000005_nullable_macro_snapshot_value`. Existing initialized volumes use `make migrate`, which conditionally
+applies missing changes in order; its schema checks make rerunning the
 command idempotent. `000001` is the base schema created during volume initialization.
 
 ## Point-in-time query boundary
@@ -125,7 +125,7 @@ command idempotent. `000001` is the base schema created during volume initializa
 Research access is split into an explicit point-in-time mode and a present-day
 convenience mode:
 
-- `research_snapshot(decision_at)` requires both `available_at <= decision_at` and
+- `research_snapshot(decision_at, macro_source=...)` requires both `available_at <= decision_at` and
   `observed_at <= decision_at`. `available_at` is the explicit conservative knowledge
   cutoff used by research; it may incorporate source publication precision and any
   documented source-specific delay. `published_at` remains source metadata and is not
@@ -135,10 +135,10 @@ convenience mode:
   mappings, not historical identifier resolution, and are not reconstructed by
   `decision_at`.
 - `latest()` is a present-day convenience view and is forbidden in backtest code. The
-  accepted FRED and BCB macro projections are current-vintage latest rows, not a
-  historical-vintage store; Yahoo backfills likewise provide only the provider data
-  returned and collected at ingestion time. The acceptance therefore does not establish
-  full historical point-in-time availability.
+  FRED and BCB projections are current-vintage latest rows. ALFRED's authoritative
+  history remains in manifest-backed Parquet while PostgreSQL exposes only its latest
+  operational projection. Yahoo backfills likewise provide only the provider data
+  returned and collected at ingestion time.
 
 Macro latest-row selection uses the same total order as PostgreSQL finalization:
 `observed_at DESC`, `revision DESC`, `available_at DESC`, `ingested_at DESC`, then

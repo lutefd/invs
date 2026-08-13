@@ -19,9 +19,39 @@ On 2026-08-13, the first three immediate actions from this handoff were complete
 
 The durable evidence is in
 [the market-basic operator acceptance report](acceptance/2026-08-12-market-basic.md).
-The next data-integrity milestone is ALFRED/historical-vintage ingestion; optional
-CVM filing and feature-inspection notebook cells remain separate presentation work.
-No strategy, backtest, portfolio, or ML boundary was introduced.
+
+The next data-integrity milestone has now also been implemented:
+
+- ALFRED is a separate disabled-by-default macro source using the official FRED
+  observations endpoint with historical real-time periods and explicit replay bounds.
+- Raw JSON pages are persisted before canonical publication, with per-page hashes,
+  non-secret run inputs, deterministic per-observation revisions, explicit null
+  vintages, and a conservative 36-hour availability policy for date-only vintages.
+- Historical ALFRED writes are idempotent and preserve A -> B -> A sequences without
+  revision drift. Current FRED and ALFRED series remain source-separated in research.
+- PostgreSQL's latest macro projection now permits an explicit null value; authoritative
+  historical vintages remain in manifest-backed Parquet.
+- Provider, collector, normalizer, metadata, research-cutoff, and dashboard fixture
+  tests pass. Live ALFRED acceptance is still pending because the local environment
+  does not contain a usable `FRED_API_KEY`.
+
+The platform now has a canonical [full-version roadmap](full-version-roadmap.md) and
+a granular [roadmap execution index](roadmap/README.md), introduced at `cec0ed4`.
+The roadmap, rather than the old numbered actions at the bottom of this historical
+handoff, is the sequencing authority for future versions. Optional CVM filing and
+feature-inspection notebook cells remain separate presentation work. No strategy,
+backtest, portfolio, or ML boundary was introduced by the ALFRED slice.
+
+## Current continuation boundary
+
+- Repository: `/home/luis/dev/invs`
+- Branch: `main`
+- ALFRED implementation boundary: `75e0941` (`fix(migrations): sequence nullable macro values`)
+- Roadmap boundary: `cec0ed4` (`docs(roadmap): define full platform phases`)
+- Live ALFRED blocker: supply a valid environment-only `FRED_API_KEY`; do not put it
+  in YAML, run metadata, raw attributes, logs, or acceptance artifacts.
+- The older `742e5ae` implementation point below remains useful as the exact original
+  handoff baseline, but it is no longer the current repository boundary.
 
 ## Exact implementation handoff point
 
@@ -311,7 +341,7 @@ missing fields, invalid manifests, hash/row-count mismatches, numeric physical
 columns where canonical strings are required, malformed decimal strings, invalid
 partition identity, duplicate JSON keys, and unlisted parts.
 
-`research_snapshot(decision_at=...)` performs explicit as-of selection. It requires
+`research_snapshot(decision_at=..., macro_source=...)` performs explicit as-of selection. It requires
 both `available_at <= decision_at` and `observed_at <= decision_at`, applies the
 configured security-to-issuer mapping, and prevents accidental cross-issuer joins.
 The YAML universe mapping is current configuration, not a historically versioned
@@ -337,7 +367,7 @@ Grafana dashboards are provisioned from
 - Pipeline health shows run status, failures, partials, rejected counts, raw bytes,
   and recent activity.
 - The market dashboard lists configured securities even when no snapshot exists,
-  shows explicit no-snapshot states, and displays only accepted latest Yahoo/FRED/BCB
+  shows explicit no-snapshot states, and displays only accepted latest Yahoo/FRED/ALFRED/BCB
   projections.
 - SEC is labeled ingestion-only because no fundamental snapshot table exists.
 - CVM filings are not presented as market snapshots.
@@ -387,6 +417,19 @@ duplicate JSON keys and emits PostgreSQL `EXPLAIN` statements for all dashboard 
   knowable on an earlier date.
 - The v0 acceptance retained `DGS10` and `CPIAUCSL` output (16,137 and 954 rows in
   the retained r3 acceptance report).
+
+### ALFRED historical vintages
+
+- Source code: [internal/providers/alfred/client.go](../internal/providers/alfred/client.go)
+- Config/command: `providers.alfred`, `make ingest SOURCE=alfred`
+- The provider is disabled by default and requires environment-only `FRED_API_KEY`.
+- Requests use `output_type=1`, the complete supported real-time left boundary,
+  an explicit closed right boundary, and paginated JSON raw objects.
+- Date-only vintage starts become `published_at`/`vintage_at` with date precision;
+  the safe research availability cutoff is 36 hours later.
+- Canonical revisions are deterministic ordinals per observation date, including
+  equal-value and explicit missing vintages. Historical reruns do not auto-renumber.
+- Fixture/unit/integration acceptance passes. No live API acceptance is claimed yet.
 
 ### BCB SGS
 
@@ -542,11 +585,7 @@ portfolio constructor, label/training pipeline, or ML model registry. It current
 publishes one security artifact per call; a dataset-wide orchestrator and feature
 artifact catalog are future work.
 
-One documentation mismatch remains for a later narrow follow-up: ADR 0005 was
-written before implementation and still describes calculation as a non-goal, while
-`742e5ae` now implements the bounded engine. The contract itself is unchanged;
-README/architecture/ADR wording should be aligned without broadening the feature
-scope.
+The bounded engine documentation has been aligned without broadening its scope.
 
 ## Operational setup and current use
 
@@ -576,7 +615,7 @@ make urls
 ```
 
 Fresh PostgreSQL volumes apply migrations `000001_core_metadata` through
-`000004_run_inputs`. Existing initialized volumes use the idempotent `make migrate`
+`000004_run_inputs`, and `000005_nullable_macro_snapshot_value`. Existing initialized volumes use the idempotent `make migrate`
 target. Current local runtime observations were PostgreSQL 17.10, Jupyter healthy,
 Grafana healthy on `127.0.0.1:3001`, and PostgreSQL healthy on the default database
 port. The configured host Grafana port is environment-dependent; use `make urls`.
@@ -625,7 +664,7 @@ The supported research path is:
 
 1. Run collection and confirm raw manifests and canonical manifests exist.
 2. Open or execute [python/notebooks/vertical_slice.ipynb](../python/notebooks/vertical_slice.ipynb).
-3. Use `ResearchCatalog.research_snapshot(decision_at=...)` for an explicit as-of
+3. Use `ResearchCatalog.research_snapshot(decision_at=..., macro_source=...)` for an explicit as-of
    price/fundamental/macro view.
 4. Use `ResearchCatalog.point_in_time_inputs(...)` as the input boundary for a
    derived feature.
@@ -694,7 +733,8 @@ The following are not accidental omissions:
 - No full historical point-in-time guarantee for current Yahoo, FRED, or BCB pulls.
   Historical vintage providers and publication-time evidence are required before a
   serious backtest claim.
-- No ALFRED vintage/revision ingestion yet.
+- ALFRED historical-vintage ingestion is implemented and fixture-accepted, but a
+  bounded live credentialed acceptance run has not yet been recorded.
 - No broad B3/CVM market instrument discovery, B3 market data, or unattended B3
   access policy. B3 remains deferred until access, fixtures, mapping, and policy are
   explicit.
@@ -711,29 +751,21 @@ The following are not accidental omissions:
   batch runner, calendar policy, strategy, backtester, portfolio, execution, labels,
   training data, or ML behavior.
 - Notebook does not yet expose CVM filing inspection or feature artifacts.
-- README, architecture, and ADR 0005 still contain wording predating the feature
-  implementation and should be aligned in a later documentation-only slice.
+- The roadmap is now present; version exit status must be updated there only after
+  its stated acceptance gate passes.
 
 ## Exact next actions
 
-The next work should remain sliced and committed separately:
+Follow [the roadmap execution index](roadmap/README.md). The nearest cohesive units are:
 
-1. Align README, architecture, and ADR 0005 wording with the implemented
-   `market-basic` engine. Preserve the narrow contract and explicitly keep strategy,
-   backtest, and ML out of scope.
-2. Inspect the active `fred` run in PostgreSQL and cancel it only if it is confirmed
-   orphaned, with an explicit operator reason. Do not use automatic cleanup.
-3. Run the feature engine against a real manifest-backed local price slice, archive
-   the resulting artifact outside the repository if desired, and verify tamper,
-   idempotency, conflict, and point-in-time behavior end to end.
-4. Add the separate optional CVM filing-inspection notebook cell only after the
-   filing usage policy is documented; do not join filings one-to-many into the
-   existing snapshot.
-5. Implement the universal raw-preservation-on-top-level-parse-error contract and
-   tests before broad provider expansion.
-6. If durable in-repository acceptance evidence is desired, add a small report
-   pointing to the retained CVM archives; do not rerun the already-passed replay
-   merely to produce that report.
-7. Continue with ALFRED/vintage support, BCB/CVM/B3 expansion, and only then a
-   separately versioned feature/backtest layer. Do not begin strategy or execution
-   work by treating current-vintage backfills as historical truth.
+1. Configure `FRED_API_KEY`, run one bounded ALFRED live acceptance, retry the exact
+   run key, verify raw manifests/Parquet/PostgreSQL, and record the accepted commit
+   and bounds without recording the key.
+2. Finish the universal downloaded-bytes-plus-parse-error contract for the remaining
+   providers.
+3. Add separate CVM filing and feature-artifact notebook inspection; do not join
+   filings one-to-many into the price/fundamental/macro snapshot.
+4. Complete reconciliation and backup/restore runbooks plus a clean restore drill.
+5. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
+   work and its US/Brazil bias fixtures. Do not start strategy or execution work by
+   treating current-vintage backfills as historical truth.

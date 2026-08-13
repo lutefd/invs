@@ -96,6 +96,7 @@ The initial provider mappings are explicit:
 | Provider value | Source field | Canonical marker |
 | --- | --- | --- |
 | FRED | observation date | `date` |
+| ALFRED | observation and real-time vintage dates | `date` |
 | SEC | period date | `date` |
 | Yahoo | bar timestamp | `second` |
 

@@ -2,7 +2,9 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE collection and canonical filing metadata subsequently passed a bounded live acceptance at implementation commit `742e5ae`. The repository also includes the closed deterministic `market-basic` feature engine. B3 remains deferred.
+Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE subsequently passed bounded live acceptance, and the repository now includes the closed deterministic `market-basic` feature engine plus fixture-accepted ALFRED historical-vintage ingestion. A live ALFRED run still requires a configured `FRED_API_KEY`. B3 remains deferred.
+
+The product path is documented in the [full-version roadmap](docs/full-version-roadmap.md), with granular execution views in the [roadmap index](docs/roadmap/README.md).
 
 The current accepted vertical slice covers Yahoo daily prices, SEC company facts, FRED macro series, and BCB SGS macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; run finalization publishes accepted price/macro candidates to those projections in the same PostgreSQL transaction that closes the run. A partial run may publish successful entities while a parse-error entity publishes no snapshot.
 
@@ -12,7 +14,7 @@ The current accepted vertical slice covers Yahoo daily prices, SEC company facts
 - GNU Make
 - outbound HTTPS access for collection
 
-All published ports bind to `127.0.0.1`. No API key is required for the included vertical slice, but SEC requires a descriptive User-Agent with a real contact address.
+SEC requires a descriptive User-Agent with a real contact address. ALFRED requires a 32-character lowercase alphanumeric `FRED_API_KEY`; the key is loaded only from the environment and is excluded from YAML, run inputs, raw metadata, and errors.
 
 ## First start
 
@@ -22,7 +24,7 @@ make setup
 
 This creates untracked `.env` and `config/config.local.yaml` files with private permissions. Before SEC ingestion:
 
-The committed `config/config.example.yaml` is the safe starter configuration: Yahoo and FRED are enabled, while SEC, BCB, and CVM are disabled by default. `make setup` copies it to the untracked `config/config.local.yaml`; the completed acceptance used a local override with SEC and BCB enabled and a bounded BCB end date. That local acceptance override is not the committed example configuration.
+The committed `config/config.example.yaml` is the safe starter configuration: Yahoo and FRED are enabled, while SEC, ALFRED, BCB, and CVM are disabled by default. `make setup` copies it to the untracked `config/config.local.yaml`; the completed acceptance used a local override with SEC and BCB enabled and a bounded BCB end date. That local acceptance override is not the committed example configuration.
 
 1. Set `SEC_USER_AGENT` in `.env` to a descriptive value with your contact address.
 2. Review the starting universe and date range in `config/config.local.yaml`, then set `providers.sec.enabled: true` when the contact is ready. SEC is disabled in the safe starter configuration.
@@ -42,9 +44,9 @@ After pulling a version that adds a database migration, upgrade an existing Post
 make migrate
 ```
 
-Fresh volumes apply the current forward migration sequence automatically: `000001_core_metadata`, `000002_latest_observation_snapshots`, `000003_observed_precision`, and `000004_run_inputs`. For an existing initialized volume, `make migrate` conditionally applies any missing `000002`–`000004` changes in order; its schema checks make rerunning it idempotent. The `000001` core metadata schema is the base created during volume initialization.
+Fresh volumes apply the current forward migration sequence automatically through `000005_nullable_macro_snapshot_value`. For an existing initialized volume, `make migrate` conditionally applies missing snapshot, precision, run-input, and nullable-macro-value changes in order; its schema checks make rerunning it idempotent.
 
-`make urls` prints the current tokenized Jupyter URL. Grafana is at `http://127.0.0.1:3000` by default. If port 3000 is occupied, set `GRAFANA_PORT=3300` in `.env` before startup.
+`make urls` prints the current tokenized Jupyter URL. Published PostgreSQL, Jupyter, and Grafana ports bind to `0.0.0.0`; use the server's reachable hostname or IP from another machine. Grafana uses port `3000` by default. If port 3000 is occupied, set `GRAFANA_PORT=3300` in `.env` before startup.
 
 ## Collect data
 
@@ -60,6 +62,8 @@ Or run one source at a time:
 make ingest SOURCE=prices
 make ingest SOURCE=sec
 make ingest SOURCE=fred
+# after enabling providers.alfred and setting FRED_API_KEY
+make ingest SOURCE=alfred
 make ingest SOURCE=bcb
 # after enabling providers.cvm and configuring exact universe CVM codes
 make ingest SOURCE=cvm
@@ -91,7 +95,7 @@ Open `notebooks/vertical_slice.ipynb` in JupyterLab, or execute it non-interacti
 make notebook
 ```
 
-The notebook loads the configured universe to map a price `security_id` to its SEC `issuer_id`; it never pairs independently selected identifiers. Its explicit decision timestamp produces an “as known then” snapshot: the latest price revision for each observed session and the latest eligible SEC/FRED/BCB observations whose conservative `available_at` is not later than that decision. Missing pre-ingestion datasets produce typed empty views and an explanatory no-data result.
+The notebook loads the configured universe to map a price `security_id` to its SEC `issuer_id`; it never pairs independently selected identifiers. Its explicit decision timestamp produces an “as known then” snapshot using an explicit macro source, so identically named FRED and ALFRED series never compete silently. Missing pre-ingestion datasets produce typed empty views and an explanatory no-data result.
 
 The notebook does not inspect CVM filings yet. The Python catalog now exposes the separate `filings_canonical`, `filings`, and `filings_as_of(...)` interfaces; a future notebook cell must keep CVM filings separate from the price/fundamental snapshot. CVM IPE rows use explicit receipt-time `available_at` and unknown publication precision for live replay, while CAD is a current issuer snapshot excluded from historical filing claims.
 
@@ -101,13 +105,14 @@ Earlier valid v1 Parquet parts may omit optional `observed_precision`; readers i
 
 Unmanaged pre-contract or pre-manifest normalized data is handled by an explicit archive/reset policy. The collector validates `data/normalized/` before starting a run and refuses to touch a pre-contract normalized tree, `data.parquet` or other Parquet files without a manifest, or an invalid manifest/part pair. Do not migrate those files in place: move the complete normalized tree to a recoverable archive location, recreate an empty `data/normalized/`, keep `data/raw/` and the PostgreSQL source/run catalog intact, and reingest. This reset obtains v1 provenance from the new run; no attempted migration invents missing lineage.
 
-This does not claim a historical backtest or full historical point-in-time availability. Yahoo prices and current-vintage FRED/BCB backfills are only known to this system when collected; v0 cannot reconstruct what those provider datasets looked like on past trading dates or recover historical vintages from a current-vintage pull. A backtest must vary decision timestamps and use sources with defensible historical availability/vintage data.
+This does not yet claim a complete historical backtest. Yahoo prices and current-vintage FRED/BCB backfills remain known only when collected. ALFRED preserves bounded historical macro vintages with a deliberately conservative availability policy, but it does not repair the other datasets' historical gaps and has not yet passed a live credentialed acceptance run.
 
 Optional environment variables can pin a configured slice:
 
 ```text
 EXAMPLE_SECURITY_ID
 EXAMPLE_SEC_CONCEPT
+EXAMPLE_MACRO_SOURCE
 EXAMPLE_FRED_SERIES
 EXAMPLE_DECISION_AT
 ```
