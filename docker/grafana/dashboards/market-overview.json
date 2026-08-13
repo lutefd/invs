@@ -9,7 +9,7 @@
   "panels": [
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Coverage is configured active securities for enabled Yahoo plus one configured unit for each enabled macro source (currently FRED and BCB). PostgreSQL does not currently persist the configured macro series lists, so per-series expected coverage is not claimed.",
+      "description": "Coverage is configured active securities for enabled Yahoo plus one configured unit for each enabled macro source (FRED, ALFRED, and BCB). PostgreSQL does not currently persist the configured macro series lists, so per-series expected coverage is not claimed.",
       "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "max": 100, "min": 0, "mappings": [{"options": {"match": "null", "result": {"color": "red", "text": "no enabled inputs"}}, "type": "special"}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 50}, {"color": "green", "value": 100}], "unit": "percent"}}, "overrides": []},
       "gridPos": {"h": 6, "w": 7, "x": 0, "y": 0},
       "id": 1,
@@ -31,7 +31,7 @@
     },
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Latest current-vintage observations for every configured macro source (currently FRED and BCB). The source column distinguishes providers. If a source has no published rows, the explicit no-snapshot row remains visible. Expected series lists live only in YAML today, so this panel does not claim full configured-series coverage.",
+      "description": "Latest operational observations for every configured macro source. FRED and BCB are current-vintage pulls; ALFRED has authoritative historical vintages in Parquet but only its latest accepted value is projected here. The source column distinguishes providers. If a source has no published rows, the explicit no-snapshot row remains visible.",
       "fieldConfig": {"defaults": {}, "overrides": []},
       "gridPos": {"h": 10, "w": 14, "x": 0, "y": 11},
       "id": 3,

@@ -39,6 +39,9 @@ def test_market_dashboard_is_strict_json_with_latest_snapshot_queries() -> None:
     assert "no snapshot published" in sql
     assert "source disabled" in sql
     assert "ingestion only" in sql
+    descriptions = "\n".join(panel.get("description", "") for panel in document["panels"])
+    assert "ALFRED" in descriptions
+    assert "historical vintages in Parquet" in descriptions
     assert smoke_sql([DASHBOARD]).startswith("BEGIN;")
     assert smoke_sql([DASHBOARD]).endswith("ROLLBACK;")
 
