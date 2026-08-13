@@ -58,11 +58,13 @@ The active planned version is v0.1. Feature documentation, the supported
 `make feature` / `make feature-validate` command, and its real-data replay have
 already landed. The next unaccepted cohesive units are:
 
-1. uniform downloaded-bytes-plus-parse-error preservation;
-2. separate filing and feature notebook inspection;
-3. reconciliation plus backup/restore runbooks and a clean restore drill;
-4. remaining v0.1 bounded acceptance;
-5. post-acceptance ALFRED bias fixtures and the remaining v0.2 historical-truth work.
+1. separate filing and feature notebook inspection;
+2. reconciliation plus backup/restore runbooks and a clean restore drill;
+3. remaining v0.1 bounded acceptance;
+4. post-acceptance ALFRED bias fixtures and the remaining v0.2 historical-truth work.
+
+The common downloaded-resource result contract and provider failure-preservation
+tests landed in `8f2680f`.
 
 No general strategy/backtest implementation should start before the historical-truth
 gate in v0.2 passes.

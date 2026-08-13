@@ -36,6 +36,12 @@ The next data-integrity milestone has now also been implemented:
   zero-row canonical replay also passed; see the
   [ALFRED acceptance report](acceptance/2026-08-13-alfred-cpiaucsl.md).
 
+The first v0.1 data-integrity unit then landed in `8f2680f`: every provider now
+returns a common downloaded-resource collection alongside parse errors, and the
+collector persists that collection before finalizing a failed resource. Contract
+tests cover malformed Yahoo, FRED, BCB, SEC, ALFRED, and CVM responses, including
+partial multi-resource downloads.
+
 The platform now has a canonical [full-version roadmap](full-version-roadmap.md) and
 a granular [roadmap execution index](roadmap/README.md), introduced at `cec0ed4`.
 The roadmap, rather than the old numbered actions at the bottom of this historical
@@ -48,6 +54,7 @@ backtest, portfolio, or ML boundary was introduced by the ALFRED slice.
 - Repository: `/home/luis/dev/invs`
 - Branch: `main`
 - Live-accepted ALFRED implementation boundary: `31378be` (`docs: record ALFRED milestone and roadmap`)
+- Latest provider-contract implementation boundary: `8f2680f` (`feat(provider): standardize downloaded resource results`)
 - Roadmap boundary: `cec0ed4` (`docs(roadmap): define full platform phases`)
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
@@ -248,12 +255,10 @@ checks the adapter-reported hash against the durable stored hash. Only then does
 stamp accepted rows with source UUID, run UUID, raw hash, raw record locator, and the
 aligned ingestion timestamp.
 
-The general provider contract still needs a further uniform recovery milestone for
-the case where a vendor download succeeds but top-level schema parsing returns only
-an error and no bytes. CVM returns source resources separately and therefore preserves
-its bytes; SEC partial raw preservation has been addressed. The next broad provider
-work should make downloaded-bytes-plus-parse-error an explicit invariant for every
-adapter.
+The provider recovery contract is now uniform: each adapter returns every response
+body downloaded before a transport or parse/schema error in its common resource
+collection. CVM and SEC retain their source-specific metadata through that same
+collection, while legacy compatibility fields remain for local callers.
 
 ### Canonical Parquet and manifests
 
@@ -743,7 +748,6 @@ The following are not accidental omissions:
 - No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.
 - No corporate-action collector despite the schema boundary existing.
-- No universal provider-level downloaded-bytes-on-top-level-parse-error contract.
 - Current security-to-issuer mappings are current YAML configuration, not historical
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
@@ -759,11 +763,9 @@ The following are not accidental omissions:
 
 Follow [the roadmap execution index](roadmap/README.md). The nearest cohesive units are:
 
-1. Finish the universal downloaded-bytes-plus-parse-error contract for the remaining
-   providers.
-2. Add separate CVM filing and feature-artifact notebook inspection; do not join
+1. Add separate CVM filing and feature-artifact notebook inspection; do not join
    filings one-to-many into the price/fundamental/macro snapshot.
-3. Complete reconciliation and backup/restore runbooks plus a clean restore drill.
-4. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
+2. Complete reconciliation and backup/restore runbooks plus a clean restore drill.
+3. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
    work and its US/Brazil bias fixtures. Do not start strategy or execution work by
    treating current-vintage backfills as historical truth.
