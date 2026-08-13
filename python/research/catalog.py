@@ -618,6 +618,7 @@ class ResearchCatalog:
         decision_at: str,
         mapping: SecurityMapping,
         fundamental_concept: str,
+        macro_source: str,
         macro_series_id: str,
         start: str | None = None,
         end: str | None = None,
@@ -634,6 +635,7 @@ class ResearchCatalog:
             "security_id": mapping.security_id,
             "issuer_id": mapping.issuer_id,
             "fundamental_concept": fundamental_concept,
+            "macro_source": macro_source,
             "macro_series_id": macro_series_id,
             "decision_at": decision_at,
         }
@@ -663,7 +665,8 @@ class ResearchCatalog:
             ),
             selected_macro AS (
                 SELECT * FROM macroeconomics
-                WHERE series_id = $macro_series_id
+                WHERE source = $macro_source
+                  AND series_id = $macro_series_id
             )
             SELECT
                 p.security_id,
@@ -679,6 +682,7 @@ class ResearchCatalog:
                 f.period_end AS fundamental_period_end,
                 f.published_at AS fundamental_published_at,
                 f.available_at AS fundamental_available_at,
+                m.source AS macro_source,
                 m.series_id AS macro_series_id,
                 m.value AS macro_value,
                 m.value_text AS macro_value_text,

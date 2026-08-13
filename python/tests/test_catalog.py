@@ -213,6 +213,7 @@ def _write_fundamentals(
 
 def _macro_select(
     *,
+    source: str = "fred",
     observed: str = "2025-01-01 00:00:00Z",
     published: str = "2025-01-15 13:00:00Z",
     available: str = "2025-01-15 13:00:00Z",
@@ -236,7 +237,7 @@ def _macro_select(
     )
     return f"""
         SELECT
-          '1.0.0'::VARCHAR AS schema_version, 'fred'::VARCHAR AS source,
+          '1.0.0'::VARCHAR AS schema_version, '{source}'::VARCHAR AS source,
           'GDP'::VARCHAR AS series_id, 'US'::VARCHAR AS geography,
           'Index'::VARCHAR AS unit, 'quarterly'::VARCHAR AS frequency,
           ''::VARCHAR AS seasonal_adjustment, false AS has_seasonal_adjustment,
@@ -257,8 +258,8 @@ def _macro_select(
     """
 
 
-def _write_macro_parts(root: Path, queries: list[str]) -> Path:
-    directory = root / "macroeconomics" / "source=fred" / "series_id=GDP"
+def _write_macro_parts(root: Path, queries: list[str], *, source: str = "fred") -> Path:
+    directory = root / "macroeconomics" / f"source={source}" / "series_id=GDP"
     paths = []
     for index, query in enumerate(queries):
         path = directory / f"macroeconomics-{index}.parquet"
@@ -268,7 +269,7 @@ def _write_macro_parts(root: Path, queries: list[str]) -> Path:
         directory / "manifest.json",
         paths,
         dataset="macroeconomics",
-        source="fred",
+        source=source,
         partition_key="series_id",
         partition_value="GDP",
     )
@@ -385,6 +386,7 @@ def test_fresh_data_root_registers_typed_empty_views(tmp_path: Path) -> None:
         decision_at="2025-03-01T00:00:00Z",
         mapping=mapping,
         fundamental_concept="Revenue",
+        macro_source="fred",
         macro_series_id="GDP",
     ).empty
 
@@ -732,6 +734,7 @@ def test_deterministic_point_in_time_snapshot_excludes_future_observations(
         decision_at="2025-02-11T00:00:00Z",
         mapping=mapping,
         fundamental_concept="Revenue",
+        macro_source="fred",
         macro_series_id="GDP",
     )
 
@@ -770,6 +773,7 @@ def test_available_at_is_cutoff_even_when_published_at_is_earlier(
         decision_at="2025-02-11T00:00:00Z",
         mapping=SecurityMapping(SECURITY_ID, ISSUER_ID),
         fundamental_concept="Revenue",
+        macro_source="fred",
         macro_series_id="GDP",
     )
 
@@ -841,10 +845,81 @@ def test_macro_selection_matches_go_postgres_precedence_order(tmp_path: Path) ->
         decision_at="2025-02-01T00:00:00Z",
         mapping=SecurityMapping(SECURITY_ID, ISSUER_ID),
         fundamental_concept="Revenue",
+        macro_source="fred",
         macro_series_id="GDP",
     )
 
     assert frame["macro_value_text"].tolist() == ["6.000000000000000006"]
+
+
+def test_macro_selection_requires_source_and_respects_alfred_vintage_cutoff(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "normalized"
+    _write_prices(root)
+    _write_fundamentals(root)
+    _write_macro_rows(
+        root,
+        [
+            _macro_select(
+                value="99",
+                available="2025-01-16 12:00:00Z",
+                raw_hash="f" * 64,
+            )
+        ],
+    )
+    _write_macro_parts(
+        root,
+        [
+            "\nUNION ALL\n".join(
+                [
+                    _macro_select(
+                        source="alfred",
+                        published="2025-01-15 00:00:00Z",
+                        available="2025-01-16 12:00:00Z",
+                        value="1",
+                        revision=0,
+                        raw_hash="a" * 64,
+                        vintage_at="2025-01-15 00:00:00Z",
+                    ),
+                    _macro_select(
+                        source="alfred",
+                        published="2025-02-15 00:00:00Z",
+                        available="2025-02-16 12:00:00Z",
+                        value="2",
+                        revision=1,
+                        raw_hash="b" * 64,
+                        vintage_at="2025-02-15 00:00:00Z",
+                    ),
+                ]
+            )
+        ],
+        source="alfred",
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+    arguments = {
+        "mapping": SecurityMapping(SECURITY_ID, ISSUER_ID),
+        "fundamental_concept": "Revenue",
+        "macro_source": "alfred",
+        "macro_series_id": "GDP",
+    }
+
+    before = catalog.research_snapshot(
+        decision_at="2025-02-16T11:59:59.999999Z", **arguments
+    )
+    at_cutoff = catalog.research_snapshot(
+        decision_at="2025-02-16T12:00:00Z", **arguments
+    )
+    fred = catalog.research_snapshot(
+        decision_at="2025-02-16T12:00:00Z",
+        **{**arguments, "macro_source": "fred"},
+    )
+
+    assert before["macro_source"].tolist() == ["alfred"] * len(before)
+    assert before["macro_value_text"].tolist() == ["1"] * len(before)
+    assert at_cutoff["macro_value_text"].tolist() == ["2"] * len(at_cutoff)
+    assert fred["macro_source"].tolist() == ["fred"] * len(fred)
+    assert fred["macro_value_text"].tolist() == ["99"] * len(fred)
 
 
 def test_price_revisions_are_selected_as_known_at_decision_time(tmp_path: Path) -> None:
@@ -876,12 +951,14 @@ def test_price_revisions_are_selected_as_known_at_decision_time(tmp_path: Path) 
         decision_at="2025-03-04T00:00:00Z",
         mapping=mapping,
         fundamental_concept="Revenue",
+        macro_source="fred",
         macro_series_id="GDP",
     )
     after = catalog.research_snapshot(
         decision_at="2025-03-06T00:00:00Z",
         mapping=mapping,
         fundamental_concept="Revenue",
+        macro_source="fred",
         macro_series_id="GDP",
     )
 
