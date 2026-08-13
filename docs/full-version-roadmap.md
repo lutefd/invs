@@ -335,6 +335,10 @@ introduces a new artifact or batch boundary.
 - Prove a restore into a clean temporary root. A backup that has not been restored is
   not accepted.
 
+The read-only `reconcile` command, explicit destination backup/restore scripts,
+and clean-root PostgreSQL/data restore drill landed in `0f73e39`. The detailed
+operator sequence is in [docs/operations-recovery.md](operations-recovery.md).
+
 ### 6. Establish an unattended daily runbook
 
 - Define one host-level schedule for accepted daily sources using cron or systemd

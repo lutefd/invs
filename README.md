@@ -5,6 +5,7 @@ A small, self-hosted research stack for collecting point-in-time market data int
 Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE and the bounded ALFRED CPIAUCSL historical-vintage work package subsequently passed live acceptance, and the repository includes the closed deterministic `market-basic` feature engine. Future ALFRED runs require a configured `FRED_API_KEY`. Brazilian market-data integration is not yet implemented; the roadmap records Yahoo Finance `.SA` as the planned primary B3 bridge, with selective B3 public datasets for enrichment and validation.
 
 The product path is documented in the [full-version roadmap](docs/full-version-roadmap.md), with granular execution views in the [roadmap index](docs/roadmap/README.md).
+The operator recovery procedure is in [docs/operations-recovery.md](docs/operations-recovery.md).
 
 The current accepted vertical slice covers Yahoo daily prices, SEC company facts, FRED macro series, and BCB SGS macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; run finalization publishes accepted price/macro candidates to those projections in the same PostgreSQL transaction that closes the run. A partial run may publish successful entities while a parse-error entity publishes no snapshot.
 
@@ -150,6 +151,20 @@ make dashboard-smoke
 ```
 
 The market dashboard shows configured securities even when no accepted Yahoo snapshot exists, exposes explicit no-snapshot rows for macro sources, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED and BCB series still live only in YAML, so the dashboard deliberately reports source-level presence rather than claiming per-series coverage.
+
+Reconcile durable state before and after recovery:
+
+```sh
+make reconcile
+```
+
+Create and restore explicit destinations with the scripts documented in [the
+recovery runbook](docs/operations-recovery.md):
+
+```sh
+make backup BACKUP_DIR=/path/to/new/backup
+make restore BACKUP_DIR=/path/to/backup RESTORE_DIR=/tmp/invs-restore RESTORE_DB=restore_invs
+```
 
 CVM is not included in the original r3 acceptance table above. A later bounded IPE replay passed at implementation commit `742e5ae`: 199 configured Petrobras filing rows were published with complete provenance and identical-key retry behavior. CAD responses remain raw ingestion-only current snapshots, and IPE receipt-time availability supports installation replay rather than historical public-availability claims. See [the current-state handoff](docs/current-state-handoff.md#current-cvm-live-evidence-status) for the retained CVM evidence and [the market-basic acceptance report](docs/acceptance/2026-08-12-market-basic.md) for the first supported feature replay.
 

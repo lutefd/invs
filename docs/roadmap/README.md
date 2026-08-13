@@ -58,13 +58,15 @@ The active planned version is v0.1. Feature documentation, the supported
 `make feature` / `make feature-validate` command, and its real-data replay have
 already landed. The next unaccepted cohesive units are:
 
-1. reconciliation plus backup/restore runbooks and a clean restore drill;
+1. establish and observe the unattended daily runbook;
 2. remaining v0.1 bounded acceptance;
 3. post-acceptance ALFRED bias fixtures and the remaining v0.2 historical-truth work.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook
 inspection landed in `806874a`.
+The read-only reconciliation command, backup/restore scripts, and clean-root
+recovery drill landed in `0f73e39`; see [the recovery runbook](../operations-recovery.md).
 
 The v0.2 Brazil source-selection discovery is to use Yahoo Finance as the primary
 B3 bridge through `.SA` ticker mappings for medium- to long-term research, with

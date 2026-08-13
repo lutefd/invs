@@ -718,7 +718,29 @@ make dashboard-smoke
 The smoke check rejects duplicate JSON keys and emits `EXPLAIN` statements for
 each dashboard query.
 
-## 9. Safety rules for research
+## 9. Reconciliation, backup, and restore
+
+Use the read-only reconciliation report before and after operational work:
+
+```sh
+make reconcile
+```
+
+It checks active ingestion runs, raw manifest/object hashes, normalized manifest
+and part integrity, unlisted Parquet files, and feature lineage. Findings are
+reported for operator action; the command never cancels runs or deletes evidence.
+The complete backup, clean-root restore, and host-level daily schedule are in
+[the recovery runbook](operations-recovery.md).
+
+```sh
+make backup BACKUP_DIR=/path/to/new/backup
+make restore BACKUP_DIR=/path/to/backup RESTORE_DIR=/tmp/invs-restore RESTORE_DB=restore_invs
+```
+
+The restore command refuses existing destinations and only creates a database
+whose name starts with `restore_`, so the application database is not replaced.
+
+## 10. Safety rules for research
 
 1. Treat raw bytes and committed canonical manifests as the evidence boundary.
    PostgreSQL projections may be rebuilt; raw and canonical files should not be
@@ -741,7 +763,7 @@ each dashboard query.
 8. Read only manifest-listed Parquet parts. A stray file in a partition is not
    automatically part of the dataset.
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### PostgreSQL or migrations are unavailable
 
@@ -809,7 +831,7 @@ run succeeded and that its accepted candidate passed PostgreSQL finalization.
 Canonical Parquet can contain history even when a replaceable latest projection
 is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
 
-## 11. What this version can and cannot answer
+## 12. What this version can and cannot answer
 
 ### It can answer
 

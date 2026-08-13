@@ -49,6 +49,11 @@ handoff, is the sequencing authority for future versions. The notebook now has
 separate empty-safe CVM filing and feature-artifact inspection sections from
 `806874a`; no strategy, backtest, portfolio, or ML boundary was introduced.
 
+The recovery slice then landed in `0f73e39`: a read-only reconciliation report,
+explicit destination backup/restore scripts, and a clean-root PostgreSQL/data
+restore drill. The daily schedule and the final v0.1 acceptance gate remain open;
+see [the recovery runbook](operations-recovery.md).
+
 ## B3 market-data source-selection discovery
 
 The current planning discovery for Brazil is to use Yahoo Finance as the primary B3
@@ -71,13 +76,14 @@ limits, and explicit availability semantics before accepting the bridge.
 - Live-accepted ALFRED implementation boundary: `31378be` (`docs: record ALFRED milestone and roadmap`)
 - Latest provider-contract implementation boundary: `8f2680f` (`feat(provider): standardize downloaded resource results`)
 - Latest research-visibility implementation boundary: `806874a` (`feat(research): inspect filings and feature artifacts`)
-- Roadmap boundary: `cec0ed4` (`docs(roadmap): define full platform phases`)
+- Latest operations implementation boundary: `0f73e39` (`feat(operations): reconcile durable ingestion state`)
+- Latest roadmap discovery boundary: `0be506c` (`docs(roadmap): record Yahoo B3 market-data bridge discovery`)
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
   handoff baseline, but it is no longer the current repository boundary.
 
-## Exact implementation handoff point
+## Historical implementation handoff point
 
 - Repository: `/home/luis/dev/invs`
 - Branch: `main`
@@ -93,7 +99,7 @@ limits, and explicit availability semantics before accepting the bridge.
 - PostgreSQL, Jupyter, and Grafana containers: running and healthy at the time of inspection
 - This document is intentionally a separate documentation slice. It must be reviewed and committed by the orchestrator; the document-writing worker must not commit it.
 
-The current code has two acceptance boundaries:
+The original handoff described two acceptance boundaries:
 
 1. The original post-metadata v0 acceptance for SEC, Yahoo, FRED, and BCB passed
    at `9ce22d0`. Its recoverable evidence is retained at
@@ -106,10 +112,10 @@ The current code has two acceptance boundaries:
    reviewable from the retained archive.
 
 The local bind-mounted checkout currently contains valid manifest-backed Yahoo and
-FRED output plus raw evidence. The CVM live-run evidence was written to separate
-acceptance archives rather than to this checkout. The local feature directory is
-currently empty apart from `.gitkeep`; the feature engine is implemented but has
-not been run as part of the committed v0 acceptance.
+FRED/ALFRED output plus raw evidence and two inspected `market-basic` artifacts.
+The CVM live-run evidence was written to separate acceptance archives rather than
+to this checkout. The feature artifacts remain replaceable derived outputs; the
+recovery backup includes them and validates their selected normalized lineage.
 
 ## Mission and architectural boundaries
 
@@ -275,6 +281,16 @@ The provider recovery contract is now uniform: each adapter returns every respon
 body downloaded before a transport or parse/schema error in its common resource
 collection. CVM and SEC retain their source-specific metadata through that same
 collection, while legacy compatibility fields remain for local callers.
+
+### Reconciliation and restore operations
+
+The current operations boundary is [docs/operations-recovery.md](operations-recovery.md).
+`make reconcile` is read-only and verifies active runs, raw manifests/objects,
+normalized manifest-listed parts, unlisted Parquet, and feature input lineage.
+`make backup` and `make restore` use explicit new destinations and hash-check each
+immutable file. The clean-root drill at `0f73e39` restored PostgreSQL to a new
+`restore_*` database and returned zero reconciliation findings; it did not claim
+the remaining full v0.1 acceptance gate.
 
 ### Canonical Parquet and manifests
 
@@ -693,9 +709,9 @@ The supported research path is:
 5. Use `publish_market_basic(...)` to create an immutable feature artifact under
    `data/features` and `read_feature_artifact(...)` to validate it later.
 
-Run the notebook non-interactively with `make notebook`. The notebook currently
-does not inspect CVM filings; any future filing cell must keep them separate from
-the one-to-one price/fundamental/macro snapshot.
+Run the notebook non-interactively with `make notebook`. It now inspects CVM
+filings and an existing feature artifact in separate empty-safe sections; neither
+section is joined into the one-to-one price/fundamental/macro snapshot.
 
 ### Monitoring
 
@@ -733,6 +749,11 @@ implementation/acceptance workers:
 - The CAD parser/raw canary passed at
   `/home/luis/invs-acceptance/2026-08-12-cvm-cad-current-v3rGsD`; its partial status
   was the intentional raw-only publication boundary.
+
+The operations slice at `0f73e39` additionally passed `go test ./...`, `go vet ./...`,
+the collector image build, `make reconcile` against the running stack, and a
+backup/restore drill that loaded PostgreSQL into a new `restore_*` database and
+returned zero findings from reconciliation against the restored data root.
 
 The retained post-metadata v0 r3 acceptance at
 `/home/luis/invs-acceptance/2026-08-12-v0-r3` recorded:
@@ -779,7 +800,7 @@ The following are not accidental omissions:
 
 Follow [the roadmap execution index](roadmap/README.md). The nearest cohesive units are:
 
-1. Complete reconciliation and backup/restore runbooks plus a clean restore drill.
+1. Establish and observe the unattended daily runbook.
 2. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
    work and its US/Brazil bias fixtures. Do not start strategy or execution work by
    treating current-vintage backfills as historical truth.
