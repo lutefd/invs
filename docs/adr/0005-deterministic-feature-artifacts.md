@@ -12,8 +12,9 @@ delay can be accidentally reused as if it had been available earlier or had been
 computed from a different vintage.
 
 The first feature contract is deliberately small. It establishes the artifact
-boundary without adding a feature engine, collector behavior, a strategy API, a
-backtest, or a machine-learning pipeline.
+boundary and a bounded engine for one security and decision timestamp without adding
+collector behavior, dataset-wide orchestration, a strategy API, a backtest, or a
+machine-learning pipeline.
 
 ## Decision
 
@@ -54,8 +55,8 @@ available_at = input_available_at + computation_delay_seconds
 ```
 
 The JSON Schema validates the fields and their types; timestamp arithmetic and the
-ordering rule are semantic validation responsibilities of the future engine and
-readers. A feature may therefore become available after the `decision_at` used to
+ordering rule are semantic validation responsibilities of the engine and readers. A
+feature may therefore become available after the `decision_at` used to
 select its inputs. A later consumer decision must still require
 `feature.available_at <= consumer_decision_at`; no consumer may substitute
 `decision_at`, the trading date, or `published_at`.
@@ -101,11 +102,13 @@ point rounding are not part of this contract.
 
 ## Non-goals
 
-This ADR does not implement feature calculation, input selection, storage, or
-collection. It does not define a strategy or signal API, portfolio construction,
-execution, a backtest result, performance metrics, labels, training data, model
-artifacts, or any ML behavior. Calendar/execution policy and any future feature set
-must be introduced by a separate versioned contract.
+The implementation is limited to point-in-time input selection, exact-decimal
+calculation, and immutable publication for the closed `market-basic` registry, one
+security per call. It does not add collection, dataset-wide scheduling or discovery,
+a strategy or signal API, portfolio construction, execution, a backtest result,
+performance metrics, labels, training data, model artifacts, or any ML behavior.
+Calendar/execution policy and any future feature set must be introduced by a separate
+versioned contract.
 
 ## Consequences
 

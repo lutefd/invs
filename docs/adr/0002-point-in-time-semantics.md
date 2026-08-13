@@ -94,7 +94,8 @@ policy, not a conversion of the delivery or period date into a publication insta
 CVM CAD is a current issuer snapshot rather than versioned filing history. The
 integrated collector retains it as raw ingestion-only evidence; it is excluded from
 historical filing claims and must not be treated as a row that can be joined into an
-as-of filing query. A fresh live CVM acceptance is still pending. B3 is deferred
+as-of filing query. A bounded CVM IPE replay passed live acceptance at implementation
+commit `742e5ae`. B3 is deferred
 until its access, instrument-identity, fixture, and market-data policy boundaries are
 established.
 

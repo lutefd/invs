@@ -5,8 +5,9 @@ collects daily US equity prices, SEC company metadata and fundamentals, and FRED
 and BCB macro series. It preserves source bytes, publishes canonical
 Parquet through immutable manifests, registers operational metadata in PostgreSQL,
 and publishes accepted latest-only price/macro projections for Grafana. It exposes
-canonical history through DuckDB/Jupyter. It intentionally does not include a feature
-engine, backtester, distributed queue, or live execution.
+canonical history through DuckDB/Jupyter and a closed, deterministic `market-basic`
+feature artifact engine. It intentionally does not include a strategy API, backtester,
+distributed queue, or live execution.
 
 The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC,
 Yahoo, FRED, and BCB. Its raw run manifests and normalized evidence are retained in
@@ -17,11 +18,12 @@ archives.
 
 ## CVM and B3 rollout boundary
 
-CVM is integrated as a source boundary, but is not part of the accepted vertical slice
-yet. Its configuration, PostgreSQL source-catalog support, provider/collector path,
-canonical filing-metadata writer, and Python research-catalog exposure are present.
-There has been no fresh live CVM acceptance run, so live CVM output remains pending
-operational verification.
+CVM is integrated as a source boundary. It was not part of the original r3 vertical-
+slice acceptance, but a later bounded IPE replay passed at implementation commit
+`742e5ae`: 199 configured Petrobras filing rows were published with complete
+provenance and identical-key retry behavior. Its configuration, PostgreSQL source-
+catalog support, provider/collector path, canonical filing-metadata writer, and Python
+research-catalog exposure are present. CAD remains raw ingestion-only by design.
 
 CVM IPE metadata uses the source delivery date as `filing_date`; that date does not
 establish a public publication instant. The integrated collector stores the source
@@ -79,7 +81,7 @@ SEC / FRED / BCB / Yahoo / CVM provider
 | Raw store | immutable bytes, hashes, atomic put/get | vendor parsing |
 | PostgreSQL | identity, versioned mappings, source/run metadata, latest-only operational projections | canonical history and bulk daily observations |
 | Parquet writer | immutable content-named analytical parts and manifests | operational leases and latest-only projections |
-| Research | DuckDB queries, notebooks, later deterministic features | direct vendor calls |
+| Research | DuckDB queries, notebooks, deterministic feature artifacts | direct vendor calls, strategy execution |
 
 ## Data flow and commit boundary
 

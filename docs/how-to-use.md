@@ -572,7 +572,27 @@ timestamp:
 - `volume`: the latest volume, or null when the price bar has no volume.
 
 There is no forward fill, `DOUBLE` calculation, strategy, signal, or model
-hidden behind this registry. Publish from Python:
+hidden behind this registry. The supported operator command requires an explicit
+security and decision timestamp:
+
+```sh
+make feature \
+  SECURITY_ID=469fc20f-7d4b-45bb-b827-05f8410e71aa \
+  DECISION_AT=2026-08-12T21:00:00Z \
+  FEATURE_DELAY=30
+```
+
+The command publishes through the Jupyter image, validates the result immediately,
+and prints a compact JSON summary containing its manifest path, lineage fingerprint,
+timing boundary, and exact feature values. Repeating the identical command is
+idempotent. Validate an existing container path independently with:
+
+```sh
+make feature-validate \
+  FEATURE_MANIFEST=/data/features/market-basic/1.0.0/artifact-<uuid>/manifest.json
+```
+
+For library use, publish directly from Python:
 
 ```python
 from research import ResearchCatalog

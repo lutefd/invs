@@ -54,7 +54,7 @@ corporate actions retain their stricter source-specific publication requirements
 
 The v1 contract includes a canonical filing-metadata dataset, and its writer,
 CVM provider/collector integration, and Python research-catalog exposure are present.
-A fresh live CVM acceptance is still pending, so no CVM acceptance is claimed. A CVM
+A bounded CVM IPE replay passed live acceptance at implementation commit `742e5ae`. A CVM
 IPE delivery date is retained as `filing_date` and may populate
 `period_end`/`observed_at` when the source supplies a reference date, but it does not
 establish `published_at`. CVM IPE rows
