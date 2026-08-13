@@ -75,6 +75,75 @@ func TestValidateBCBProviderRequirements(t *testing.T) {
 	}
 }
 
+func TestValidateALFREDProviderRequirements(t *testing.T) {
+	c := validConfig()
+	c.FREDAPIKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	c.Providers.ALFRED = ALFREDProvider{Enabled: true, Series: []ALFREDSeries{{
+		ID: "CPIAUCSL", Geography: "US", Unit: "index", Frequency: "monthly",
+		SeasonalAdjustment: "seasonally_adjusted",
+		RealtimeEnd:        "2026-08-11",
+		ObservationStart:   "2018-01-01", ObservationEnd: "2026-07-01",
+	}}}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, mutate := range map[string]func(*ALFREDSeries){
+		"missing id":                  func(s *ALFREDSeries) { s.ID = "" },
+		"unsafe id":                   func(s *ALFREDSeries) { s.ID = "CPI/AUCSL" },
+		"missing geography":           func(s *ALFREDSeries) { s.Geography = "" },
+		"missing unit":                func(s *ALFREDSeries) { s.Unit = "" },
+		"invalid frequency":           func(s *ALFREDSeries) { s.Frequency = "business_daily" },
+		"missing realtime end":        func(s *ALFREDSeries) { s.RealtimeEnd = "" },
+		"invalid realtime end":        func(s *ALFREDSeries) { s.RealtimeEnd = "12/08/2026" },
+		"realtime end before minimum": func(s *ALFREDSeries) { s.RealtimeEnd = "1776-07-03" },
+		"invalid observation start":   func(s *ALFREDSeries) { s.ObservationStart = "2018" },
+		"reversed observation range":  func(s *ALFREDSeries) { s.ObservationStart, s.ObservationEnd = "2026-07-01", "2018-01-01" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := c
+			candidate.Providers.ALFRED.Series = []ALFREDSeries{c.Providers.ALFRED.Series[0]}
+			mutate(&candidate.Providers.ALFRED.Series[0])
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid ALFRED configuration accepted")
+			}
+		})
+	}
+
+	duplicate := c
+	duplicate.Providers.ALFRED.Series = append(duplicate.Providers.ALFRED.Series, duplicate.Providers.ALFRED.Series[0])
+	if err := duplicate.Validate(); err == nil {
+		t.Fatal("duplicate ALFRED series accepted")
+	}
+}
+
+func TestALFREDProviderCountsAsEnabledProvider(t *testing.T) {
+	c := validConfig()
+	c.FREDAPIKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	c.Providers.Prices.Enabled = false
+	c.Providers.FRED.Enabled = false
+	c.Providers.ALFRED = ALFREDProvider{Enabled: true, Series: []ALFREDSeries{{
+		ID: "CPIAUCSL", Geography: "US", Unit: "index", Frequency: "monthly",
+		RealtimeEnd: "2026-08-11",
+	}}}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("ALFRED-only provider configuration rejected: %v", err)
+	}
+}
+
+func TestValidateALFREDRequiresEnvironmentOnlyAPIKey(t *testing.T) {
+	c := validConfig()
+	c.Providers.ALFRED = ALFREDProvider{Enabled: true, Series: []ALFREDSeries{{
+		ID: "CPIAUCSL", Geography: "US", Unit: "index", Frequency: "monthly", RealtimeEnd: "2026-08-11",
+	}}}
+	for _, key := range []string{"", "short", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!"} {
+		c.FREDAPIKey = key
+		if err := c.Validate(); err == nil {
+			t.Fatalf("invalid key %q accepted", key)
+		}
+	}
+}
+
 func TestValidateCVMProviderRequirements(t *testing.T) {
 	c := validConfig()
 	c.Providers.CVM = CVMProvider{

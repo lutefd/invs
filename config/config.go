@@ -15,6 +15,7 @@ import (
 type Config struct {
 	DataDir     string     `yaml:"data_dir"`
 	DatabaseURL string     `yaml:"-"`
+	FREDAPIKey  string     `yaml:"-"`
 	UserAgent   string     `yaml:"user_agent"`
 	HTTP        HTTP       `yaml:"http"`
 	Providers   Providers  `yaml:"providers"`
@@ -62,6 +63,7 @@ type Providers struct {
 	SEC    EnabledProvider `yaml:"sec"`
 	Prices PriceProvider   `yaml:"prices"`
 	FRED   FREDProvider    `yaml:"fred"`
+	ALFRED ALFREDProvider  `yaml:"alfred"`
 	BCB    BCBProvider     `yaml:"bcb"`
 	CVM    CVMProvider     `yaml:"cvm"`
 }
@@ -77,6 +79,20 @@ type PriceProvider struct {
 type FREDProvider struct {
 	Enabled bool     `yaml:"enabled"`
 	Series  []string `yaml:"series"`
+}
+type ALFREDProvider struct {
+	Enabled bool           `yaml:"enabled"`
+	Series  []ALFREDSeries `yaml:"series"`
+}
+type ALFREDSeries struct {
+	ID                 string `yaml:"id"`
+	Geography          string `yaml:"geography"`
+	Unit               string `yaml:"unit"`
+	Frequency          string `yaml:"frequency"`
+	SeasonalAdjustment string `yaml:"seasonal_adjustment"`
+	RealtimeEnd        string `yaml:"realtime_end"`
+	ObservationStart   string `yaml:"observation_start"`
+	ObservationEnd     string `yaml:"observation_end"`
 }
 type BCBProvider struct {
 	Enabled bool        `yaml:"enabled"`
@@ -137,6 +153,7 @@ func Load(path string) (Config, error) {
 
 func applyEnv(c *Config) {
 	c.DatabaseURL = os.Getenv("DATABASE_URL")
+	c.FREDAPIKey = strings.TrimSpace(os.Getenv("FRED_API_KEY"))
 	if v := os.Getenv("INVS_DATA_DIR"); v != "" {
 		c.DataDir = v
 	}
@@ -203,6 +220,57 @@ func (c Config) Validate() error {
 	if c.Providers.FRED.Enabled && len(c.Providers.FRED.Series) == 0 {
 		errs = append(errs, errors.New("enabled FRED provider requires at least one series"))
 	}
+	if c.Providers.ALFRED.Enabled {
+		if !validFREDAPIKey(c.FREDAPIKey) {
+			errs = append(errs, errors.New("enabled ALFRED provider requires FRED_API_KEY as 32 lowercase alphanumeric characters"))
+		}
+		if len(c.Providers.ALFRED.Series) == 0 {
+			errs = append(errs, errors.New("enabled ALFRED provider requires at least one series"))
+		}
+		seenSeries := make(map[string]bool, len(c.Providers.ALFRED.Series))
+		for i, series := range c.Providers.ALFRED.Series {
+			pfx := fmt.Sprintf("providers.alfred.series[%d]", i)
+			if !validSourceIdentifier(series.ID) {
+				errs = append(errs, fmt.Errorf("%s.id must contain only letters, digits, '.', '_' or '-'", pfx))
+			}
+			if strings.TrimSpace(series.Geography) == "" {
+				errs = append(errs, fmt.Errorf("%s.geography is required", pfx))
+			}
+			if strings.TrimSpace(series.Unit) == "" {
+				errs = append(errs, fmt.Errorf("%s.unit is required", pfx))
+			}
+			if !validEconomicFrequency(series.Frequency) {
+				errs = append(errs, fmt.Errorf("%s.frequency is unsupported", pfx))
+			}
+			if series.SeasonalAdjustment != "" && strings.TrimSpace(series.SeasonalAdjustment) == "" {
+				errs = append(errs, fmt.Errorf("%s.seasonal_adjustment must not be whitespace", pfx))
+			}
+			realtimeEnd, realtimeEndErr := requiredISODate(series.RealtimeEnd)
+			if realtimeEndErr != nil {
+				errs = append(errs, fmt.Errorf("%s.realtime_end must be an ISO date", pfx))
+			}
+			if realtimeEndErr == nil && realtimeEnd.Before(time.Date(1776, 7, 4, 0, 0, 0, 0, time.UTC)) {
+				errs = append(errs, fmt.Errorf("%s.realtime_end precedes ALFRED's earliest supported realtime date", pfx))
+			}
+			observationStart, observationStartErr := optionalISODate(series.ObservationStart)
+			observationEnd, observationEndErr := optionalISODate(series.ObservationEnd)
+			if observationStartErr != nil {
+				errs = append(errs, fmt.Errorf("%s.observation_start must be an ISO date", pfx))
+			}
+			if observationEndErr != nil {
+				errs = append(errs, fmt.Errorf("%s.observation_end must be an ISO date", pfx))
+			}
+			if observationStartErr == nil && observationEndErr == nil && !observationStart.IsZero() && !observationEnd.IsZero() && observationEnd.Before(observationStart) {
+				errs = append(errs, fmt.Errorf("%s.observation_end must not precede observation_start", pfx))
+			}
+			if validSourceIdentifier(series.ID) {
+				if seenSeries[series.ID] {
+					errs = append(errs, fmt.Errorf("%s.id duplicates %q", pfx, series.ID))
+				}
+				seenSeries[series.ID] = true
+			}
+		}
+	}
 	if c.Providers.BCB.Enabled {
 		if len(c.Providers.BCB.Series) == 0 {
 			errs = append(errs, errors.New("enabled BCB provider requires at least one series"))
@@ -261,7 +329,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -338,6 +406,10 @@ func validBCBCode(value string) bool {
 }
 
 func validCVMCode(value string) bool {
+	return validSourceIdentifier(value)
+}
+
+func validSourceIdentifier(value string) bool {
 	if strings.TrimSpace(value) != value || value == "" {
 		return false
 	}
@@ -347,6 +419,25 @@ func validCVMCode(value string) bool {
 		}
 	}
 	return true
+}
+
+func validFREDAPIKey(value string) bool {
+	if len(value) != 32 {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func requiredISODate(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, errors.New("date is required")
+	}
+	return optionalISODate(value)
 }
 
 func validEconomicFrequency(value string) bool {

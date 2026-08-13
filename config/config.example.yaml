@@ -15,6 +15,18 @@ providers:
   fred:
     enabled: true
     series: [DGS10, CPIAUCSL]
+  alfred:
+    enabled: false
+    series:
+      - id: CPIAUCSL
+        geography: US
+        unit: index_1982_1984_100
+        frequency: monthly
+        seasonal_adjustment: seasonally_adjusted
+        # ALFRED requests always start at 1776-07-04 so row vintage dates are not clipped.
+        realtime_end: 2026-08-11
+        observation_start: 2018-01-01
+        observation_end: 2026-07-01
   bcb:
     enabled: false
     series:
