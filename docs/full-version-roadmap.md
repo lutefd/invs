@@ -69,8 +69,8 @@ The following baseline limitations drive the version order:
 
 - Current Yahoo, FRED, and BCB backfills do not establish historical knowledge
   availability.
-- ALFRED vintage ingestion and exact-boundary fixture selection are implemented but
-  not live-accepted; corporate actions, historical universe membership, exchange
+- The bounded ALFRED CPIAUCSL ingestion work package and exact-boundary selection are
+  live-accepted; corporate actions, historical universe membership, exchange
   calendars, and historical identifier resolution remain absent.
 - B3 market data and broad Brazilian instrument discovery are not yet admitted.
 - SEC filing metadata is not yet a canonical dataset, and CVM CAD is intentionally

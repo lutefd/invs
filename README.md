@@ -2,7 +2,7 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE subsequently passed bounded live acceptance, and the repository now includes the closed deterministic `market-basic` feature engine plus fixture-accepted ALFRED historical-vintage ingestion. A live ALFRED run still requires a configured `FRED_API_KEY`. B3 remains deferred.
+Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE and the bounded ALFRED CPIAUCSL historical-vintage work package subsequently passed live acceptance, and the repository includes the closed deterministic `market-basic` feature engine. Future ALFRED runs require a configured `FRED_API_KEY`. B3 remains deferred.
 
 The product path is documented in the [full-version roadmap](docs/full-version-roadmap.md), with granular execution views in the [roadmap index](docs/roadmap/README.md).
 
@@ -105,7 +105,7 @@ Earlier valid v1 Parquet parts may omit optional `observed_precision`; readers i
 
 Unmanaged pre-contract or pre-manifest normalized data is handled by an explicit archive/reset policy. The collector validates `data/normalized/` before starting a run and refuses to touch a pre-contract normalized tree, `data.parquet` or other Parquet files without a manifest, or an invalid manifest/part pair. Do not migrate those files in place: move the complete normalized tree to a recoverable archive location, recreate an empty `data/normalized/`, keep `data/raw/` and the PostgreSQL source/run catalog intact, and reingest. This reset obtains v1 provenance from the new run; no attempted migration invents missing lineage.
 
-This does not yet claim a complete historical backtest. Yahoo prices and current-vintage FRED/BCB backfills remain known only when collected. ALFRED preserves bounded historical macro vintages with a deliberately conservative availability policy, but it does not repair the other datasets' historical gaps and has not yet passed a live credentialed acceptance run.
+This does not yet claim a complete historical backtest. Yahoo prices and current-vintage FRED/BCB backfills remain known only when collected. ALFRED preserves bounded historical macro vintages with a deliberately conservative availability policy and has passed a bounded live acceptance, but it does not repair the other datasets' historical gaps.
 
 Optional environment variables can pin a configured slice:
 

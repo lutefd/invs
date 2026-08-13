@@ -62,7 +62,7 @@ already landed. The next unaccepted cohesive units are:
 2. separate filing and feature notebook inspection;
 3. reconciliation plus backup/restore runbooks and a clean restore drill;
 4. remaining v0.1 bounded acceptance;
-5. accepted ALFRED vintage ingestion and v0.2 bias fixtures.
+5. post-acceptance ALFRED bias fixtures and the remaining v0.2 historical-truth work.
 
 No general strategy/backtest implementation should start before the historical-truth
 gate in v0.2 passes.

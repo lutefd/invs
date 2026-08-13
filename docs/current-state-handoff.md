@@ -31,9 +31,10 @@ The next data-integrity milestone has now also been implemented:
   revision drift. Current FRED and ALFRED series remain source-separated in research.
 - PostgreSQL's latest macro projection now permits an explicit null value; authoritative
   historical vintages remain in manifest-backed Parquet.
-- Provider, collector, normalizer, metadata, research-cutoff, and dashboard fixture
-  tests pass. Live ALFRED acceptance is still pending because the local environment
-  does not contain a usable `FRED_API_KEY`.
+- Provider, collector, normalizer, metadata, research-cutoff, and dashboard tests
+  pass. A bounded credentialed CPIAUCSL live run, exact-key skip, and independent
+  zero-row canonical replay also passed; see the
+  [ALFRED acceptance report](acceptance/2026-08-13-alfred-cpiaucsl.md).
 
 The platform now has a canonical [full-version roadmap](full-version-roadmap.md) and
 a granular [roadmap execution index](roadmap/README.md), introduced at `cec0ed4`.
@@ -46,10 +47,10 @@ backtest, portfolio, or ML boundary was introduced by the ALFRED slice.
 
 - Repository: `/home/luis/dev/invs`
 - Branch: `main`
-- ALFRED implementation boundary: `75e0941` (`fix(migrations): sequence nullable macro values`)
+- Live-accepted ALFRED implementation boundary: `31378be` (`docs: record ALFRED milestone and roadmap`)
 - Roadmap boundary: `cec0ed4` (`docs(roadmap): define full platform phases`)
-- Live ALFRED blocker: supply a valid environment-only `FRED_API_KEY`; do not put it
-  in YAML, run metadata, raw attributes, logs, or acceptance artifacts.
+- ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
+  raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
   handoff baseline, but it is no longer the current repository boundary.
 
@@ -429,7 +430,7 @@ duplicate JSON keys and emits PostgreSQL `EXPLAIN` statements for all dashboard 
   the safe research availability cutoff is 36 hours later.
 - Canonical revisions are deterministic ordinals per observation date, including
   equal-value and explicit missing vintages. Historical reruns do not auto-renumber.
-- Fixture/unit/integration acceptance passes. No live API acceptance is claimed yet.
+- Fixture/unit/integration acceptance and the bounded live CPIAUCSL replay pass.
 
 ### BCB SGS
 
@@ -733,8 +734,8 @@ The following are not accidental omissions:
 - No full historical point-in-time guarantee for current Yahoo, FRED, or BCB pulls.
   Historical vintage providers and publication-time evidence are required before a
   serious backtest claim.
-- ALFRED historical-vintage ingestion is implemented and fixture-accepted, but a
-  bounded live credentialed acceptance run has not yet been recorded.
+- The bounded ALFRED CPIAUCSL work package is live-accepted; broader v0.2 historical
+  truth is not accepted.
 - No broad B3/CVM market instrument discovery, B3 market data, or unattended B3
   access policy. B3 remains deferred until access, fixtures, mapping, and policy are
   explicit.
@@ -758,14 +759,11 @@ The following are not accidental omissions:
 
 Follow [the roadmap execution index](roadmap/README.md). The nearest cohesive units are:
 
-1. Configure `FRED_API_KEY`, run one bounded ALFRED live acceptance, retry the exact
-   run key, verify raw manifests/Parquet/PostgreSQL, and record the accepted commit
-   and bounds without recording the key.
-2. Finish the universal downloaded-bytes-plus-parse-error contract for the remaining
+1. Finish the universal downloaded-bytes-plus-parse-error contract for the remaining
    providers.
-3. Add separate CVM filing and feature-artifact notebook inspection; do not join
+2. Add separate CVM filing and feature-artifact notebook inspection; do not join
    filings one-to-many into the price/fundamental/macro snapshot.
-4. Complete reconciliation and backup/restore runbooks plus a clean restore drill.
-5. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
+3. Complete reconciliation and backup/restore runbooks plus a clean restore drill.
+4. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
    work and its US/Brazil bias fixtures. Do not start strategy or execution work by
    treating current-vintage backfills as historical truth.
