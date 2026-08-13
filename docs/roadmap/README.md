@@ -54,14 +54,15 @@ scale triggers, security, documentation, and universal definition of done.
 
 ## Current execution focus
 
-The active planned version is v0.1. Feature documentation, the supported
-`make feature` / `make feature-validate` command, and its real-data replay have
-already landed. The next unaccepted cohesive units are:
+v0.1 is accepted at `63d479d`. The active planned version is now v0.2; its
+bounded ALFRED work package is accepted, but the historical-truth version gate is
+not. The next unaccepted cohesive units are:
 
-1. resolve the first observed daily-run attention and record a clean run of the
-   implemented unattended daily runbook (`make daily` and `make ops-status`);
-2. remaining v0.1 bounded acceptance;
-3. post-acceptance ALFRED bias fixtures and the remaining v0.2 historical-truth work.
+1. write the historical-identity/universe and calendar ADRs before implementation;
+2. add v0.2 vintage-selection and historical-bias fixtures for one US and one Brazil
+   research slice;
+3. admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
+   coverage, identity, and availability checks pass.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook

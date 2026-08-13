@@ -15,9 +15,9 @@ actions, FX, and source policies required for honest simulation.
 1. [v0.1 — Foundation Certification and Operations](../versions/v0.1-foundation-certification.md)
 2. [v0.2 — Historical Truth and Market Mechanics](../versions/v0.2-historical-truth.md)
 
-The versions are sequential. ALFRED implementation can be prepared while remaining
-v0.1 operational work is finishing, but v0.2 cannot be accepted until v0.1 recovery
-and ingestion gates pass.
+The versions are sequential. v0.1 is accepted at `63d479d`; v0.2 cannot be accepted
+until its historical identity, vintage, calendar, action, FX, and US/Brazil bias
+gates pass.
 
 ## Phase workstreams
 
@@ -35,11 +35,12 @@ and ingestion gates pass.
 
 ## Phase gate checklist
 
-- [ ] v0.1 clean-machine collection and manifest verification pass.
-- [ ] Provider parse failures retain downloaded bytes and publish no false canonical
+- [x] v0.1 clean-machine collection and manifest verification pass (`63d479d` plus
+  the retained prior clean-slice evidence).
+- [x] Provider parse failures retain downloaded bytes and publish no false canonical
   rows.
-- [ ] Backup is restored into a clean root and all durable layers verify.
-- [ ] Daily collection failures, partials, stale data, and disk pressure are visible.
+- [x] Backup is restored into a clean root and all durable layers verify.
+- [x] Daily collection failures, partials, stale data, and disk pressure are visible.
 - [ ] One revised ALFRED series selects the correct vintage across exact boundaries.
 - [ ] Historical identifiers and universe membership preserve removed/delisted names.
 - [ ] US and Brazil session/calendar behavior is explicit.

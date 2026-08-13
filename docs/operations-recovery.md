@@ -1,9 +1,10 @@
 # Recovery, reconciliation, and daily operations
 
 This runbook covers the durable foundation only. It does not make a historical
-truth or trading-system claim. The reconciliation and restore implementation is
-accepted at `0f73e39`; v0.1 remains in progress until the full clean-machine
-acceptance scenario and an observed unattended schedule pass.
+truth or trading-system claim. The reconciliation and restore implementation was
+accepted at `0f73e39`; the full v0.1 foundation and operations gate was accepted at
+`63d479d`. The exact evidence is in
+[the v0.1 foundation acceptance report](acceptance/2026-08-13-v0.1-foundation.md).
 
 ## Reconcile before and after operations
 
@@ -159,8 +160,8 @@ thresholds are locally configurable with `INVS_STALE_AFTER_HOURS`,
 
 The log is the local alert surface: inspect it for failed/partial runs, stale
 source coverage, reconciliation findings, projection lag, and disk headroom.
-A later v0.1 acceptance slice must observe this schedule and record the result;
-implementation and documentation alone do not check that gate.
+The accepted 2026-08-13 observation below demonstrates this schedule and records
+the result; implementation and documentation alone would not have checked that gate.
 
 ### First live observation: 2026-08-13
 
@@ -184,9 +185,30 @@ source freshness, projection age, and disk headroom were within thresholds. This
 is recorded observation evidence, not a passed unattended-run gate. A clean
 observation after the Yahoo correction is reviewed remains pending.
 
+### Clean observation after correction: 2026-08-13
+
+After reviewing the preserved Yahoo response correction and archiving the superseded
+canonical/feature outputs, the exact implementation boundary `63d479d` ran:
+
+```sh
+INVS_DAILY_RUN_KEY=daily-2026-08-13-yahoo-correction-2 \
+  make daily DAILY_DATE=2026-08-13
+```
+
+SEC, Yahoo, FRED, ALFRED, and BCB all succeeded. The wrapper reported
+`collection_status=0`, `reconcile_status=0`, `operational_status=ok`, and
+`daily_status=ok`. The source status check showed zero unresolved failed/partial
+runs after each source's latest successful run; older attempts remain visible in
+PostgreSQL and the daily log. The corrected Yahoo canonical partition contains 1,661
+rows, and the active AAPL 2026-08-12 row has `open=305.10` and `volume=40588500`.
+
+An exact-key retry completed successfully with zero changed canonical rows. This
+observation, the bounded current-code CVM IPE replay, and the clean-root recovery
+drill are recorded in the [v0.1 acceptance report](acceptance/2026-08-13-v0.1-foundation.md).
+
 ## Recovery evidence
 
-At implementation commit `0f73e39`, the following drill passed on the local
+At implementation commit `0f73e39`, the following initial drill passed on the local
 Compose stack:
 
 - backup created a new directory containing 41 immutable files and a PostgreSQL
@@ -196,7 +218,7 @@ Compose stack:
 - `cmd/reconcile` ran against both restored roots and returned zero findings;
 - the original application database and checkout data were not overwritten.
 
-This proves the recovery slice. It does not replace the remaining v0.1
-acceptance scenario, which still requires the bounded real-source collection,
-notebook/catalog/dashboard checks, failure-preservation coverage, and an
-observed daily run.
+This proved the recovery slice. The post-correction v0.1 acceptance repeated the
+backup/restore path with 97 immutable files, restored database
+`restore_v01_20260813`, current feature lineage, and zero reconciliation findings;
+its full evidence is in the [v0.1 acceptance report](acceptance/2026-08-13-v0.1-foundation.md).

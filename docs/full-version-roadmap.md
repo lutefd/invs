@@ -238,6 +238,8 @@ while later components are built.
 
 # v0.1 — Foundation Certification and Operations
 
+**Status:** Accepted at `63d479d`; see the [v0.1 foundation acceptance report](acceptance/2026-08-13-v0.1-foundation.md).
+
 ## Goal
 
 Turn the current implementation into a boring, repeatable base that can be trusted
@@ -273,8 +275,9 @@ or replay it using documented commands.
 - Document the difference between repository release state, local collected data,
   external acceptance archives, and replaceable PostgreSQL projections.
 
-The feature/CVM wording alignment landed in `37e8812`. The remaining v0.1
-documentation work is the release/acceptance index and recovery documentation.
+The feature/CVM wording alignment landed in `37e8812`; the release/acceptance
+index and recovery documentation are now complete. The exact v0.1 acceptance
+evidence is in the linked report.
 
 ### 2. Complete the operator surface for features — completed before roadmap finalization
 
@@ -355,9 +358,10 @@ operator sequence is in [docs/operations-recovery.md](operations-recovery.md).
 
 The serialized `make daily` wrapper and local `make ops-status` failure summary
 landed in `68d7fd8`; append-only canonical replay support landed in `f92d5a5`.
-The first live observation recorded attention, so the unattended gate remains
-open until a scheduled run completes with clean reconciliation and an acceptable
-operational status.
+After a reviewed Yahoo correction, the post-commit run at `63d479d` completed with
+clean reconciliation and `operational_status=ok`. The v0.1 acceptance report records
+the exact run-input hashes, current-code CVM IPE replay, feature artifact, and
+clean-root recovery evidence.
 
 ## Data and migration work
 
@@ -1848,15 +1852,14 @@ A version is not done because its happy path runs once. It is done when:
 
 ## First execution queue
 
-The immediate queue after approving this roadmap should remain narrow. The original
-feature-documentation and operator-command actions are already accepted, so the
-remaining queue begins at the next data-integrity boundary:
+v0.1 is accepted. The next narrow queue is the v0.2 historical-truth boundary:
 
-1. Add reconciliation and backup/restore runbooks, then execute a clean restore drill.
-2. Certify the remaining v0.1 scope with a bounded live acceptance.
-3. Write the historical-identity/universe and calendar ADRs before the rest of v0.2.
-4. Add the first v0.2 vintage-selection and historical-bias fixtures.
+1. Write the historical-identity/universe and calendar ADRs before implementation.
+2. Add the first v0.2 vintage-selection and historical-bias fixtures for one US and
+   one Brazil research slice.
+3. Admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
+   coverage, identity, and availability checks pass.
 
-Do not start the general backtester while any of steps 1–4 remain unaccepted. The
-fastest path to the full platform is to keep every later result explainable from a
-trusted historical input boundary.
+Do not start the general backtester while the v0.2 historical-truth gate remains
+unaccepted. The fastest path to the full platform is to keep every later result
+explainable from a trusted historical input boundary.

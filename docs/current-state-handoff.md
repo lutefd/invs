@@ -51,8 +51,10 @@ separate empty-safe CVM filing and feature-artifact inspection sections from
 
 The recovery slice then landed in `0f73e39`: a read-only reconciliation report,
 explicit destination backup/restore scripts, and a clean-root PostgreSQL/data
-restore drill. The daily schedule and the final v0.1 acceptance gate remain open;
-see [the recovery runbook](operations-recovery.md).
+restore drill. The v0.1 foundation and operations gate is now accepted at
+`63d479d`; the exact evidence is in the
+[v0.1 foundation acceptance report](acceptance/2026-08-13-v0.1-foundation.md).
+The next work is v0.2 historical truth, not strategy or execution logic.
 
 ## B3 market-data source-selection discovery
 
@@ -76,7 +78,7 @@ limits, and explicit availability semantics before accepting the bridge.
 - Live-accepted ALFRED implementation boundary: `31378be` (`docs: record ALFRED milestone and roadmap`)
 - Latest provider-contract implementation boundary: `8f2680f` (`feat(provider): standardize downloaded resource results`)
 - Latest research-visibility implementation boundary: `806874a` (`feat(research): inspect filings and feature artifacts`)
-- Latest operations implementation boundary: `0f73e39` (`feat(operations): reconcile durable ingestion state`)
+- Latest v0.1 operations implementation boundary: `63d479d` (`fix(operations): clear superseded source alerts`)
 - Latest roadmap discovery boundary: `0be506c` (`docs(roadmap): record Yahoo B3 market-data bridge discovery`)
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
@@ -292,10 +294,12 @@ immutable file. The clean-root drill at `0f73e39` restored PostgreSQL to a new
 `restore_*` database and returned zero reconciliation findings; it did not claim
 the remaining full v0.1 acceptance gate.
 The serialized daily wrapper and local operational status check landed in
-`68d7fd8`; the append-only canonical replay fix landed in `f92d5a5`. The first
-live daily observation is recorded in [the operations runbook](operations-recovery.md)
-and remains an attention result pending review of a real Yahoo historical
-correction.
+`68d7fd8`; the append-only canonical replay fix landed in `f92d5a5`. After a
+reviewed Yahoo historical correction, the post-commit daily run at `63d479d`
+completed with all enabled sources succeeded, zero reconciliation findings, and
+`operational_status=ok`. The full current-code evidence is recorded in
+[the v0.1 acceptance report](acceptance/2026-08-13-v0.1-foundation.md) and the
+[operations runbook](operations-recovery.md).
 
 ### Canonical Parquet and manifests
 
@@ -806,10 +810,12 @@ The following are not accidental omissions:
 
 ## Exact next actions
 
-Follow [the roadmap execution index](roadmap/README.md). The nearest cohesive units are:
+Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
+`63d479d`; the nearest cohesive v0.2 units are:
 
-1. Resolve the first observed daily-run attention, then record a clean unattended
-   runbook observation.
-2. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
-   work and its US/Brazil bias fixtures. Do not start strategy or execution work by
-   treating current-vintage backfills as historical truth.
+1. Write the historical-identity/universe and calendar ADRs before implementation.
+2. Add the first v0.2 vintage-selection and historical-bias fixtures for one US and
+   one Brazil research slice.
+3. Admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
+   coverage, identity, and availability checks pass. Do not start strategy or
+   execution work by treating current-vintage backfills as historical truth.
