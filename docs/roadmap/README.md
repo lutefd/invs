@@ -56,11 +56,15 @@ scale triggers, security, documentation, and universal definition of done.
 
 v0.1 is accepted at `63d479d`. The active planned version is now v0.2; its
 bounded ALFRED work package is accepted, but the historical-truth version gate is
-not. The next unaccepted cohesive units are:
+not. The historical-contract slice in `4d483ac` added ADRs 0006 and 0007, strict
+identity/listing/membership/calendar schemas, and executable synthetic US/Brazil
+fixtures. It establishes selection semantics but is not source-backed publication
+or live historical-fitness acceptance. The next unaccepted cohesive units are:
 
-1. write the historical-identity/universe and calendar ADRs before implementation;
-2. add v0.2 vintage-selection and historical-bias fixtures for one US and one Brazil
-   research slice;
+1. publish source-backed historical identifiers, listings, and universe membership
+   through the durable metadata/research boundary;
+2. admit and version explicit US and Brazil exchange calendars with source evidence
+   and the pinned decision-clock behavior;
 3. admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
    coverage, identity, and availability checks pass.
 

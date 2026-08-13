@@ -104,6 +104,26 @@ Adapters must preserve these mappings and fail closed on an invalid marker. They
 must not infer exact instants from a date-only value or silently reinterpret a
 malformed marker.
 
+### Historical identity and calendars
+
+The v0.2 historical contracts are separate from the current YAML/security catalog:
+
+- `security-identifier-version.schema.json` records a scoped identifier assignment
+  with validity and knowledge intervals;
+- `security-listing-version.schema.json` records issuer, MIC, currency, and primary
+  listing state over a validity interval;
+- `universe-membership.schema.json` records positive or corrective membership
+  assertions; and
+- `trading-session.schema.json` plus `calendar-manifest.schema.json` records
+  explicit open/closed sessions, exchange timezone, calendar version, and a session
+  fingerprint.
+
+`available_at` is the historical knowledge cutoff, while `valid_from` and
+`valid_until` describe the market or universe interval. The synthetic bounded
+fixtures in `historical-truth.fixture.json` and `calendar.fixture.json` are
+exercised by `python/tests/test_historical_truth.py`; they prove the resolver
+boundary but do not represent live provider coverage or durable source admission.
+
 ## Validation
 
 Run the dependency-free structural and reference check:

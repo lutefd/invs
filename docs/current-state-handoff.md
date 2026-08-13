@@ -56,6 +56,12 @@ restore drill. The v0.1 foundation and operations gate is now accepted at
 [v0.1 foundation acceptance report](acceptance/2026-08-13-v0.1-foundation.md).
 The next work is v0.2 historical truth, not strategy or execution logic.
 
+The first v0.2 contract slice landed in `4d483ac`: ADRs 0006 and 0007 define
+source-backed historical identity/universe semantics and versioned exchange
+calendars/decision clocks; strict schemas and pure Python resolvers exercise
+synthetic US and Brazil fixtures. The slice deliberately stops before PostgreSQL
+historical publication, live calendar/source admission, and the bounded bias audit.
+
 ## B3 market-data source-selection discovery
 
 The current planning discovery for Brazil is to use Yahoo Finance as the primary B3
@@ -80,6 +86,7 @@ limits, and explicit availability semantics before accepting the bridge.
 - Latest research-visibility implementation boundary: `806874a` (`feat(research): inspect filings and feature artifacts`)
 - Latest v0.1 operations implementation boundary: `63d479d` (`fix(operations): clear superseded source alerts`)
 - Latest roadmap discovery boundary: `0be506c` (`docs(roadmap): record Yahoo B3 market-data bridge discovery`)
+- Latest v0.2 contract/fixture boundary: `4d483ac` (`feat(data): add historical truth contracts and fixtures`)
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
@@ -164,7 +171,7 @@ dataset merely because it is convenient to query.
 
 Primary design references are [README.md](../README.md),
 [architecture.md](architecture.md), and [ADR 0001](adr/0001-storage-boundaries.md)
-through [ADR 0005](adr/0005-deterministic-feature-artifacts.md).
+through [ADR 0007](adr/0007-versioned-calendars-and-decision-clocks.md).
 
 ## Completed commit sequence
 
@@ -767,6 +774,10 @@ the collector image build, `make reconcile` against the running stack, and a
 backup/restore drill that loaded PostgreSQL into a new `restore_*` database and
 returned zero findings from reconciliation against the restored data root.
 
+The v0.2 contract/fixture slice at `4d483ac` passed `make test`: Go tests and vet,
+18 JSON Schema documents, and 58 Python tests including the exact-boundary identity,
+membership, calendar, and decision-clock fixtures.
+
 The retained post-metadata v0 r3 acceptance at
 `/home/luis/invs-acceptance/2026-08-12-v0-r3` recorded:
 
@@ -790,6 +801,9 @@ The following are not accidental omissions:
   serious backtest claim.
 - The bounded ALFRED CPIAUCSL work package is live-accepted; broader v0.2 historical
   truth is not accepted.
+- Historical identity/listing/membership and calendar contracts have synthetic
+  resolver fixtures, but no durable PostgreSQL publication or admitted live source
+  exists yet.
 - No broad B3/CVM market instrument discovery or integrated Brazilian market-data
   path. Yahoo `.SA` is the planned primary bridge, while selective B3 public datasets
   remain an enrichment and validation path; source terms, fixtures, mappings,
@@ -813,9 +827,11 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Write the historical-identity/universe and calendar ADRs before implementation.
-2. Add the first v0.2 vintage-selection and historical-bias fixtures for one US and
-   one Brazil research slice.
+1. Publish source-backed historical identifier/listing/universe records through a
+   migration and manifest-backed research boundary, including PostgreSQL overlap
+   constraints and durable provenance.
+2. Admit and version the bounded US/Brazil calendar inputs, then connect the pinned
+   decision-clock semantics to the research selection path.
 3. Admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
    coverage, identity, and availability checks pass. Do not start strategy or
    execution work by treating current-vintage backfills as historical truth.
