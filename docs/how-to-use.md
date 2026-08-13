@@ -835,7 +835,9 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
 - Historical issuer state from CVM CAD; CAD is current and raw-only.
 - Full document contents, extracted filing statements, or a canonical CAD
   history; the current CVM slice is filing metadata plus raw source evidence.
-- A complete B3/Brazilian market-data universe; B3 remains deferred.
+- A complete B3/Brazilian market-data universe; Yahoo Finance `.SA` is the planned
+  primary bridge, but integration, coverage, and historical-fitness acceptance remain
+  pending.
 - A backtest, strategy signal, portfolio, forecast, ML model, execution order,
   or performance claim. The feature engine is deliberately only the first
   deterministic market-basic registry.

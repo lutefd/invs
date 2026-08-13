@@ -42,9 +42,17 @@ joined into an as-of research snapshot. The Python catalog exposes dedicated
 needs a separate optional filings-inspection cell; filings will not be joined
 one-to-many into the existing price/fundamental/macro snapshot.
 
-B3 remains deferred. No B3 source, instrument mapping, or historical-availability
-claim is part of this foundation until unattended access, a captured fixture, and
-the required market-data policy boundary are established.
+B3 market data is not implemented in this foundation. The source-selection discovery
+for future Brazilian coverage is Yahoo Finance as the primary bridge, with Brazilian
+tickers mapped through the `.SA` suffix for historical prices, volumes, dividends,
+splits, and related market data. Selective B3 public datasets may enrich instrument
+metadata, delistings, corporate actions, and validation without making paid B3
+credentials a dependency of the main analytical pipeline.
+
+This is a planning boundary, not a historical-availability claim. Unattended access,
+source terms, captured fixtures, instrument mapping, coverage, rate limits, and the
+required market-data policy must still be established before Brazilian support is
+accepted.
 
 ```text
 SEC / FRED / ALFRED / BCB / Yahoo / CVM provider

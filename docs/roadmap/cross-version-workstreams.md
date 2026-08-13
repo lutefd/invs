@@ -9,8 +9,9 @@
 Source work should be pulled by research needs in this order:
 
 1. Maintain and verify SEC, Yahoo/replacement, FRED/ALFRED, BCB, and CVM.
-2. Admit corporate-action, calendar, universe-membership, FX, and B3-or-alternative
-   sources needed for honest US/Brazil simulation.
+2. Validate the Yahoo-primary Brazil bridge and selectively admit B3 public-data,
+   corporate-action, calendar, universe-membership, and FX sources needed for honest
+   US/Brazil simulation.
 3. Add EIA and a small set of global/commodity series required by the reference theme
    and product acceptance questions.
 4. Add World Bank/IMF for global structural context when a concrete notebook or

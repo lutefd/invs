@@ -66,5 +66,11 @@ The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook
 inspection landed in `806874a`.
 
+The v0.2 Brazil source-selection discovery is to use Yahoo Finance as the primary
+B3 bridge through `.SA` ticker mappings for medium- to long-term research, with
+selective B3 public datasets for metadata, delistings, corporate actions, and
+validation. This is a planning decision only; source admission, fixtures, coverage,
+availability semantics, and the Brazil bias audit remain pending.
+
 No general strategy/backtest implementation should start before the historical-truth
 gate in v0.2 passes.

@@ -49,6 +49,21 @@ handoff, is the sequencing authority for future versions. The notebook now has
 separate empty-safe CVM filing and feature-artifact inspection sections from
 `806874a`; no strategy, backtest, portfolio, or ML boundary was introduced.
 
+## B3 market-data source-selection discovery
+
+The current planning discovery for Brazil is to use Yahoo Finance as the primary B3
+market-data bridge. Brazilian tickers should be mapped through the `.SA` suffix to
+collect historical prices, volumes, dividends, splits, and related market data. This
+keeps paid B3 credentials out of the critical path for the platform's medium- to
+long-term portfolio research, backtesting, simulation, and ML use cases.
+
+B3 public datasets remain selective complements for instrument metadata, delistings,
+corporate actions, and validation. This changes the source-selection plan, not the
+implementation status: no Brazilian market-data integration, historical-fitness
+acceptance, or broad instrument discovery is present in this checkout yet. The v0.2
+work must still validate access and terms, fixtures, identifiers, coverage, rate
+limits, and explicit availability semantics before accepting the bridge.
+
 ## Current continuation boundary
 
 - Repository: `/home/luis/dev/invs`
@@ -742,9 +757,10 @@ The following are not accidental omissions:
   serious backtest claim.
 - The bounded ALFRED CPIAUCSL work package is live-accepted; broader v0.2 historical
   truth is not accepted.
-- No broad B3/CVM market instrument discovery, B3 market data, or unattended B3
-  access policy. B3 remains deferred until access, fixtures, mapping, and policy are
-  explicit.
+- No broad B3/CVM market instrument discovery or integrated Brazilian market-data
+  path. Yahoo `.SA` is the planned primary bridge, while selective B3 public datasets
+  remain an enrichment and validation path; source terms, fixtures, mappings,
+  coverage, and historical-availability policy are still pending.
 - No canonical CVM CAD dataset or CAD snapshot table.
 - No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.

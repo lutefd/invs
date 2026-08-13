@@ -72,13 +72,36 @@ The following baseline limitations drive the version order:
 - The bounded ALFRED CPIAUCSL ingestion work package and exact-boundary selection are
   live-accepted; corporate actions, historical universe membership, exchange
   calendars, and historical identifier resolution remain absent.
-- B3 market data and broad Brazilian instrument discovery are not yet admitted.
+- Brazilian market-data integration and broad instrument discovery are not yet
+  implemented. The source-selection discovery below identifies Yahoo Finance as
+  the primary bridge, but the v0.2 admission evidence is still outstanding.
 - SEC filing metadata is not yet a canonical dataset, and CVM CAD is intentionally
   raw-only.
 - The feature engine publishes a single bounded feature set and lacks a dataset-wide
   runner and catalog.
 - There is no theme graph, document-event pipeline, hypothesis ledger, backtester,
   portfolio engine, paper account, or live execution.
+
+## Source-selection discovery: Brazilian market data
+
+The planning decision for the first Brazil research slice is to use Yahoo Finance as
+the primary B3 market-data bridge. Brazilian tickers are mapped to Yahoo symbols with
+the `.SA` suffix. The bridge is intended to collect historical prices, volumes,
+dividends, splits, and related market data without making paid B3 credentials a
+prerequisite for the main analytical pipeline.
+
+This fits the product boundary: the platform targets medium- to long-term portfolio
+research, backtesting, simulation, and ML, not intraday trading. Yahoo coverage is
+therefore treated as sufficient for the main analytical pipeline. B3 public datasets
+remain selective complements for instrument metadata, delistings, corporate actions,
+and validation.
+
+This is a source-selection discovery, not an implementation or historical-fitness
+acceptance. The v0.2 work must still capture fixtures, review access and terms,
+document coverage and availability semantics, map identifiers, and prove that the
+resulting Brazil slice is fit for its intended research use. A paid B3 or replacement
+provider may be reconsidered only if an explicit requirement exposes a gap, such as
+intraday coverage.
 
 ## Product boundary and non-negotiable rules
 
@@ -377,7 +400,8 @@ scheduler abstractions.
 
 - New strategy signals or broad feature sets.
 - Historical backtest claims.
-- B3 market-data integration without its admission evidence.
+- Brazilian market-data integration without source, terms, fixture, identity, and
+  availability evidence.
 - Distributed orchestration, object storage migration, multi-user auth, or live
   trading.
 
@@ -505,19 +529,26 @@ invariants.
 - Do not parse narrative filing content into investment events yet; that belongs to
   v0.4.
 
-### 7. Brazil admission path
+### 7. Brazil market-data bridge and selective B3 enrichment
 
-- Treat B3 access as an explicit spike with a go/no-go result covering unattended
-  access, redistribution/license constraints, stable URLs or APIs, captured fixtures,
-  instrument identifiers, historical coverage, and rate limits.
-- If admitted, add B3 instruments, daily quotes, indexes, and corporate actions behind
-  the same raw-first/canonical interfaces.
+- Use Yahoo Finance as the primary B3 market-data bridge for the first Brazil slice.
+  Map Brazilian tickers through the `.SA` suffix and extend the raw-first/canonical
+  interfaces to cover historical prices, volumes, dividends, splits, and related
+  market data.
+- Treat direct B3 public datasets as selective enrichment for instrument metadata,
+  delistings, corporate actions, and validation rather than as the main market-data
+  dependency.
+- Record the Yahoo and B3 source terms, unattended-access behavior, stable endpoints,
+  captured fixtures, instrument identifiers, historical coverage, and rate limits
+  before accepting the bridge. The source-selection discovery does not waive this
+  admission evidence.
 - Expand BCB series only from a research question, with source metadata and bounded
   acceptance for each family.
 - Keep CVM IPE canonical, CAD raw-only until a versioned issuer-snapshot contract is
   approved, and do not equate receipt time with historical public availability.
-- If B3 is not admissible, document the decision and use an alternative licensed
-  provider without weakening identifiers or provenance.
+- Do not make paid B3 credentials a dependency of the medium- to long-term research
+  pipeline. Reconsider a paid B3 or replacement provider only for a documented gap,
+  such as intraday requirements, and without weakening identifiers or provenance.
 
 ### 8. Source admission checklist for global expansion
 
@@ -588,7 +619,8 @@ historical use. Present-day convenience methods must remain visibly separate.
 
 - Resolve one B3-listed security and its currency/MIC as of a historical date using
   an admitted source or documented alternative.
-- Select BCB/CVM/B3-or-alternative inputs under their explicit availability policies.
+- Select Yahoo bridge and selective BCB/CVM/B3 public-data inputs under their explicit
+  availability policies.
 - Convert one valuation between BRL and USD using the pinned FX observation.
 - Demonstrate a corporate action or explicitly mark it unsupported and block the
   affected simulation interval.
@@ -616,7 +648,7 @@ historical use. Present-day convenience methods must remain visibly separate.
 6. `feat(data): publish corporate actions and adjustments`
 7. `feat(data): add canonical foreign exchange observations`
 8. `feat(data): publish SEC filing metadata`
-9. `docs(data): record B3 source admission decision`
+9. `docs(data): record Yahoo-primary Brazil market-data decision`
 10. `test(acceptance): audit v0.2 point-in-time truth`
 
 ## Explicit non-goals
@@ -1661,8 +1693,9 @@ inside the initial adapter.
 Source work should be pulled by research needs in this order:
 
 1. Maintain and verify SEC, Yahoo/replacement, FRED/ALFRED, BCB, and CVM.
-2. Admit corporate-action, calendar, universe-membership, FX, and B3-or-alternative
-   sources needed for honest US/Brazil simulation.
+2. Validate the Yahoo-primary Brazil bridge and selectively admit B3 public-data,
+   corporate-action, calendar, universe-membership, and FX sources needed for honest
+   US/Brazil simulation.
 3. Add EIA and a small set of global/commodity series required by the reference theme
    and product acceptance questions.
 4. Add World Bank/IMF for global structural context when a concrete notebook or
