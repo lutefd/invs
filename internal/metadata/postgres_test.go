@@ -101,6 +101,15 @@ func TestFinalizeRunSQLPersistsRawManifestHash(t *testing.T) {
 	}
 }
 
+func TestMacroSnapshotValuePreservesExplicitMissingRevision(t *testing.T) {
+	if got := nullableMacroValue("308.742"); got != "308.742" {
+		t.Fatalf("nullableMacroValue(non-empty) = %#v", got)
+	}
+	if got := nullableMacroValue(""); got != nil {
+		t.Fatalf("nullableMacroValue(empty) = %#v, want nil", got)
+	}
+}
+
 func TestSnapshotUpsertsPersistObservedPrecision(t *testing.T) {
 	cases := []struct {
 		name string

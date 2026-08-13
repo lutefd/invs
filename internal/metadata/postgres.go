@@ -699,7 +699,7 @@ func (r *Repository) FinalizeRun(ctx context.Context, run Run, finished time.Tim
 			candidate.Temporal.AvailableAt.UTC(),
 			candidate.Temporal.IngestedAt.UTC(),
 			string(candidate.Temporal.PublishedPrecision),
-			candidate.Value,
+			nullableMacroValue(candidate.Value),
 			candidate.Revision,
 			vintageAt,
 			snapshotRawPayloadHash(candidate.RawPayloadHash, candidate.Provenance.RawPayloadHash),
@@ -725,6 +725,13 @@ func nullableManifestHash(hash string) any {
 		return nil
 	}
 	return hash
+}
+
+func nullableMacroValue(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func snapshotObservedPrecision(precision model.TimePrecision) string {
