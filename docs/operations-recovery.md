@@ -160,6 +160,28 @@ source coverage, reconciliation findings, projection lag, and disk headroom.
 A later v0.1 acceptance slice must observe this schedule and record the result;
 implementation and documentation alone do not check that gate.
 
+### First live observation: 2026-08-13
+
+The first real wrapper run used `DAILY_DATE=2026-08-13` and the stable key
+`daily-2026-08-13` from implementation commit `68d7fd8`. The lock and continuation
+behavior worked: SEC, FRED, ALFRED, and BCB completed, while Yahoo became
+`partial` on a canonical natural-key conflict. The conflict was a real source
+correction: the 2026-08-12 bar changed open/volume between two preserved Yahoo
+response objects. The run therefore remained an attention result.
+
+Reconciliation also surfaced one obsolete FRED snapshot part left by the earlier
+full-snapshot publication behavior. After verifying its source run was terminal
+and that no feature artifact referenced it, the exact content-named part was moved
+to the recoverable local review area under `.runtime/unlisted-review/`; it was not
+deleted. `make reconcile` then returned `issues=0`. The append-only publication fix
+landed in `f92d5a5` so future new rows stay listed without unlisting prior lineage.
+
+`make ops-status` still correctly returned `operational_status=attention` because
+recent failed/partial source runs remain in the 24-hour review window; source
+freshness, projection age, and disk headroom were within thresholds. This is
+recorded observation evidence, not a passed unattended-run gate. A clean
+observation after the Yahoo correction is reviewed remains pending.
+
 ## Recovery evidence
 
 At implementation commit `0f73e39`, the following drill passed on the local

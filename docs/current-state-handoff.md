@@ -291,6 +291,11 @@ normalized manifest-listed parts, unlisted Parquet, and feature input lineage.
 immutable file. The clean-root drill at `0f73e39` restored PostgreSQL to a new
 `restore_*` database and returned zero reconciliation findings; it did not claim
 the remaining full v0.1 acceptance gate.
+The serialized daily wrapper and local operational status check landed in
+`68d7fd8`; the append-only canonical replay fix landed in `f92d5a5`. The first
+live daily observation is recorded in [the operations runbook](operations-recovery.md)
+and remains an attention result pending review of a real Yahoo historical
+correction.
 
 ### Canonical Parquet and manifests
 
@@ -803,7 +808,8 @@ The following are not accidental omissions:
 
 Follow [the roadmap execution index](roadmap/README.md). The nearest cohesive units are:
 
-1. Establish and observe the unattended daily runbook.
+1. Resolve the first observed daily-run attention, then record a clean unattended
+   runbook observation.
 2. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
    work and its US/Brazil bias fixtures. Do not start strategy or execution work by
    treating current-vintage backfills as historical truth.
