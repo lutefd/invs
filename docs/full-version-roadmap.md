@@ -353,6 +353,11 @@ operator sequence is in [docs/operations-recovery.md](operations-recovery.md).
 - Define retention policy: raw and canonical evidence are retained; temporary files,
   obsolete unlisted parts, logs, and backups have explicit review-based policies.
 
+The repository now provides the serialized `make daily` wrapper and the local
+`make ops-status` failure summary. The unattended gate remains open until a real
+scheduled run completes with clean reconciliation and an acceptable operational
+status.
+
 ## Data and migration work
 
 No new bulk analytical store is required. Small additions may include:

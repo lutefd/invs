@@ -128,20 +128,37 @@ database, not the original application database.
 ## Daily host schedule
 
 The v0.1 scheduler remains host-level. Do not add Dagster or Prefect for this
-boundary. A cron entry should serialize the batch with a host lock, use one
-stable date key, preserve the collector's effective run-input metadata, and run
-reconciliation even when collection fails. For example, with `flock` and a
-repository-local log directory:
+boundary. `make daily` is the supported operator wrapper: it serializes the batch
+with a host lock, uses one stable UTC date key, preserves the collector's
+effective run-input metadata, and runs reconciliation and the local status check
+even when collection fails.
+
+The default schedule is:
 
 ```cron
-15 02 * * * cd /home/luis/dev/invs && flock -n .runtime/daily.lock sh -c 'run_key="daily-$(date -u +\%F)"; make ingest SOURCE=all RUN_KEY="$run_key"; collection_status=$?; make reconcile; reconcile_status=$?; test "$collection_status" -eq 0 -a "$reconcile_status" -eq 0' >> /home/luis/dev/invs/logs/daily.log 2>&1
+15 02 * * * cd /home/luis/dev/invs && make daily >> /home/luis/dev/invs/logs/cron.log 2>&1
 ```
 
-Create `.runtime/` and `logs/` with operator-owned permissions before enabling
-the entry. The log is the local alert surface: inspect it for failed/partial
-runs, stale source coverage, reconciliation findings, projection lag, and disk
-headroom. A later v0.1 acceptance slice must observe this schedule and record
-the result; documentation alone does not check that gate.
+The wrapper writes one log per UTC run under `logs/` and takes
+`.runtime/daily.lock` with `flock`; an overlapping invocation exits with status
+75. The default run key is `daily-YYYY-MM-DD`, and a failed run must be retried
+with a new explicit key, for example:
+
+```sh
+INVS_DAILY_RUN_KEY=daily-2026-08-13-retry-1 make daily DAILY_DATE=2026-08-13
+```
+
+Use `INVS_DAILY_SOURCE` to narrow an operator retry. `make ops-status` reports
+enabled-source freshness, active runs, failed/partial runs in the last 24 hours,
+projection age, and data-root disk headroom. It exits nonzero with an
+`operational_status=attention` summary when any threshold is exceeded. The
+thresholds are locally configurable with `INVS_STALE_AFTER_HOURS`,
+`INVS_PROJECTION_AFTER_HOURS`, and `INVS_DISK_WARN_PERCENT`.
+
+The log is the local alert surface: inspect it for failed/partial runs, stale
+source coverage, reconciliation findings, projection lag, and disk headroom.
+A later v0.1 acceptance slice must observe this schedule and record the result;
+implementation and documentation alone do not check that gate.
 
 ## Recovery evidence
 

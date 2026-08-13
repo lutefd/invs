@@ -58,7 +58,8 @@ The active planned version is v0.1. Feature documentation, the supported
 `make feature` / `make feature-validate` command, and its real-data replay have
 already landed. The next unaccepted cohesive units are:
 
-1. establish and observe the unattended daily runbook;
+1. observe the implemented unattended daily runbook (`make daily` and
+   `make ops-status`);
 2. remaining v0.1 bounded acceptance;
 3. post-acceptance ALFRED bias fixtures and the remaining v0.2 historical-truth work.
 

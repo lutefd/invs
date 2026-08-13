@@ -4,6 +4,10 @@
 !.env.example
 config/config.local.yaml
 
+# Operator runtime and logs
+.runtime/
+logs/
+
 # Runtime data
 data/raw/**
 data/normalized/**

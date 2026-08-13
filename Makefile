@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate health urls ingest rerun reconcile backup restore feature feature-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -59,6 +59,12 @@ rerun:
 	@run_key="operator-retry-$(SOURCE)-$$(date +%s)"; \
 		$(MAKE) ingest SOURCE=$(SOURCE) RUN_KEY="$$run_key" && \
 		$(MAKE) ingest SOURCE=$(SOURCE) RUN_KEY="$$run_key"
+
+daily: setup config
+	@scripts/daily.sh "$(DAILY_DATE)"
+
+ops-status: setup config
+	@scripts/ops-status.sh
 
 reconcile: setup config
 	@$(COMPOSE) --profile collect run --rm collector reconcile --data-root /data --fail-on-issues
