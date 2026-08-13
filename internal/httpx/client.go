@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -77,7 +78,7 @@ func (c *Client) Get(ctx context.Context, url string) ([]byte, error) {
 				if len(snippet) > 300 {
 					snippet = snippet[:300]
 				}
-				err = &StatusError{Code: resp.StatusCode, URL: url, Body: snippet}
+				err = &StatusError{Code: resp.StatusCode, URL: redactURL(url), Body: snippet}
 				if !retryable(resp.StatusCode) {
 					return nil, err
 				}
@@ -101,6 +102,21 @@ func (c *Client) Get(ctx context.Context, url string) ([]byte, error) {
 		}
 	}
 	return nil, fmt.Errorf("request failed after %d attempts: %w", c.maxAttempts, last)
+}
+
+func redactURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "[invalid URL]"
+	}
+	query := parsed.Query()
+	for _, key := range []string{"api_key", "apikey", "access_token", "token", "key"} {
+		if query.Has(key) {
+			query.Set(key, "[REDACTED]")
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 type StatusError struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +17,22 @@ func testClient(t *testing.T, attempts int) *Client {
 		t.Fatal(err)
 	}
 	return c
+}
+
+func TestGetRedactsQueryCredentialsFromStatusError(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "denied", http.StatusForbidden)
+	}))
+	defer s.Close()
+	const secret = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	_, err := testClient(t, 1).Get(context.Background(), s.URL+"/observations?series_id=CPIAUCSL&api_key="+secret)
+	if err == nil {
+		t.Fatal("expected status error")
+	}
+	message := err.Error()
+	if strings.Contains(message, secret) || !strings.Contains(message, "api_key=%5BREDACTED%5D") || !strings.Contains(message, "series_id=CPIAUCSL") {
+		t.Fatalf("status error did not safely preserve request context: %v", err)
+	}
 }
 
 func TestGetRetriesAndSendsUserAgent(t *testing.T) {
