@@ -93,7 +93,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-market_research}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market_research_local}
     ports:
-      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+      - "0.0.0.0:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
