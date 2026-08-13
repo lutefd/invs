@@ -688,9 +688,13 @@ Or open the running JupyterLab instance at the URL printed by:
 make urls
 ```
 
-The notebook currently demonstrates the price/SEC fundamentals/FRED
-point-in-time join. It intentionally does not join CVM filings one-to-many and
-does not yet contain a dedicated filings or feature-publication cell.
+The notebook demonstrates the price/SEC fundamentals/FRED point-in-time join,
+then inspects CVM filings and an existing `market-basic` feature artifact in
+separate optional sections. It intentionally never joins CVM filings one-to-many
+into the snapshot. Use `EXAMPLE_FILING_MODE=installation_replay` for an explicit
+installation-time filing view, and set `EXAMPLE_FEATURE_MANIFEST` to inspect a
+specific feature manifest; both sections remain empty-safe when no artifact or
+filing dataset is present.
 
 Grafana is available at the configured local port. The provisioned dashboards
 are:
