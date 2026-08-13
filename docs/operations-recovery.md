@@ -149,8 +149,10 @@ INVS_DAILY_RUN_KEY=daily-2026-08-13-retry-1 make daily DAILY_DATE=2026-08-13
 ```
 
 Use `INVS_DAILY_SOURCE` to narrow an operator retry. `make ops-status` reports
-enabled-source freshness, active runs, failed/partial runs in the last 24 hours,
-projection age, and data-root disk headroom. It exits nonzero with an
+enabled-source freshness, active runs, unresolved failed/partial runs after the
+latest successful run in the last 24 hours, projection age, and data-root disk
+headroom. A later successful run clears the source's unresolved alert, but older
+attempts remain visible in PostgreSQL and the daily log. It exits nonzero with an
 `operational_status=attention` summary when any threshold is exceeded. The
 thresholds are locally configurable with `INVS_STALE_AFTER_HOURS`,
 `INVS_PROJECTION_AFTER_HOURS`, and `INVS_DISK_WARN_PERCENT`.
@@ -177,9 +179,9 @@ deleted. `make reconcile` then returned `issues=0`. The append-only publication 
 landed in `f92d5a5` so future new rows stay listed without unlisting prior lineage.
 
 `make ops-status` still correctly returned `operational_status=attention` because
-recent failed/partial source runs remain in the 24-hour review window; source
-freshness, projection age, and disk headroom were within thresholds. This is
-recorded observation evidence, not a passed unattended-run gate. A clean
+the source failures and partials had not yet been superseded by a successful run;
+source freshness, projection age, and disk headroom were within thresholds. This
+is recorded observation evidence, not a passed unattended-run gate. A clean
 observation after the Yahoo correction is reviewed remains pending.
 
 ## Recovery evidence

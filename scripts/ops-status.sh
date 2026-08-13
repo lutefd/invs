@@ -42,6 +42,12 @@ echo "thresholds stale_hours=$stale_after_hours projection_hours=$projection_aft
 
 issues=0
 source_sql=$(cat <<'SQL'
+WITH latest_success AS (
+    SELECT data_source_id, max(started_at) AS started_at
+    FROM ingestion_runs
+    WHERE status = 'succeeded'
+    GROUP BY data_source_id
+)
 SELECT s.code,
        CASE WHEN s.enabled THEN 'enabled' ELSE 'disabled' END,
        COALESCE(EXTRACT(EPOCH FROM (now() - max(r.started_at))) / 3600, -1)::numeric(12,2),
@@ -49,17 +55,19 @@ SELECT s.code,
        count(*) FILTER (
          WHERE r.status IN ('failed', 'partial')
            AND r.started_at >= now() - interval '24 hours'
+           AND (latest_success.started_at IS NULL OR r.started_at > latest_success.started_at)
        )
 FROM data_sources s
 LEFT JOIN ingestion_runs r ON r.data_source_id = s.id
-GROUP BY s.id, s.code, s.enabled
+LEFT JOIN latest_success ON latest_success.data_source_id = s.id
+GROUP BY s.id, s.code, s.enabled, latest_success.started_at
 ORDER BY s.code
 SQL
 )
 source_rows=$(run_sql "$source_sql")
 if [[ -n "$source_rows" ]]; then
-  while IFS='|' read -r code enabled age_hours active_runs troubled_runs; do
-    echo "source=$code enabled=$enabled age_hours=$age_hours active_runs=$active_runs troubled_runs_24h=$troubled_runs"
+  while IFS='|' read -r code enabled age_hours active_runs unresolved_troubled_runs; do
+    echo "source=$code enabled=$enabled age_hours=$age_hours unresolved_troubled_runs_24h=$unresolved_troubled_runs"
     if [[ "$enabled" == enabled ]]; then
       if awk -v age="$age_hours" -v threshold="$stale_after_hours" 'BEGIN { exit !(age < 0 || age > threshold) }'; then
         echo "attention=source_stale source=$code age_hours=$age_hours"
@@ -69,8 +77,8 @@ if [[ -n "$source_rows" ]]; then
         echo "attention=source_active_runs source=$code count=$active_runs"
         issues=1
       fi
-      if (( troubled_runs > 0 )); then
-        echo "attention=source_failures source=$code count_24h=$troubled_runs"
+      if (( unresolved_troubled_runs > 0 )); then
+        echo "attention=source_failures source=$code count_24h=$unresolved_troubled_runs"
         issues=1
       fi
     fi
