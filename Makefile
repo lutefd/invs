@@ -45,12 +45,12 @@ migrate: setup config
 health:
 	@$(COMPOSE) ps
 	@$(COMPOSE) exec -T postgres sh -c 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
-	@$(COMPOSE) exec -T jupyter python -c "import socket; socket.create_connection(('127.0.0.1', 8888), 2).close()"
-	@$(COMPOSE) exec -T grafana wget -q -O /dev/null http://127.0.0.1:3000/api/health
+	@$(COMPOSE) exec -T jupyter python -c "import socket; socket.create_connection(('0.0.0.0', 8888), 2).close()"
+	@$(COMPOSE) exec -T grafana wget -q -O /dev/null http://0.0.0.0:3000/api/health
 
 urls:
 	@$(COMPOSE) exec -T jupyter jupyter server list
-	@echo "Grafana: http://127.0.0.1:$${GRAFANA_PORT:-3000}"
+	@echo "Grafana: http://0.0.0.0:$${GRAFANA_PORT:-3000}"
 
 ingest: setup config
 	@$(COMPOSE) --profile collect run --rm collector --source $(SOURCE) $(RUN_KEY_ARG)
