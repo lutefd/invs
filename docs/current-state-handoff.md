@@ -45,9 +45,9 @@ partial multi-resource downloads.
 The platform now has a canonical [full-version roadmap](full-version-roadmap.md) and
 a granular [roadmap execution index](roadmap/README.md), introduced at `cec0ed4`.
 The roadmap, rather than the old numbered actions at the bottom of this historical
-handoff, is the sequencing authority for future versions. Optional CVM filing and
-feature-inspection notebook cells remain separate presentation work. No strategy,
-backtest, portfolio, or ML boundary was introduced by the ALFRED slice.
+handoff, is the sequencing authority for future versions. The notebook now has
+separate empty-safe CVM filing and feature-artifact inspection sections from
+`806874a`; no strategy, backtest, portfolio, or ML boundary was introduced.
 
 ## Current continuation boundary
 
@@ -55,6 +55,7 @@ backtest, portfolio, or ML boundary was introduced by the ALFRED slice.
 - Branch: `main`
 - Live-accepted ALFRED implementation boundary: `31378be` (`docs: record ALFRED milestone and roadmap`)
 - Latest provider-contract implementation boundary: `8f2680f` (`feat(provider): standardize downloaded resource results`)
+- Latest research-visibility implementation boundary: `806874a` (`feat(research): inspect filings and feature artifacts`)
 - Roadmap boundary: `cec0ed4` (`docs(roadmap): define full platform phases`)
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
@@ -755,7 +756,6 @@ The following are not accidental omissions:
 - Feature engine is a closed first registry only; no feature discovery catalog,
   batch runner, calendar policy, strategy, backtester, portfolio, execution, labels,
   training data, or ML behavior.
-- Notebook does not yet expose CVM filing inspection or feature artifacts.
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
 
@@ -763,9 +763,7 @@ The following are not accidental omissions:
 
 Follow [the roadmap execution index](roadmap/README.md). The nearest cohesive units are:
 
-1. Add separate CVM filing and feature-artifact notebook inspection; do not join
-   filings one-to-many into the price/fundamental/macro snapshot.
-2. Complete reconciliation and backup/restore runbooks plus a clean restore drill.
-3. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
+1. Complete reconciliation and backup/restore runbooks plus a clean restore drill.
+2. Close the remaining v0.1 acceptance gate, then continue v0.2 historical-truth
    work and its US/Brazil bias fixtures. Do not start strategy or execution work by
    treating current-vintage backfills as historical truth.

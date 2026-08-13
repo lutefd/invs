@@ -1809,13 +1809,11 @@ The immediate queue after approving this roadmap should remain narrow. The origi
 feature-documentation and operator-command actions are already accepted, so the
 remaining queue begins at the next data-integrity boundary:
 
-1. Add filing and feature inspection to the notebook without changing snapshot
-   cardinality.
-2. Add reconciliation and backup/restore runbooks, then execute a clean restore drill.
-3. Certify the remaining v0.1 scope with a bounded live acceptance.
-4. Write the historical-identity/universe and calendar ADRs before the rest of v0.2.
-5. Add the first v0.2 vintage-selection and historical-bias fixtures.
+1. Add reconciliation and backup/restore runbooks, then execute a clean restore drill.
+2. Certify the remaining v0.1 scope with a bounded live acceptance.
+3. Write the historical-identity/universe and calendar ADRs before the rest of v0.2.
+4. Add the first v0.2 vintage-selection and historical-bias fixtures.
 
-Do not start the general backtester while any of steps 1–5 remain unaccepted. The
+Do not start the general backtester while any of steps 1–4 remain unaccepted. The
 fastest path to the full platform is to keep every later result explainable from a
 trusted historical input boundary.
