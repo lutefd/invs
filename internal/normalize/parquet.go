@@ -297,7 +297,7 @@ func (w *Writer) WritePrices(securityID string, obs []model.PriceBar) (string, i
 	if err != nil && !slices.Equal(existing, rows) {
 		return "", 0, err
 	}
-	return publish(w, dir, partition, existing, rows, metadata)
+	return publish(w, dir, partition, existing, rows, priceKey, metadata)
 }
 func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObservation) (string, int, error) {
 	if _, err := uuid.Parse(issuerID); err != nil {
@@ -341,7 +341,7 @@ func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObser
 	if err != nil && !slices.Equal(existing, rows) {
 		return "", 0, err
 	}
-	return publish(w, dir, partition, existing, rows, metadata)
+	return publish(w, dir, partition, existing, rows, fundamentalKey, metadata)
 }
 
 // WriteFilings publishes one issuer/source partition of canonical filing
@@ -393,7 +393,7 @@ func (w *Writer) WriteFilings(issuerID string, obs []model.Filing) (string, int,
 	if err != nil && !slices.Equal(existing, rows) {
 		return "", 0, err
 	}
-	return publish(w, dir, partition, existing, rows, metadata)
+	return publish(w, dir, partition, existing, rows, filingKey, metadata)
 }
 
 // WriteEconomics updates obs revisions in place after a successful write so
@@ -464,7 +464,7 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 	if err != nil && !slices.Equal(existing, rows) {
 		return "", 0, err
 	}
-	path, n, err := publish(w, dir, partition, existing, rows, metadata)
+	path, n, err := publish(w, dir, partition, existing, rows, economicKey, metadata)
 	if err != nil {
 		return "", 0, err
 	}
@@ -983,8 +983,15 @@ func latestEconomic(rows []EconomicRow, r EconomicRow) (EconomicRow, bool) {
 	return best, ok
 }
 func samePrice(a, b PriceRow) bool {
-	if a.RawPayloadHash != b.RawPayloadHash {
+	if !sameObservedPrecision(a.ObservedPrecision, b.ObservedPrecision) {
 		return false
+	}
+	a.ObservedPrecision = b.ObservedPrecision
+	if a.RawPayloadHash != b.RawPayloadHash {
+		// A provider response may contain a wider range or changed response
+		// metadata on a retry. Preserve the first raw lineage when the
+		// canonical row itself is unchanged.
+		a.RawPayloadHash = b.RawPayloadHash
 	}
 	a.PublishedAt = b.PublishedAt
 	a.AvailableAt = b.AvailableAt
@@ -993,11 +1000,21 @@ func samePrice(a, b PriceRow) bool {
 	return a == b
 }
 func sameFundamental(a, b FundamentalRow) bool {
+	if !sameObservedPrecision(a.ObservedPrecision, b.ObservedPrecision) {
+		return false
+	}
+	a.ObservedPrecision = b.ObservedPrecision
+	a.RawPayloadHash = b.RawPayloadHash
 	a.IngestionRunID = b.IngestionRunID
 	a.IngestedAt = b.IngestedAt
 	return a == b
 }
 func sameEconomic(a, b EconomicRow) bool {
+	if !sameObservedPrecision(a.ObservedPrecision, b.ObservedPrecision) {
+		return false
+	}
+	a.ObservedPrecision = b.ObservedPrecision
+	a.RawPayloadHash = b.RawPayloadHash
 	a.IngestionRunID = b.IngestionRunID
 	a.IngestedAt = b.IngestedAt
 	return a == b
@@ -1013,6 +1030,13 @@ func sameFiling(a, b FilingRow) bool {
 	a.IngestionRunID = b.IngestionRunID
 	a.IngestedAt = b.IngestedAt
 	return a == b
+}
+
+func sameObservedPrecision(a, b string) bool {
+	if a == b {
+		return true
+	}
+	return a == string(model.PrecisionUnknown) || b == string(model.PrecisionUnknown) || a == "" || b == ""
 }
 func merge[T any](existing, in []T, key func(T) string, equal func(T, T) bool) ([]T, error) {
 	m := map[string]T{}
@@ -1491,15 +1515,34 @@ func storedTemporal(observed, published int64, observedPrecision, publishedPreci
 	}
 	return t
 }
-func publish[T comparable](w *Writer, dir string, partition map[string]string, existing, rows []T, metadata publicationMetadata) (string, int, error) {
+func publish[T comparable](w *Writer, dir string, partition map[string]string, existing, rows []T, key func(T) string, metadata publicationMetadata) (string, int, error) {
 	manifestPath := filepath.Join(dir, ManifestFilename)
-	if slices.Equal(existing, rows) {
+	existingKeys := make(map[string]struct{}, len(existing))
+	for _, row := range existing {
+		existingKeys[key(row)] = struct{}{}
+	}
+	delta := make([]T, 0, len(rows))
+	for _, row := range rows {
+		if _, ok := existingKeys[key(row)]; !ok {
+			delta = append(delta, row)
+		}
+	}
+	if len(delta) == 0 {
 		return manifestPath, 0, nil
 	}
-	part, err := writePart(dir, rows, w.publicationOps())
+	part, err := writePart(dir, delta, w.publicationOps())
 	if err != nil {
 		return "", 0, err
 	}
+	previous, present, err := readManifestIfPresent(manifestPath)
+	if err != nil {
+		return "", 0, err
+	}
+	parts := make([]ManifestPart, 0, len(previous.Parts)+1)
+	if present {
+		parts = append(parts, previous.Parts...)
+	}
+	parts = append(parts, part)
 	manifest := Manifest{
 		ManifestVersion:   ManifestVersion,
 		SchemaVersion:     model.SchemaVersion,
@@ -1510,7 +1553,7 @@ func publish[T comparable](w *Writer, dir string, partition map[string]string, e
 		IngestionRunID:    metadata.IngestionRunID,
 		Partition:         clonePartition(partition),
 		RowCount:          len(rows),
-		Parts:             []ManifestPart{part},
+		Parts:             parts,
 	}
 	if err := validateManifest(manifest); err != nil {
 		return "", 0, err
@@ -1518,7 +1561,7 @@ func publish[T comparable](w *Writer, dir string, partition map[string]string, e
 	if err := writeManifest(manifestPath, manifest, w.publicationOps()); err != nil {
 		return "", 0, err
 	}
-	return manifestPath, len(rows), nil
+	return manifestPath, len(delta), nil
 }
 
 func (w *Writer) gitCommitValue() string {

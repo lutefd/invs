@@ -329,7 +329,19 @@ func TestPriceSameRawPayloadWithDifferentTimingIsNoOp(t *testing.T) {
 	}
 }
 
-func TestPriceChangedRawPayloadAtSameNaturalKeyConflicts(t *testing.T) {
+func TestPriceLegacyUnknownObservedPrecisionIsCompatible(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	bar := price(time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC))
+	if _, _, err := w.WritePrices(securityID, []model.PriceBar{bar}); err != nil {
+		t.Fatal(err)
+	}
+	bar.Temporal.ObservedPrecision = model.PrecisionSecond
+	if _, _, err := w.WritePrices(securityID, []model.PriceBar{bar}); err != nil {
+		t.Fatalf("legacy unknown precision should be compatible: %v", err)
+	}
+}
+
+func TestPriceChangedCanonicalValueAtSameNaturalKeyConflicts(t *testing.T) {
 	w, _ := NewWriter(t.TempDir())
 	bar := price(time.Now().UTC().Add(-3 * time.Hour))
 	if _, _, err := w.WritePrices(securityID, []model.PriceBar{bar}); err != nil {
@@ -337,12 +349,13 @@ func TestPriceChangedRawPayloadAtSameNaturalKeyConflicts(t *testing.T) {
 	}
 	bar.RawPayloadHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	bar.Provenance.RawPayloadHash = bar.RawPayloadHash
+	bar.Close = "2.5"
 	if _, _, err := w.WritePrices(securityID, []model.PriceBar{bar}); !errors.Is(err, ErrNaturalKeyConflict) {
 		t.Fatalf("got %v", err)
 	}
 }
 
-func TestSameNaturalKeyComparisonsPreserveRawPayloadIdentity(t *testing.T) {
+func TestSameNaturalKeyComparisonsIgnoreContainerRawPayloadIdentity(t *testing.T) {
 	priceA := PriceRow{RawPayloadHash: rawHash}
 	priceB := priceA
 	priceB.RawPayloadHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -352,8 +365,8 @@ func TestSameNaturalKeyComparisonsPreserveRawPayloadIdentity(t *testing.T) {
 	economicA := EconomicRow{RawPayloadHash: rawHash}
 	economicB := economicA
 	economicB.RawPayloadHash = priceB.RawPayloadHash
-	if samePrice(priceA, priceB) || sameFundamental(fundamentalA, fundamentalB) || sameEconomic(economicA, economicB) {
-		t.Fatal("raw payload identity was ignored")
+	if !samePrice(priceA, priceB) || !sameFundamental(fundamentalA, fundamentalB) || !sameEconomic(economicA, economicB) {
+		t.Fatal("identical canonical rows with a new container hash were not idempotent")
 	}
 }
 
@@ -708,8 +721,7 @@ func TestMacroRevisionInvalidAndConflictingInputsFailClosed(t *testing.T) {
 	}
 
 	conflict := base
-	conflict.RawPayloadHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	conflict.Provenance.RawPayloadHash = conflict.RawPayloadHash
+	conflict.Unit = "Percent"
 	conflictInput := []model.EconomicObservation{conflict}
 	if _, _, err := w.WriteEconomics("X", conflictInput); !errors.Is(err, ErrNaturalKeyConflict) {
 		t.Fatalf("conflict error=%v", err)

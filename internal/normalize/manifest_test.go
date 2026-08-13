@@ -107,6 +107,51 @@ func TestManifestPublicationSyncsPartBeforeManifestRename(t *testing.T) {
 	}
 }
 
+func TestManifestPublicationAppendsNewRowsAndKeepsLineage(t *testing.T) {
+	root := t.TempDir()
+	w, err := NewWriter(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstAt := time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC)
+	manifestPath, _, err := w.WritePrices(securityID, []model.PriceBar{price(firstAt)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstManifest, err := ReadManifest(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPart := firstManifest.Parts[0]
+
+	second := price(firstAt.Add(24 * time.Hour))
+	manifestPath, rowsWritten, err := w.WritePrices(securityID, []model.PriceBar{second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rowsWritten != 1 {
+		t.Fatalf("rows written=%d, want 1", rowsWritten)
+	}
+	manifest, err := ReadManifest(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.RowCount != 2 || len(manifest.Parts) != 2 {
+		t.Fatalf("manifest counts=%d parts=%+v", manifest.RowCount, manifest.Parts)
+	}
+	if manifest.Parts[0] != firstPart {
+		t.Fatalf("first part changed: got=%+v want=%+v", manifest.Parts[0], firstPart)
+	}
+	for _, part := range manifest.Parts {
+		if _, err := os.Stat(filepath.Join(filepath.Dir(manifestPath), part.Path)); err != nil {
+			t.Fatalf("manifest part %s missing: %v", part.Path, err)
+		}
+	}
+	if err := w.ValidateExisting(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLegacyDataParquetIsNeverTreatedAsCommitted(t *testing.T) {
 	root := t.TempDir()
 	w, err := NewWriter(root)

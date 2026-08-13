@@ -310,7 +310,10 @@ Important invariants:
 - Published rows require source UUID, run UUID, raw SHA-256, record locator,
   ingestion time, and normalizer version.
 - Top-level and provenance raw hashes must agree.
-- A changed raw hash for the same natural key is a conflict.
+- A changed canonical value or identity for the same natural key is a conflict.
+  Re-fetching an equivalent canonical row from a changed response envelope is a
+  no-op and preserves the first row's raw lineage; the new raw run evidence is
+  still retained by its run manifest.
 - Fundamental natural keys include taxonomy and unit.
 - Macro revisions preserve an A -> B -> A history rather than collapsing by value.
 - Existing files are checked for physical schema, supported version, row invariants,

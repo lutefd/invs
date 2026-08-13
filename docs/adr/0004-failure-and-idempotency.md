@@ -116,7 +116,8 @@ unlisted files are therefore invisible to research readers.
 For every adapter, tests execute the same fixture twice, interrupt once after raw
 write and once before manifest publication, then rerun. Assertions cover stable row
 counts, byte-identical manifests, no duplicate natural keys, preserved raw hashes,
-and an explicit conflict when identical natural keys contain different data. Large
+idempotence for equivalent canonical rows from a changed response envelope, and an
+explicit conflict when identical natural keys contain different data. Large
 historical macro fixtures must reduce to one finalization candidate per series before
 the PostgreSQL transaction, while lineage validation still examines every candidate.
 Parse-error fixtures must preserve the returned raw bytes and publish no normalized

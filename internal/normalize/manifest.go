@@ -35,9 +35,9 @@ const (
 //
 //	{"manifest_version":1,"schema_version":"1.0.0","normalizer_version":"go-v1","git_commit":"<sha1-or-unknown>","source":"<source>","data_source_id":"<uuid>","ingestion_run_id":"<uuid>","partition":{"dataset":"<dataset>","source":"<source>","<key>":"<value>"},"row_count":1,"parts":[{"path":"part-<sha256>.parquet","sha256":"<sha256>","row_count":1}]}
 //
-// The current Go writer publishes one part per manifest, while parts remains
-// an array so a future writer can publish a partition split without changing
-// discovery.
+// The Go writer appends newly accepted canonical rows as content-named parts;
+// each manifest lists the complete current part set so readers retain stable
+// lineage to earlier publications.
 type Manifest struct {
 	ManifestVersion   int               `json:"manifest_version"`
 	SchemaVersion     string            `json:"schema_version"`
