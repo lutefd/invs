@@ -70,8 +70,10 @@ The following baseline limitations drive the version order:
 - Current Yahoo, FRED, and BCB backfills do not establish historical knowledge
   availability.
 - The bounded ALFRED CPIAUCSL ingestion work package and exact-boundary selection are
-  live-accepted; corporate actions, historical universe membership, exchange
-  calendars, and historical identifier resolution remain absent.
+  live-accepted. ADRs, synthetic fixtures, and the durable metadata publication/
+  resolution boundary now exist; corporate actions, admitted historical universe
+  membership, exchange calendars, and live source-backed identifier evidence remain
+  outstanding.
 - Brazilian market-data integration and broad instrument discovery are not yet
   implemented. The source-selection discovery below identifies Yahoo Finance as
   the primary bridge, but the v0.2 admission evidence is still outstanding.
@@ -1854,9 +1856,10 @@ A version is not done because its happy path runs once. It is done when:
 
 v0.1 is accepted. The next narrow queue is the v0.2 historical-truth boundary:
 
-1. Write the historical-identity/universe and calendar ADRs before implementation.
-2. Add the first v0.2 vintage-selection and historical-bias fixtures for one US and
-   one Brazil research slice.
+1. Integrate an admitted security-master source with the durable historical metadata
+   boundary and capture raw/source-backed evidence for one bounded US and Brazil slice.
+2. Admit and publish versioned US/Brazil exchange calendars, then connect the pinned
+   decision-clock behavior to the research selection path.
 3. Admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
    coverage, identity, and availability checks pass.
 

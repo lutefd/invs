@@ -86,6 +86,10 @@ with `make ingest` below. `make urls` prints the Jupyter URL and the configured
 Grafana URL. Ports default to PostgreSQL `5432`, Jupyter `8888`, and Grafana
 `3000`; `.env` can override them.
 
+To verify the v0.2 historical metadata boundary against PostgreSQL, run
+`make historical-truth-db-test`. It uses isolated fixtures and a disposable fresh
+database; it does not admit live security-master or calendar data.
+
 To stop containers while retaining named PostgreSQL and Grafana volumes:
 
 ```sh

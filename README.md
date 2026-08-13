@@ -45,7 +45,12 @@ After pulling a version that adds a database migration, upgrade an existing Post
 make migrate
 ```
 
-Fresh volumes apply the current forward migration sequence automatically through `000005_nullable_macro_snapshot_value`. For an existing initialized volume, `make migrate` conditionally applies missing snapshot, precision, run-input, and nullable-macro-value changes in order; its schema checks make rerunning it idempotent.
+Fresh volumes apply the current forward migration sequence automatically through
+`000006_historical_truth`. For an existing initialized volume, `make migrate`
+conditionally applies missing snapshot, precision, run-input, nullable-macro-value,
+and historical-truth changes in order; its schema checks make rerunning it idempotent.
+Run `make historical-truth-db-test` to exercise the append-only historical metadata
+constraints and fresh/rollback migration path.
 
 `make urls` prints the current tokenized Jupyter URL. Published PostgreSQL, Jupyter, and Grafana ports bind to `0.0.0.0`; use the server's reachable hostname or IP from another machine. Grafana uses port `3000` by default. If port 3000 is occupied, set `GRAFANA_PORT=3300` in `.env` before startup.
 

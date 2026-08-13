@@ -58,12 +58,14 @@ v0.1 is accepted at `63d479d`. The active planned version is now v0.2; its
 bounded ALFRED work package is accepted, but the historical-truth version gate is
 not. The historical-contract slice in `4d483ac` added ADRs 0006 and 0007, strict
 identity/listing/membership/calendar schemas, and executable synthetic US/Brazil
-fixtures. It establishes selection semantics but is not source-backed publication
-or live historical-fitness acceptance. The next unaccepted cohesive units are:
+fixtures. The durable publication/resolution boundary and PostgreSQL migration
+harness landed in `d963180`; this establishes a tested storage/API boundary but
+is not source admission or live historical-fitness acceptance. The next unaccepted
+cohesive units are:
 
-1. publish source-backed historical identifiers, listings, and universe membership
-   through the durable metadata/research boundary;
-2. admit and version explicit US and Brazil exchange calendars with source evidence
+1. integrate an admitted source-backed security-master path with the durable
+   publication boundary for historical identifiers, listings, and universe membership;
+2. admit and publish explicit US and Brazil exchange calendars with source evidence
    and the pinned decision-clock behavior;
 3. admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
    coverage, identity, and availability checks pass.

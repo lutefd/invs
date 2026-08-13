@@ -123,9 +123,10 @@ snapshot data.
 ## Database migrations
 
 Fresh PostgreSQL volumes apply the forward migrations in order: `000001_core_metadata`,
-`000002_latest_observation_snapshots`, `000003_observed_precision`, and
-`000004_run_inputs`, and `000005_nullable_macro_snapshot_value`. Existing initialized volumes use `make migrate`, which conditionally
-applies missing changes in order; its schema checks make rerunning the
+`000002_latest_observation_snapshots`, `000003_observed_precision`,
+`000004_run_inputs`, `000005_nullable_macro_snapshot_value`, and
+`000006_historical_truth`. Existing initialized volumes use `make migrate`, which
+conditionally applies missing changes in order; its schema checks make rerunning the
 command idempotent. `000001` is the base schema created during volume initialization.
 
 ## Point-in-time query boundary

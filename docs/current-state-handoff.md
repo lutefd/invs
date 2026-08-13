@@ -59,56 +59,16 @@ The next work is v0.2 historical truth, not strategy or execution logic.
 The first v0.2 contract slice landed in `4d483ac`: ADRs 0006 and 0007 define
 source-backed historical identity/universe semantics and versioned exchange
 calendars/decision clocks; strict schemas and pure Python resolvers exercise
-synthetic US and Brazil fixtures. The slice deliberately stops before PostgreSQL
-historical publication, live calendar/source admission, and the bounded bias audit.
+synthetic US and Brazil fixtures. The slice deliberately stops before live
+calendar/source admission and the bounded bias audit.
 
-## 2026-08-13 session-transfer boundary
-
-The next v0.2 implementation slice was started after `e16f650` but intentionally
-stopped for transfer to another Codex session. The committed baseline is
-`e16f650` (`docs(roadmap): record historical truth contract slice`). The checkout is
-deliberately dirty and the in-progress files belong to this slice; do not discard,
-reset, or overwrite them.
-
-Current in-progress scope:
-
-- `internal/metadata/historical.go` is a new, uncommitted Go repository boundary for
-  append-only historical identifier, listing, membership, calendar-manifest, and
-  trading-session records. It includes validation, deterministic record hashes,
-  atomic batch publication, explicit-source as-of queries, ambiguity checks, and
-  half-open session lookup. It has not been compiled, formatted, or tested yet.
-- `migrations/000006_historical_truth.up.sql` and `.down.sql` are uncommitted worker
-  output for the five durable historical tables, revision-aware exclusion
-  constraints, immutable record hashes, and rollback. They must be reviewed against
-  ADRs 0006/0007 and the Go SQL before application.
-- `docker/postgres.Dockerfile` and `Makefile` have uncommitted migration wiring from
-  the same worker. At the transfer instant, the worker had not reported completion
-  and no database integration-test script was visible yet.
-- Background worker `019ffc63-3d26-7503-85af-c622f311b33e` owns only the migration,
-  PostgreSQL image, Makefile migration wiring, and database-test harness. It was
-  still running when this handoff was written and must be allowed to finish; do not
-  terminate it merely because the session is changing.
-
-No validation claim exists for this dirty slice. In particular, `go test`, `go vet`,
-`make test`, migration apply/idempotence/rollback, and live PostgreSQL as-of queries
-have not been run since these files appeared. No v0.2 roadmap checkbox should be
-changed and no source-backed historical-publication acceptance should be claimed.
-
-Resume sequence for the next session:
-
-1. Inspect `git status` and collect the migration worker's final result without
-   resetting its files.
-2. Review migration/Go column names and constraints together, especially calendar
-   manifest foreign keys, immutable `record_hash`, same-source/same-revision
-   exclusions, and `available_at <= recorded_at`.
-3. Run `gofmt` and add focused Go tests for batch validation, deterministic calendar
-   fingerprints, immutable replay conflicts, ranking, ambiguity, and exact
-   availability/session boundaries.
-4. Run the worker's real PostgreSQL test harness, then prove forward migration,
-   idempotent `make migrate`, rollback, re-apply, and fresh-image initialization.
-5. Run `make test`, `make notebook`, `make dashboard-smoke`, and the relevant image
-   builds before committing. Only then synchronize migration documentation and the
-   roadmap with the exact implementation commit.
+The durable metadata implementation slice then landed in `d963180`
+(`feat(data): publish historical truth metadata boundary`). It adds the Go
+publication/resolution boundary, five append-only PostgreSQL tables with
+revision-aware exclusion constraints and immutable record hashes, Docker/init and
+idempotent migration wiring, focused Go tests, and a real PostgreSQL harness. This
+is an accepted implementation boundary, not source admission or the v0.2 exit gate:
+no live identifier/listing/membership or exchange-calendar source has been admitted.
 
 ## B3 market-data source-selection discovery
 
@@ -135,6 +95,7 @@ limits, and explicit availability semantics before accepting the bridge.
 - Latest v0.1 operations implementation boundary: `63d479d` (`fix(operations): clear superseded source alerts`)
 - Latest roadmap discovery boundary: `0be506c` (`docs(roadmap): record Yahoo B3 market-data bridge discovery`)
 - Latest v0.2 contract/fixture boundary: `4d483ac` (`feat(data): add historical truth contracts and fixtures`)
+- Latest v0.2 durable metadata boundary: `d963180` (`feat(data): publish historical truth metadata boundary`)
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
@@ -224,7 +185,7 @@ through [ADR 0007](adr/0007-versioned-calendars-and-decision-clocks.md).
 ## Completed commit sequence
 
 The branch is linear. These are the commits present before this handoff document
-and the separate usage guide are committed:
+and the separate usage guide were committed:
 
 ```text
 851fbd4 chore: initialize local development workspace
@@ -279,11 +240,12 @@ e81684e fix(collector): ignore unconfigured CVM issuers
 742e5ae feat(features): publish deterministic market artifacts
 ```
 
-The last three implementation commits are the post-contract CVM/feature additions:
-`9b8dad0` adds the blank-protocol URL identity fallback, `e81684e` stops the global
-CVM archive from turning unconfigured issuers into rejects, and `742e5ae` adds the
-bounded `market-basic` engine. The two documentation files are intentionally not
-included in this list until the orchestrator reviews and commits them.
+The last three implementation commits in that historical list are the post-contract
+CVM/feature additions: `9b8dad0` adds the blank-protocol URL identity fallback,
+`e81684e` stops the global CVM archive from turning unconfigured issuers into
+rejects, and `742e5ae` adds the bounded `market-basic` engine. Subsequent continuation
+commits are recorded in the current continuation boundary above; the accepted
+historical metadata slice is `d963180`.
 
 ## What is completed
 
@@ -310,6 +272,27 @@ Canonical collection requires PostgreSQL. `SyncCatalog` creates or updates sourc
 issuer, security, and identifier records first. `StartRun` returns both the stable
 run UUID and its `data_source_id`; production code does not invent lineage IDs that
 are absent from the catalog. Isolated tests may inject UUID fixtures.
+
+### Historical identity and calendar metadata
+
+The v0.2 metadata boundary in
+[internal/metadata/historical.go](../internal/metadata/historical.go) publishes an
+atomic `HistoricalTruthBatch` containing source-backed identifier, listing,
+universe-membership, calendar-manifest, and trading-session records. It validates
+half-open validity intervals, source/knowledge ordering, timezone/session shape, and
+deterministic calendar fingerprints. Replays with the same ID and canonical
+`record_hash` are no-ops; the same ID with different content is an error. Queries
+require an explicit `data_source_id`, `as_of`, and `decision_at` and fail closed on
+equal-ranked conflicting results.
+
+Migration `000006_historical_truth` stores these records append-only. PostgreSQL
+exclusion constraints reject overlapping intervals within one source and revision
+while allowing later revisions to overlap, and triggers reject mutation/deletion.
+The `scripts/test-historical-truth-db.sh` harness proves migration idempotence,
+overlap/revision behavior, exact availability and half-open boundaries, session
+close semantics, transaction rollback, fresh initialization, and down/up replay.
+This boundary does not yet collect or admit a live historical security-master or
+calendar source, and the current YAML universe remains current configuration only.
 
 ### Raw evidence and recovery
 
@@ -720,8 +703,11 @@ make urls
 ```
 
 Fresh PostgreSQL volumes apply migrations `000001_core_metadata` through
-`000004_run_inputs`, and `000005_nullable_macro_snapshot_value`. Existing initialized volumes use the idempotent `make migrate`
-target. Current local runtime observations were PostgreSQL 17.10, Jupyter healthy,
+`000004_run_inputs`, `000005_nullable_macro_snapshot_value`, and
+`000006_historical_truth`. Existing initialized volumes use the idempotent
+`make migrate` target. Run `make historical-truth-db-test` to exercise the
+historical migration and append-only boundary against PostgreSQL. Current local
+runtime observations were PostgreSQL 17.10, Jupyter healthy,
 Grafana healthy on `127.0.0.1:3001`, and PostgreSQL healthy on the default database
 port. The configured host Grafana port is environment-dependent; use `make urls`.
 
@@ -790,22 +776,23 @@ section is joined into the one-to-one price/fundamental/macro snapshot.
 
 ## Verification evidence
 
-Checks completed against implementation HEAD `742e5ae` or reported by the completed
-implementation/acceptance workers:
+Checks completed against the historical metadata implementation commit `d963180`:
 
-- `CGO_ENABLED=0 go test -count=1 ./...` passed at implementation HEAD.
-- `go vet ./...` passed at implementation HEAD.
-- `git diff --check` passed and the implementation worktree was clean before these
-  documentation files were added.
-- `python3 schemas/validate_schemas.py` validated 13 JSON Schema documents.
-- `python3 schemas/test_feature_schemas.py` passed feature fixtures and timing/fingerprint invariants.
-- The feature worker reported 47 Python feature tests and Ruff passing in its test environment.
-- Earlier catalog/dashboard Python checks passed in the project container; the current
-  host shell does not have `pytest` installed, so `python3 -m pytest -q` on the host
-  is not itself a passing verification command. Use `make test`, which installs the
-  Python development dependencies inside the Jupyter container.
-- PostgreSQL migrations have passed fresh apply, rollback, and existing-volume
-  idempotent migration checks in the prior acceptance work.
+- `go test ./...` and `go vet ./...` passed, including focused historical metadata
+  validation, canonical UTC hashing, and calendar fingerprint tests.
+- `make test` passed the Go/schema checks and 58 Python tests with Ruff.
+- `python3 schemas/validate_schemas.py` validated 18 JSON Schema documents, and
+  `python3 schemas/test_feature_schemas.py` passed the feature fixtures.
+- `make notebook` executed the vertical-slice notebook successfully.
+- `make dashboard-smoke` validated every dashboard query with PostgreSQL `EXPLAIN`.
+- `scripts/test-historical-truth-db.sh` passed forward migration, repeated
+  `make migrate`, same-source/same-revision overlap rejection, later-revision
+  overlap allowance, exact availability and half-open validity/session boundaries,
+  append-only mutation rejection, transaction rollback, fresh-image initialization,
+  and migration down/up replay.
+- `git diff --check` passed before the implementation commit. The host shell does
+  not need a local pytest installation; `make test` installs the Python development
+  dependencies inside the Jupyter container.
 - Empty-data notebook execution, fixture DuckDB readback, high-precision decimal
   preservation, provenance checks, strict dashboard JSON validation, and image builds
   passed in the earlier v0 acceptance workflow.
@@ -849,9 +836,9 @@ The following are not accidental omissions:
   serious backtest claim.
 - The bounded ALFRED CPIAUCSL work package is live-accepted; broader v0.2 historical
   truth is not accepted.
-- Historical identity/listing/membership and calendar contracts have synthetic
-  resolver fixtures, but no durable PostgreSQL publication or admitted live source
-  exists yet.
+- Historical identity/listing/membership and calendar contracts now have a durable
+  PostgreSQL publication/resolution boundary plus synthetic resolver fixtures, but
+  no admitted live security-master or exchange-calendar source has populated it yet.
 - No broad B3/CVM market instrument discovery or integrated Brazilian market-data
   path. Yahoo `.SA` is the planned primary bridge, while selective B3 public datasets
   remain an enrichment and validation path; source terms, fixtures, mappings,
@@ -875,10 +862,10 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Publish source-backed historical identifier/listing/universe records through a
-   migration and manifest-backed research boundary, including PostgreSQL overlap
-   constraints and durable provenance.
-2. Admit and version the bounded US/Brazil calendar inputs, then connect the pinned
+1. Integrate an admitted source-backed security-master path with the historical
+   publication boundary for bounded US/Brazil identifiers, listings, and universe
+   membership, including raw evidence and live acceptance.
+2. Admit and publish bounded US/Brazil calendar inputs, then connect the pinned
    decision-clock semantics to the research selection path.
 3. Admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
    coverage, identity, and availability checks pass. Do not start strategy or
