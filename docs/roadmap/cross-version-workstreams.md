@@ -9,9 +9,9 @@
 Source work should be pulled by research needs in this order:
 
 1. Maintain and verify SEC, Yahoo/replacement, FRED/ALFRED, BCB, and CVM.
-2. Validate the Yahoo-primary Brazil bridge and selectively admit B3 public-data,
-   corporate-action, calendar, universe-membership, and FX sources needed for honest
-   US/Brazil simulation.
+2. Validate Yahoo only as a candidate Brazil price bridge and selectively admit
+   official B3 identity/listing, corporate-action, calendar, universe-membership,
+   and FX sources needed for honest US/Brazil simulation.
 3. Add EIA and a small set of global/commodity series required by the reference theme
    and product acceptance questions.
 4. Add World Bank/IMF for global structural context when a concrete notebook or
@@ -160,8 +160,9 @@ boundary:
 1. Write the historical-identity/universe and calendar ADRs before implementation.
 2. Add the first v0.2 vintage-selection and historical-bias fixtures for one US and
    one Brazil research slice.
-3. Admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
-   coverage, identity, and availability checks pass.
+3. Admit the official B3/US security-master paths first; revisit Yahoo `.SA` only as
+   a price bridge after its source, terms, fixture, coverage, and availability checks
+   pass.
 
 Do not start the general backtester while the v0.2 historical-truth gate remains
 unaccepted. The fastest path to the full platform is to keep every later result

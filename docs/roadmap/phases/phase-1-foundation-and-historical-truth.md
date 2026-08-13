@@ -30,8 +30,9 @@ gates pass.
 - Publish corporate actions and reproducible adjustments without overwriting raw
   prices.
 - Add versioned FX conversion and canonical SEC filing metadata.
-- Validate the Yahoo-primary B3 bridge and selective B3 public-data enrichment only
-  after access, policy, fixture, identity, and availability review.
+- Admit official B3 identity/listing data and validate the separate Yahoo `.SA`
+  price-bridge candidate only after access, policy, fixture, identity, and
+  availability review.
 
 ## Phase gate checklist
 

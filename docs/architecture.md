@@ -42,12 +42,13 @@ joined into an as-of research snapshot. The Python catalog exposes dedicated
 needs a separate optional filings-inspection cell; filings will not be joined
 one-to-many into the existing price/fundamental/macro snapshot.
 
-B3 market data is not implemented in this foundation. The source-selection discovery
-for future Brazilian coverage is Yahoo Finance as the primary bridge, with Brazilian
-tickers mapped through the `.SA` suffix for historical prices, volumes, dividends,
-splits, and related market data. Selective B3 public datasets may enrich instrument
-metadata, delistings, corporate actions, and validation without making paid B3
-credentials a dependency of the main analytical pipeline.
+B3 market data is not implemented in this foundation. The bounded Yahoo `.SA`
+verification supports a candidate price bridge, but it does not provide admissible
+security-master evidence: issuer/security identity, ISIN/MIC, historical listing
+intervals, universe membership, revisions, and historical availability remain
+unproven. Official B3 public data is therefore the candidate source for Brazilian
+instrument identity, listings, delistings, and validation; Yahoo remains separate
+price-bridge discovery pending terms and access review.
 
 This is a planning boundary, not a historical-availability claim. Unattended access,
 source terms, captured fixtures, instrument mapping, coverage, rate limits, and the

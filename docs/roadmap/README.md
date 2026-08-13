@@ -67,8 +67,8 @@ cohesive units are:
    publication boundary for historical identifiers, listings, and universe membership;
 2. admit and publish explicit US and Brazil exchange calendars with source evidence
    and the pinned decision-clock behavior;
-3. admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
-   coverage, identity, and availability checks pass.
+3. revisit Yahoo `.SA` only as a price bridge after its source, terms, fixture,
+   coverage, and availability checks pass.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook
@@ -76,11 +76,14 @@ inspection landed in `806874a`.
 The read-only reconciliation command, backup/restore scripts, and clean-root
 recovery drill landed in `0f73e39`; see [the recovery runbook](../operations-recovery.md).
 
-The v0.2 Brazil source-selection discovery is to use Yahoo Finance as the primary
-B3 bridge through `.SA` ticker mappings for medium- to long-term research, with
-selective B3 public datasets for metadata, delistings, corporate actions, and
-validation. This is a planning decision only; source admission, fixtures, coverage,
-availability semantics, and the Brazil bias audit remain pending.
+The v0.2 source-selection discovery was tested against live Yahoo `.SA` responses in
+[the Yahoo source-admission report](../acceptance/2026-08-13-yahoo-sa-security-master.md).
+Yahoo is a candidate price bridge, but it is **not admitted as security-master
+evidence**: the checked responses lack stable identity, MIC/primary-listing facts,
+historical intervals, membership events, revisions, and historical availability
+semantics, and its terms require a separate unattended-access/retention review.
+Selective official B3 data must therefore own the Brazil identity/listing path.
+Source admission, fixtures, coverage, and the Brazil bias audit remain pending.
 
 No general strategy/backtest implementation should start before the historical-truth
 gate in v0.2 passes.

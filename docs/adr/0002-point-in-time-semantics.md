@@ -105,11 +105,13 @@ CVM CAD is a current issuer snapshot rather than versioned filing history. The
 integrated collector retains it as raw ingestion-only evidence; it is excluded from
 historical filing claims and must not be treated as a row that can be joined into an
 as-of filing query. A bounded CVM IPE replay passed live acceptance at implementation
-commit `742e5ae`. B3 market data is not yet integrated. The planned Brazilian bridge
-is Yahoo Finance through `.SA` ticker mappings, with selective B3 public datasets for
-metadata, delistings, corporate actions, and validation; access, instrument identity,
-fixtures, coverage, and market-data policy boundaries must still be established
-before historical use is accepted.
+commit `742e5ae`. B3 market data is not yet integrated. A bounded Yahoo `.SA`
+verification supports a candidate price bridge but failed the security-master
+evidence gate: access terms, stable instrument identity, historical lifecycle,
+fixtures, coverage, and availability policy are not sufficient for historical use.
+Official B3 public data is the candidate source for Brazilian identity/listing
+evidence; Yahoo remains a separate price-bridge candidate pending its own terms
+review.
 
 Trading signals computed after a market close may first trade at the next executable
 session unless the strategy and input publication times prove an earlier execution

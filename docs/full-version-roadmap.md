@@ -75,8 +75,9 @@ The following baseline limitations drive the version order:
   membership, exchange calendars, and live source-backed identifier evidence remain
   outstanding.
 - Brazilian market-data integration and broad instrument discovery are not yet
-  implemented. The source-selection discovery below identifies Yahoo Finance as
-  the primary bridge, but the v0.2 admission evidence is still outstanding.
+  implemented. The bounded Yahoo `.SA` check supports a candidate price bridge but
+  failed the security-master evidence gate; official B3 identity/listing evidence and
+  the separate Yahoo terms/price-bridge review remain outstanding.
 - SEC filing metadata is not yet a canonical dataset, and CVM CAD is intentionally
   raw-only.
 - The feature engine publishes a single bounded feature set and lacks a dataset-wide
@@ -86,19 +87,19 @@ The following baseline limitations drive the version order:
 
 ## Source-selection discovery: Brazilian market data
 
-The planning decision for the first Brazil research slice is to use Yahoo Finance as
-the primary B3 market-data bridge. Brazilian tickers are mapped to Yahoo symbols with
-the `.SA` suffix. The bridge is intended to collect historical prices, volumes,
-dividends, splits, and related market data without making paid B3 credentials a
-prerequisite for the main analytical pipeline.
+The bounded live verification in [the Yahoo source-admission report](acceptance/2026-08-13-yahoo-sa-security-master.md)
+supports Yahoo Finance as a candidate price bridge for Brazilian tickers mapped with
+the `.SA` suffix. It does not admit Yahoo as a security-master source: the checked
+responses lacked stable identity, MIC/primary-listing facts, historical lifecycle,
+universe membership, revision, and historical-availability evidence.
 
-This fits the product boundary: the platform targets medium- to long-term portfolio
-research, backtesting, simulation, and ML, not intraday trading. Yahoo coverage is
-therefore treated as sufficient for the main analytical pipeline. B3 public datasets
-remain selective complements for instrument metadata, delistings, corporate actions,
-and validation.
+The product boundary remains medium- to long-term portfolio research, backtesting,
+simulation, and ML, not intraday trading. That scope does not waive source identity
+or availability requirements. Official B3 data is the candidate owner for instrument
+metadata, listings, ISINs, delistings, and lifecycle evidence; Yahoo remains separate
+price-bridge discovery.
 
-This is a source-selection discovery, not an implementation or historical-fitness
+This is a source-admission result, not an implementation or historical-fitness
 acceptance. The v0.2 work must still capture fixtures, review access and terms,
 document coverage and availability semantics, map identifiers, and prove that the
 resulting Brazil slice is fit for its intended research use. A paid B3 or replacement
@@ -547,17 +548,16 @@ invariants.
 
 ### 7. Brazil market-data bridge and selective B3 enrichment
 
-- Use Yahoo Finance as the primary B3 market-data bridge for the first Brazil slice.
-  Map Brazilian tickers through the `.SA` suffix and extend the raw-first/canonical
-  interfaces to cover historical prices, volumes, dividends, splits, and related
-  market data.
-- Treat direct B3 public datasets as selective enrichment for instrument metadata,
-  delistings, corporate actions, and validation rather than as the main market-data
-  dependency.
+- Use official B3 instrument/listing data as the candidate security-master source for
+  the first Brazil slice, including ISIN, listing identity, and historical lifecycle
+  evidence where the source supports it.
+- Keep Yahoo Finance `.SA` as a separate candidate price bridge. It is not a source
+  for issuer/security identity or universe membership unless a future source review
+  establishes those fields and the required access/retention permission.
 - Record the Yahoo and B3 source terms, unattended-access behavior, stable endpoints,
   captured fixtures, instrument identifiers, historical coverage, and rate limits
-  before accepting the bridge. The source-selection discovery does not waive this
-  admission evidence.
+  before accepting either path. The bounded Yahoo verification report documents the
+  current failed security-master admission.
 - Expand BCB series only from a research question, with source metadata and bounded
   acceptance for each family.
 - Keep CVM IPE canonical, CAD raw-only until a versioned issuer-snapshot contract is
@@ -664,7 +664,7 @@ historical use. Present-day convenience methods must remain visibly separate.
 6. `feat(data): publish corporate actions and adjustments`
 7. `feat(data): add canonical foreign exchange observations`
 8. `feat(data): publish SEC filing metadata`
-9. `docs(data): record Yahoo-primary Brazil market-data decision`
+9. `docs(acceptance): record Yahoo .SA source-admission boundary`
 10. `test(acceptance): audit v0.2 point-in-time truth`
 
 ## Explicit non-goals
@@ -1709,9 +1709,9 @@ inside the initial adapter.
 Source work should be pulled by research needs in this order:
 
 1. Maintain and verify SEC, Yahoo/replacement, FRED/ALFRED, BCB, and CVM.
-2. Validate the Yahoo-primary Brazil bridge and selectively admit B3 public-data,
-   corporate-action, calendar, universe-membership, and FX sources needed for honest
-   US/Brazil simulation.
+2. Validate Yahoo only as a candidate Brazil price bridge and selectively admit
+   official B3 identity/listing, corporate-action, calendar, universe-membership,
+   and FX sources needed for honest US/Brazil simulation.
 3. Add EIA and a small set of global/commodity series required by the reference theme
    and product acceptance questions.
 4. Add World Bank/IMF for global structural context when a concrete notebook or
@@ -1860,8 +1860,8 @@ v0.1 is accepted. The next narrow queue is the v0.2 historical-truth boundary:
    boundary and capture raw/source-backed evidence for one bounded US and Brazil slice.
 2. Admit and publish versioned US/Brazil exchange calendars, then connect the pinned
    decision-clock behavior to the research selection path.
-3. Admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
-   coverage, identity, and availability checks pass.
+3. Revisit Yahoo `.SA` only as a separate price bridge after its terms, fixture,
+   coverage, and availability checks pass.
 
 Do not start the general backtester while the v0.2 historical-truth gate remains
 unaccepted. The fastest path to the full platform is to keep every later result

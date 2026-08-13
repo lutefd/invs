@@ -70,20 +70,23 @@ idempotent migration wiring, focused Go tests, and a real PostgreSQL harness. Th
 is an accepted implementation boundary, not source admission or the v0.2 exit gate:
 no live identifier/listing/membership or exchange-calendar source has been admitted.
 
-## B3 market-data source-selection discovery
+## Yahoo `.SA` source-admission verification
 
-The current planning discovery for Brazil is to use Yahoo Finance as the primary B3
-market-data bridge. Brazilian tickers should be mapped through the `.SA` suffix to
-collect historical prices, volumes, dividends, splits, and related market data. This
-keeps paid B3 credentials out of the critical path for the platform's medium- to
-long-term portfolio research, backtesting, simulation, and ML use cases.
+The bounded live verification is recorded in the
+[Yahoo `.SA` source-admission report](acceptance/2026-08-13-yahoo-sa-security-master.md).
+Yahoo currently proves useful for a configured São Paulo quote and daily price
+series, but it is **not admitted as historical security-master evidence**. The
+checked response path did not provide stable issuer/security identity, ISIN/MIC,
+primary-listing state, historical validity intervals, universe membership events,
+revision history, or historical public-availability timestamps. Yahoo's published
+terms also require a separate permission review for unattended automated collection
+and restrict redistribution.
 
-B3 public datasets remain selective complements for instrument metadata, delistings,
-corporate actions, and validation. This changes the source-selection plan, not the
-implementation status: no Brazilian market-data integration, historical-fitness
-acceptance, or broad instrument discovery is present in this checkout yet. The v0.2
-work must still validate access and terms, fixtures, identifiers, coverage, rate
-limits, and explicit availability semantics before accepting the bridge.
+Yahoo `.SA` remains a candidate **price bridge only**, subject to that terms review.
+Official B3 data must own the Brazil security-master identity/listing path, including
+ISIN and historical lifecycle evidence. No Brazilian security-master source,
+historical-fitness acceptance, or broad instrument discovery is present in this
+checkout yet.
 
 ## Current continuation boundary
 
@@ -840,9 +843,9 @@ The following are not accidental omissions:
   PostgreSQL publication/resolution boundary plus synthetic resolver fixtures, but
   no admitted live security-master or exchange-calendar source has populated it yet.
 - No broad B3/CVM market instrument discovery or integrated Brazilian market-data
-  path. Yahoo `.SA` is the planned primary bridge, while selective B3 public datasets
-  remain an enrichment and validation path; source terms, fixtures, mappings,
-  coverage, and historical-availability policy are still pending.
+  path. Yahoo `.SA` passed a bounded quote/price verification but failed the
+  security-master evidence gate; official B3 identity/listing data, source terms,
+  fixtures, mappings, coverage, and historical-availability policy remain pending.
 - No canonical CVM CAD dataset or CAD snapshot table.
 - No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.
@@ -867,6 +870,7 @@ Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
    membership, including raw evidence and live acceptance.
 2. Admit and publish bounded US/Brazil calendar inputs, then connect the pinned
    decision-clock semantics to the research selection path.
-3. Admit the Yahoo-primary Brazil bridge only after its source, terms, fixture,
-   coverage, identity, and availability checks pass. Do not start strategy or
-   execution work by treating current-vintage backfills as historical truth.
+3. Admit an official B3-backed Brazil identity/listing path and a separate US source;
+   revisit Yahoo `.SA` only as a price bridge after its terms, fixture, coverage, and
+   availability checks pass. Do not start strategy or execution work by treating
+   current-vintage backfills as historical truth.
