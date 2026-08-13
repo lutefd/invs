@@ -11,6 +11,7 @@ import duckdb
 import pytest
 
 from research import ResearchCatalog
+from research.feature_cli import main as feature_cli_main
 from research.features import (
     FEATURE_NAMES,
     FeatureArtifactConflictError,
@@ -304,3 +305,53 @@ def test_feature_module_has_no_strategy_backtest_or_ml_imports() -> None:
     assert not any(word in source for word in forbidden)
     assert UUID(SECURITY_ID).version == 4
     assert features_module.DEFAULT_GENERATOR_VERSION
+
+
+def test_feature_cli_publishes_idempotently_and_validates(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    catalog = _catalog(tmp_path, _two_days()[:2])
+    features_root = tmp_path / "features"
+    publish_args = [
+        "publish",
+        "--data-root",
+        str(catalog.data_root),
+        "--features-root",
+        str(features_root),
+        "--security-id",
+        SECURITY_ID,
+        "--decision-at",
+        "2025-01-02T23:00:00Z",
+        "--computation-delay-seconds",
+        "30",
+        "--git-commit",
+        "0" * 40,
+    ]
+
+    assert feature_cli_main(publish_args) == 0
+    first = json.loads(capsys.readouterr().out)
+    assert first["action"] == "published"
+    assert first["row_count"] == 1
+    assert first["features"]["close"] == "101.000000000000000001"
+    manifest_path = Path(first["manifest_path"])
+    manifest_mtime = manifest_path.stat().st_mtime_ns
+
+    assert feature_cli_main(publish_args) == 0
+    second = json.loads(capsys.readouterr().out)
+    assert second == first
+    assert manifest_path.stat().st_mtime_ns == manifest_mtime
+
+    assert feature_cli_main(["validate", "--manifest", str(manifest_path)]) == 0
+    validated = json.loads(capsys.readouterr().out)
+    assert validated["action"] == "validated"
+    assert validated["artifact_id"] == first["artifact_id"]
+
+
+def test_feature_cli_reports_validation_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "missing" / "manifest.json"
+    assert feature_cli_main(["validate", "--manifest", str(missing)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "does not exist" in captured.err

@@ -18,6 +18,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.4,<9", "ruff>=0.12,<1"]
 
+[project.scripts]
+invs-feature = "research.feature_cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["research"]
 

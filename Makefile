@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate health urls ingest rerun test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate health urls ingest rerun feature feature-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -55,6 +55,22 @@ rerun:
 	@run_key="operator-retry-$(SOURCE)-$$(date +%s)"; \
 		$(MAKE) ingest SOURCE=$(SOURCE) RUN_KEY="$$run_key" && \
 		$(MAKE) ingest SOURCE=$(SOURCE) RUN_KEY="$$run_key"
+
+feature: config
+	@test -n "$(SECURITY_ID)" || (echo "SECURITY_ID is required" >&2; exit 2)
+	@test -n "$(DECISION_AT)" || (echo "DECISION_AT is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps jupyter python -m research.feature_cli publish \
+		--data-root /data \
+		--features-root /data/features \
+		--security-id "$(SECURITY_ID)" \
+		--decision-at "$(DECISION_AT)" \
+		--computation-delay-seconds "$(or $(FEATURE_DELAY),0)" \
+		--git-commit "$(or $(INVS_GIT_COMMIT),unknown)"
+
+feature-validate: config
+	@test -n "$(FEATURE_MANIFEST)" || (echo "FEATURE_MANIFEST is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps jupyter python -m research.feature_cli validate \
+		--manifest "$(FEATURE_MANIFEST)"
 
 test: config
 	@go test ./...
