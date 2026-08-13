@@ -893,40 +893,142 @@ func TestCollectorCVMRetainsEveryReturnedRawResourceOnParseFailure(t *testing.T)
 	}
 }
 
-func TestCollectorCVMRejectsUnmatchedRowsWithoutPublishing(t *testing.T) {
+func TestCollectorCVMIgnoresUnconfiguredRowsAndPreservesConfiguredRows(t *testing.T) {
 	metadataPayload := []byte("Campo: Assunto\nDescricao: documento IPE\n")
-	ipePayload := collectorCVMIPERow("999999")
+	ipePayload := collectorCVMIPERows("000123", "999999")
 	archivePayload := collectorCVMArchive(t, ipePayload)
 	run := testRun()
 	raw := &orderingRawStore{}
 	var finalized metadata.Metrics
+	var logs bytes.Buffer
 	app := &app{
 		cfg: config.Config{
 			Universe:  []config.Security{{IssuerID: testIssuerID, SecurityID: testSecurityID, CVMCode: "000123"}},
 			Providers: config.Providers{CVM: config.CVMProvider{Enabled: true, IPE: config.CVMIPEConfig{Years: []int{2026}}}},
 		},
 		raw:        raw,
-		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedSource: "cvm_ipe", locatorPrefix: "zip/year=2026/"},
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedHash: hashPayload(archivePayload), expectedSource: "cvm_ipe", locatorPrefix: "zip/year=2026/", zeroRows: true},
 		http: collectorHTTPFake{responses: map[string][]byte{
 			cvm.DefaultIPEMetadataURL:                   metadataPayload,
 			fmt.Sprintf(cvm.DefaultIPEArchiveURL, 2026): archivePayload,
 		}},
-		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		log: slog.New(slog.NewTextHandler(&logs, nil)),
 		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, _ []model.PriceBar, _ []model.EconomicObservation) {
 			finalized = m
 			raw.events = append(raw.events, "metadata:finalize")
 		}},
-		batchKey: "cvm-unmatched-test",
+		batchKey: "cvm-unconfigured-test",
 	}
 
-	if err := app.run(context.Background(), "cvm"); err == nil || !strings.Contains(err.Error(), "no unique exact configured CVM-code mapping") {
-		t.Fatalf("unmatched CVM error = %v", err)
+	if err := app.run(context.Background(), "cvm"); err != nil {
+		t.Fatalf("unconfigured CVM row error = %v", err)
+	}
+	filings := app.normalized.(*orderingNormalizedStore).filings
+	if len(filings) != 1 || filings[0].IssuerID != testIssuerID {
+		t.Fatalf("configured CVM filings = %+v, want one successful configured filing", filings)
+	}
+	if finalized.Received != 2 || finalized.Rejected != 0 || finalized.Written != 0 || finalized.RawPayloads != 2 {
+		t.Fatalf("unconfigured CVM metrics = %+v", finalized)
+	}
+	if finalized.Err != nil {
+		t.Fatalf("unconfigured CVM finalization error = %v", finalized.Err)
+	}
+	if finalized.Cursor["ipe_rows_matched"] != 1 || finalized.Cursor["ipe_rows_unconfigured"] != 1 || finalized.Cursor["ipe_rows_ignored"] != 1 || finalized.Cursor["ipe_rows_ambiguous"] != 0 {
+		t.Fatalf("unconfigured CVM cursor = %+v", finalized.Cursor)
+	}
+	if !strings.Contains(logs.String(), "status=success") {
+		t.Fatalf("unconfigured CVM run log = %q", logs.String())
+	}
+}
+
+func TestCollectorCVMRejectsAmbiguousConfiguredCodeSafely(t *testing.T) {
+	metadataPayload := []byte("Campo: Assunto\nDescricao: documento IPE\n")
+	ipePayload := collectorCVMIPERow("000123")
+	archivePayload := collectorCVMArchive(t, ipePayload)
+	run := testRun()
+	raw := &orderingRawStore{}
+	var finalized metadata.Metrics
+	var logs bytes.Buffer
+	app := &app{
+		cfg: config.Config{
+			Universe: []config.Security{
+				{IssuerID: testIssuerID, SecurityID: testSecurityID, CVMCode: "000123"},
+				{IssuerID: "c7d2b89a-6a89-44f7-88d5-3f6c0f7d7b40", SecurityID: "3f7e3b1c-9e4f-4d65-b11a-3cc4e4c0c5e5", CVMCode: "000123"},
+			},
+			Providers: config.Providers{CVM: config.CVMProvider{Enabled: true, IPE: config.CVMIPEConfig{Years: []int{2026}}}},
+		},
+		raw:        raw,
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedHash: hashPayload(archivePayload), expectedSource: "cvm_ipe", locatorPrefix: "zip/year=2026/"},
+		http: collectorHTTPFake{responses: map[string][]byte{
+			cvm.DefaultIPEMetadataURL:                   metadataPayload,
+			fmt.Sprintf(cvm.DefaultIPEArchiveURL, 2026): archivePayload,
+		}},
+		log: slog.New(slog.NewTextHandler(&logs, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, _ []model.PriceBar, _ []model.EconomicObservation) {
+			finalized = m
+			raw.events = append(raw.events, "metadata:finalize")
+		}},
+		batchKey: "cvm-ambiguous-code-test",
+	}
+
+	if err := app.run(context.Background(), "cvm"); err == nil || !strings.Contains(err.Error(), "ambiguous duplicate configured CVM-code mappings") {
+		t.Fatalf("ambiguous CVM error = %v", err)
 	}
 	if len(app.normalized.(*orderingNormalizedStore).filings) != 0 {
-		t.Fatal("unmatched CVM row was published")
+		t.Fatal("ambiguous CVM row was published")
 	}
-	if finalized.Rejected != 1 || finalized.Written != 0 || finalized.RawPayloads != 2 {
-		t.Fatalf("unmatched CVM metrics = %+v", finalized)
+	if finalized.Received != 1 || finalized.Rejected != 1 || finalized.Written != 0 || finalized.RawPayloads != 2 {
+		t.Fatalf("ambiguous CVM metrics = %+v", finalized)
+	}
+	if finalized.Err == nil || finalized.Cursor["ipe_rows_ambiguous"] != 1 || finalized.Cursor["ipe_rows_unconfigured"] != 0 || finalized.Cursor["ipe_rows_ignored"] != 0 {
+		t.Fatalf("ambiguous CVM finalization = %+v", finalized)
+	}
+	if !strings.Contains(logs.String(), "status=partial") {
+		t.Fatalf("ambiguous CVM run log = %q", logs.String())
+	}
+}
+
+func TestCollectorCVMPreservesSuccessfulRowsWhenProviderRejectsRows(t *testing.T) {
+	metadataPayload := []byte("Campo: Assunto\nDescricao: documento IPE\n")
+	ipePayload := append(collectorCVMIPERow("000123"), []byte("malformed\n")...)
+	archivePayload := collectorCVMArchive(t, ipePayload)
+	run := testRun()
+	raw := &orderingRawStore{}
+	var finalized metadata.Metrics
+	var logs bytes.Buffer
+	app := &app{
+		cfg: config.Config{
+			Universe:  []config.Security{{IssuerID: testIssuerID, SecurityID: testSecurityID, CVMCode: "000123"}},
+			Providers: config.Providers{CVM: config.CVMProvider{Enabled: true, IPE: config.CVMIPEConfig{Years: []int{2026}}}},
+		},
+		raw:        raw,
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedHash: hashPayload(archivePayload), expectedSource: "cvm_ipe", locatorPrefix: "zip/year=2026/"},
+		http: collectorHTTPFake{responses: map[string][]byte{
+			cvm.DefaultIPEMetadataURL:                   metadataPayload,
+			fmt.Sprintf(cvm.DefaultIPEArchiveURL, 2026): archivePayload,
+		}},
+		log: slog.New(slog.NewTextHandler(&logs, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, _ []model.PriceBar, _ []model.EconomicObservation) {
+			finalized = m
+			raw.events = append(raw.events, "metadata:finalize")
+		}},
+		batchKey: "cvm-source-rejected-test",
+	}
+
+	if err := app.run(context.Background(), "cvm"); err == nil || !strings.Contains(err.Error(), "CVM source records rejected") {
+		t.Fatalf("provider-rejected CVM error = %v", err)
+	}
+	if len(app.normalized.(*orderingNormalizedStore).filings) != 1 {
+		t.Fatal("successful CVM row was not published")
+	}
+	if finalized.Received != 2 || finalized.Rejected != 1 || finalized.Written != 1 || finalized.RawPayloads != 2 {
+		t.Fatalf("provider-rejected CVM metrics = %+v", finalized)
+	}
+	if finalized.Err == nil || finalized.Cursor["records_rejected"] != 1 {
+		t.Fatalf("provider-rejected CVM finalization = %+v", finalized)
+	}
+	if !strings.Contains(logs.String(), "status=partial") {
+		t.Fatalf("provider-rejected CVM run log = %q", logs.String())
 	}
 }
 
@@ -1185,7 +1287,18 @@ func TestCollectorPersistsProviderRawOnParseErrorBeforeFinalization(t *testing.T
 }
 
 func collectorCVMIPERow(code string) []byte {
-	return []byte(fmt.Sprintf("CNPJ_Companhia;Nome_Companhia;Codigo_CVM;Data_Referencia;Categoria;Tipo;Especie;Assunto;Data_Entrega;Tipo_Apresentacao;Protocolo_Entrega;Versao;Link_Download\n12.345.678/0001-90;AÇÚCAR S.A.;%s;2025-12-31;FRE;Comunicado;Comunicado ao mercado;Distribuição;2026-01-05;AP;0000000000000001;01;https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&numProtocolo=1\n", code))
+	return collectorCVMIPERows(code)
+}
+
+func collectorCVMIPERows(codes ...string) []byte {
+	const header = "CNPJ_Companhia;Nome_Companhia;Codigo_CVM;Data_Referencia;Categoria;Tipo;Especie;Assunto;Data_Entrega;Tipo_Apresentacao;Protocolo_Entrega;Versao;Link_Download\n"
+	var builder strings.Builder
+	builder.WriteString(header)
+	for i, code := range codes {
+		protocol := fmt.Sprintf("%016d", i+1)
+		builder.WriteString(fmt.Sprintf("12.345.678/0001-90;AÇÚCAR S.A.;%s;2025-12-31;FRE;Comunicado;Comunicado ao mercado;Distribuição;2026-01-05;AP;%s;01;https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&numProtocolo=%d\n", code, protocol, i+1))
+	}
+	return []byte(builder.String())
 }
 
 func collectorCVMCADPayload() []byte {

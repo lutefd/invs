@@ -651,11 +651,18 @@ func (a *app) collectCVM(ctx context.Context) error {
 
 	byCode, ambiguousCodes := cvmIssuerMappings(a.cfg.Universe)
 	byIssuer := make(map[string][]model.Filing)
-	matched, unmatched := 0, 0
+	matched, unconfigured, ambiguous := 0, 0, 0
 	for _, row := range result.IPE {
+		if ambiguousCodes[row.CVMCode] {
+			ambiguous++
+			continue
+		}
 		security, ok := byCode[row.CVMCode]
-		if !ok || ambiguousCodes[row.CVMCode] {
-			unmatched++
+		if !ok {
+			// The IPE archive is global, so rows outside the configured
+			// universe are expected and intentionally ignored. Only an exact
+			// configured CVM-code mapping may select an issuer.
+			unconfigured++
 			continue
 		}
 		rawHash, hashErr := cvmRawHashForRow(row, resourceHashes)
@@ -673,12 +680,14 @@ func (a *app) collectCVM(ctx context.Context) error {
 		byIssuer[security.IssuerID] = append(byIssuer[security.IssuerID], filing)
 		matched++
 	}
-	if unmatched > 0 {
-		m.Rejected += unmatched
-		errs = append(errs, fmt.Errorf("%d CVM IPE rows had no unique exact configured CVM-code mapping", unmatched))
+	if ambiguous > 0 {
+		m.Rejected += ambiguous
+		errs = append(errs, fmt.Errorf("%d CVM IPE rows had ambiguous duplicate configured CVM-code mappings", ambiguous))
 	}
 	m.Cursor["ipe_rows_matched"] = matched
-	m.Cursor["ipe_rows_unmatched"] = unmatched
+	m.Cursor["ipe_rows_unconfigured"] = unconfigured
+	m.Cursor["ipe_rows_ignored"] = unconfigured
+	m.Cursor["ipe_rows_ambiguous"] = ambiguous
 	m.Cursor["issuers_with_filings"] = len(byIssuer)
 
 	issuerIDs := make([]string, 0, len(byIssuer))
@@ -768,7 +777,11 @@ func cvmIssuerMappings(universe []config.Security) (map[string]config.Security, 
 		if code == "" {
 			continue
 		}
+		if ambiguous[code] {
+			continue
+		}
 		if _, exists := byCode[code]; exists {
+			delete(byCode, code)
 			ambiguous[code] = true
 			continue
 		}
