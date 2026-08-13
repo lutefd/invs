@@ -593,6 +593,81 @@ func TestWriteEconomicsSupportsBCBPartitionIdentity(t *testing.T) {
 	}
 }
 
+func TestWriteEconomicsPreservesALFREDHistoricalVintageIdentity(t *testing.T) {
+	root := t.TempDir()
+	w, _ := NewWriter(root)
+	observed := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	makeVintage := func(day int, value string, revision int) model.EconomicObservation {
+		published := time.Date(2020, time.February, day, 0, 0, 0, 0, time.UTC)
+		vintage := published
+		ingested := time.Date(2020, time.March, 1, 0, 0, 0, 0, time.UTC)
+		return model.EconomicObservation{
+			Source: "alfred", SeriesID: "CPIAUCSL", Geography: "US", Unit: "index",
+			Frequency: "monthly", Value: value, Revision: revision, VintageAt: &vintage,
+			Temporal: model.Temporal{
+				ObservedAt: observed, ObservedPrecision: model.PrecisionDate,
+				PublishedAt: published, PublishedPrecision: model.PrecisionDate,
+				AvailableAt: published.Add(36 * time.Hour), IngestedAt: ingested,
+			},
+			RawPayloadHash: rawHash, Provenance: provenance(ingested),
+		}
+	}
+
+	input := []model.EconomicObservation{
+		makeVintage(1, "1", 0), makeVintage(8, "2", 1), makeVintage(15, "1", 2),
+	}
+	path, n, err := w.WriteEconomics("CPIAUCSL", input)
+	if err != nil || n != 3 {
+		t.Fatalf("initial write n=%d err=%v", n, err)
+	}
+	if input[0].Revision != 0 || input[1].Revision != 1 || input[2].Revision != 2 {
+		t.Fatalf("initial revisions changed: %+v", input)
+	}
+
+	retry := append([]model.EconomicObservation(nil), input...)
+	for i := range retry {
+		retry[i].Temporal.IngestedAt = retry[i].Temporal.IngestedAt.Add(time.Hour)
+		retry[i].Provenance.IngestedAt = retry[i].Temporal.IngestedAt
+		retry[i].Provenance.IngestionRunID = "b2468024-ce38-4b4b-9135-7f3e60ca6318"
+	}
+	if _, n, err := w.WriteEconomics("CPIAUCSL", retry); err != nil || n != 0 {
+		t.Fatalf("retry n=%d err=%v", n, err)
+	}
+	rows := rowsFromManifest[EconomicRow](t, path)
+	if len(rows) != 3 || rows[0].Revision != 0 || rows[1].Revision != 1 || rows[2].Revision != 2 || rows[0].Value != "1" || rows[1].Value != "2" || rows[2].Value != "1" {
+		t.Fatalf("historical vintages drifted: %+v", rows)
+	}
+	if got := filepath.Join(root, "macroeconomics", "source=alfred", "series_id=CPIAUCSL", ManifestFilename); path != got {
+		t.Fatalf("path=%q want %q", path, got)
+	}
+}
+
+func TestWriteEconomicsPreservesALFREDMissingVintage(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	observed := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	published := time.Date(2020, 2, 1, 0, 0, 0, 0, time.UTC)
+	vintage := published
+	ingested := published.Add(48 * time.Hour)
+	fact := model.EconomicObservation{
+		Source: "alfred", SeriesID: "X", Geography: "US", Unit: "index", Frequency: "monthly",
+		Revision: 0, VintageAt: &vintage,
+		Temporal: model.Temporal{
+			ObservedAt: observed, ObservedPrecision: model.PrecisionDate,
+			PublishedAt: published, PublishedPrecision: model.PrecisionDate,
+			AvailableAt: published.Add(36 * time.Hour), IngestedAt: ingested,
+		},
+		RawPayloadHash: rawHash, Provenance: provenance(ingested),
+	}
+	path, n, err := w.WriteEconomics("X", []model.EconomicObservation{fact})
+	if err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	rows := rowsFromManifest[EconomicRow](t, path)
+	if len(rows) != 1 || rows[0].HasValue || rows[0].Value != "" {
+		t.Fatalf("missing vintage not preserved: %+v", rows)
+	}
+}
+
 func TestWriteEconomicsEmptyInputIsNoOp(t *testing.T) {
 	root := t.TempDir()
 	w, _ := NewWriter(root)

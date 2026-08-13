@@ -434,6 +434,11 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 		if err != nil {
 			return "", 0, err
 		}
+		if source == "alfred" {
+			effectiveRevisions[i] = int(r.Revision)
+			in = append(in, r)
+			continue
+		}
 		latest, found := latestEconomic(existing, r)
 		if found && latest.Value == r.Value {
 			if economicKey(latest) == economicKey(r) && !sameEconomic(latest, r) {
@@ -683,9 +688,12 @@ func economicRow(o model.EconomicObservation) (EconomicRow, error) {
 	if o.Source == "" || o.SeriesID == "" || o.Unit == "" || o.Revision < 0 {
 		return EconomicRow{}, errors.New("invalid economic domain fields")
 	}
-	value, err := model.CanonicalDecimal(o.Value, false)
-	if err != nil {
-		return EconomicRow{}, err
+	value := ""
+	if o.Value != "" {
+		value, err = model.CanonicalDecimal(o.Value, false)
+		if err != nil {
+			return EconomicRow{}, err
+		}
 	}
 	observedPrecision := normalizeObservedPrecision(o.Temporal.ObservedPrecision)
 	temporal := o.Temporal
@@ -915,7 +923,7 @@ func sourceOfFilings(obs []model.Filing) string {
 }
 func validEconomicSource(source string) bool {
 	switch source {
-	case "fred", "bcb":
+	case "fred", "alfred", "bcb":
 		return true
 	default:
 		return false
