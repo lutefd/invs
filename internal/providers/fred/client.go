@@ -2,9 +2,7 @@ package fred
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/csv"
-	"encoding/hex"
 	"fmt"
 	"net/url"
 	"sort"
@@ -12,6 +10,7 @@ import (
 	"time"
 
 	"github.com/luisdourado/invs/internal/model"
+	"github.com/luisdourado/invs/internal/providers"
 )
 
 const defaultBaseURL = "https://fred.stlouisfed.org/graph/fredgraph.csv"
@@ -30,6 +29,10 @@ func NewClient(http Getter) *Client {
 }
 
 type Result struct {
+	providers.ResourceResult
+
+	// Raw and SHA256 are retained as compatibility aliases for this provider's
+	// single response. Resources is the canonical downloaded-resource contract.
 	Observations                     []model.EconomicObservation
 	Raw                              []byte
 	SHA256                           string
@@ -53,8 +56,14 @@ func (c *Client) Collect(ctx context.Context, seriesID string) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("FRED series %s: %w", seriesID, err)
 	}
-	result := Result{Raw: b, SHA256: digest(b)}
-	obs, received, rejected, err := parseCSV(b, seriesID, c.now().UTC().Truncate(time.Microsecond))
+	fetchedAt := c.now().UTC().Truncate(time.Microsecond)
+	resource := providers.NewRawResource("series", seriesID, b, fetchedAt, "text/csv")
+	result := Result{
+		ResourceResult: providers.ResourceResult{Resources: []providers.RawResource{resource}},
+		Raw:            resource.Bytes,
+		SHA256:         resource.SHA256,
+	}
+	obs, received, rejected, err := parseCSV(resource.Bytes, seriesID, fetchedAt)
 	result.Observations, result.RecordsReceived, result.RecordsRejected = obs, received, rejected
 	if err != nil {
 		return result, err
@@ -100,4 +109,4 @@ func parseCSV(b []byte, seriesID string, ingested time.Time) ([]model.EconomicOb
 	sort.Slice(result, func(i, j int) bool { return result[i].Temporal.ObservedAt.Before(result[j].Temporal.ObservedAt) })
 	return result, received, rejected, nil
 }
-func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+func digest(b []byte) string { return providers.SHA256(b) }

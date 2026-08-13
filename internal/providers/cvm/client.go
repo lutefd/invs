@@ -4,9 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/csv"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/url"
@@ -17,6 +15,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/luisdourado/invs/internal/providers"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/unicode/norm"
 )
@@ -56,7 +55,7 @@ type Request struct {
 	IPEYears   []int
 }
 
-type ResourceKind string
+type ResourceKind = string
 
 const (
 	ResourceCAD         ResourceKind = "cad"
@@ -64,17 +63,7 @@ const (
 	ResourceIPEArchive  ResourceKind = "ipe"
 )
 
-type RawResource struct {
-	Key            string
-	Kind           ResourceKind
-	Year           int
-	URL            string
-	Bytes          []byte
-	SHA256         string
-	ContentType    string
-	ParserVersion  string
-	ParserMetadata map[string]string
-}
+type RawResource = providers.RawResource
 
 type ParseStats struct {
 	RecordsReceived int
@@ -83,7 +72,8 @@ type ParseStats struct {
 }
 
 type Result struct {
-	Resources       []RawResource
+	providers.ResourceResult
+
 	CAD             []CADRow
 	IPE             []IPERow
 	IPEMetadata     []FieldMetadata
@@ -242,7 +232,11 @@ func (c *Client) Collect(ctx context.Context, request Request) (Result, error) {
 		if err != nil {
 			return result, fmt.Errorf("CVM CAD: %w", err)
 		}
-		resource := newRawResource(ResourceCAD, 0, "cvm/cad", DefaultCADURL, "text/csv", body)
+		fetchedAt, err := normalizedIngested(c.now())
+		if err != nil {
+			return result, fmt.Errorf("CVM CAD fetched_at: %w", err)
+		}
+		resource := newRawResource(ResourceCAD, 0, "cvm/cad", DefaultCADURL, "text/csv", body, fetchedAt)
 		result.Resources = append(result.Resources, resource)
 		index := len(result.Resources) - 1
 		rows, stats, charset, parseErr := parseCAD(body)
@@ -266,7 +260,11 @@ func (c *Client) Collect(ctx context.Context, request Request) (Result, error) {
 	if err != nil {
 		return result, fmt.Errorf("CVM IPE metadata: %w", err)
 	}
-	metadataResource := newRawResource(ResourceIPEMetadata, 0, "cvm/ipe/metadata", DefaultIPEMetadataURL, "text/plain", metadataBytes)
+	fetchedAt, err := normalizedIngested(c.now())
+	if err != nil {
+		return result, fmt.Errorf("CVM IPE metadata fetched_at: %w", err)
+	}
+	metadataResource := newRawResource(ResourceIPEMetadata, 0, "cvm/ipe/metadata", DefaultIPEMetadataURL, "text/plain", metadataBytes, fetchedAt)
 	result.Resources = append(result.Resources, metadataResource)
 	metadataIndex := len(result.Resources) - 1
 	metadata, charset, parseErr := parseIPEMetadata(metadataBytes)
@@ -286,8 +284,12 @@ func (c *Client) Collect(ctx context.Context, request Request) (Result, error) {
 		if err != nil {
 			return result, fmt.Errorf("CVM IPE archive %d: %w", year, err)
 		}
+		fetchedAt, err := normalizedIngested(c.now())
+		if err != nil {
+			return result, fmt.Errorf("CVM IPE archive %d fetched_at: %w", year, err)
+		}
 		key := fmt.Sprintf("cvm/ipe/year=%04d", year)
-		resource := newRawResource(ResourceIPEArchive, year, key, archiveURL, "application/zip", body)
+		resource := newRawResource(ResourceIPEArchive, year, key, archiveURL, "application/zip", body, fetchedAt)
 		result.Resources = append(result.Resources, resource)
 		index := len(result.Resources) - 1
 		rows, stats, charset, member, parseErr := parseIPEArchive(body, year, ingested)
@@ -345,11 +347,11 @@ func normalizedIngested(now time.Time) (time.Time, error) {
 	return now.UTC().Truncate(time.Microsecond), nil
 }
 
-func newRawResource(kind ResourceKind, year int, key, resourceURL, contentType string, body []byte) RawResource {
+func newRawResource(kind ResourceKind, year int, key, resourceURL, contentType string, body []byte, fetchedAt time.Time) RawResource {
 	copyBody := append([]byte(nil), body...)
 	return RawResource{
 		Key: key, Kind: kind, Year: year, URL: resourceURL, Bytes: copyBody,
-		SHA256: digest(copyBody), ContentType: contentType, ParserVersion: ParserVersion,
+		SHA256: providers.SHA256(copyBody), FetchedAt: fetchedAt.UTC().Truncate(time.Microsecond), ContentType: contentType, ParserVersion: ParserVersion,
 		ParserMetadata: map[string]string{"resource_key": key, "parser_version": ParserVersion},
 	}
 }
@@ -875,6 +877,5 @@ func equalStrings(left, right []string) bool {
 }
 
 func digest(body []byte) string {
-	hash := sha256.Sum256(body)
-	return hex.EncodeToString(hash[:])
+	return providers.SHA256(body)
 }

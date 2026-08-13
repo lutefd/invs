@@ -174,6 +174,9 @@ func TestCollectRetainsRawOnTopLevelParseFailure(t *testing.T) {
 	if len(result.Resources) != 1 || !bytes.Equal(result.Resources[0].Bytes, badCAD) || result.Resources[0].SHA256 != hashHex(badCAD) {
 		t.Fatalf("raw CAD response was not retained: %+v", result.Resources)
 	}
+	if result.Resources[0].FetchedAt.IsZero() || result.Resources[0].ContentType != "text/csv" {
+		t.Fatalf("common CAD resource metadata = %+v", result.Resources[0])
+	}
 
 	metadata := windows1252(t, readFixture(t, "meta_ipe_cia_aberta.txt"))
 	badArchive := []byte("not a zip")
@@ -184,6 +187,9 @@ func TestCollectRetainsRawOnTopLevelParseFailure(t *testing.T) {
 	}
 	if len(result.Resources) != 2 || !bytes.Equal(result.Resources[1].Bytes, badArchive) || result.Resources[1].SHA256 != hashHex(badArchive) {
 		t.Fatalf("raw IPE response was not retained: %+v", result.Resources)
+	}
+	if result.Resources[1].FetchedAt.IsZero() || result.Resources[1].ContentType != "application/zip" {
+		t.Fatalf("common IPE resource metadata = %+v", result.Resources[1])
 	}
 }
 

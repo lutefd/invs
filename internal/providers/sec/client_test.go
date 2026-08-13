@@ -172,6 +172,9 @@ func TestCollectCompanyRetainsRawOnParseError(t *testing.T) {
 				if r.Raw[i].Kind != want[i].Kind || !bytes.Equal(r.Raw[i].Data, want[i].Data) || r.Raw[i].SHA256 != want[i].SHA256 {
 					t.Fatalf("raw[%d]=%+v want %+v", i, r.Raw[i], want[i])
 				}
+				if r.Resources[i].Kind != want[i].Kind || !bytes.Equal(r.Resources[i].Bytes, want[i].Data) || r.Resources[i].SHA256 != want[i].SHA256 || r.Resources[i].ContentType != "application/json" || r.Resources[i].FetchedAt.IsZero() {
+					t.Fatalf("common resource[%d]=%+v want the downloaded response and metadata", i, r.Resources[i])
+				}
 			}
 		})
 	}
@@ -196,9 +199,15 @@ func TestCollectCompanyRetainsSubmissionsOnCompanyFactsTransportError(t *testing
 	if len(r.Raw) != 1 {
 		t.Fatalf("raw documents=%d want 1", len(r.Raw))
 	}
+	if len(r.Resources) != 1 {
+		t.Fatalf("common downloaded resources=%d want 1", len(r.Resources))
+	}
 	got := r.Raw[0]
 	if got.Kind != "submissions" || !bytes.Equal(got.Data, submissions) || got.SHA256 != sha256Hex(submissions) {
 		t.Fatalf("raw=%+v want submissions payload with SHA-256 %s", got, sha256Hex(submissions))
+	}
+	if r.Resources[0].Kind != "submissions" || !bytes.Equal(r.Resources[0].Bytes, submissions) || r.Resources[0].SHA256 != sha256Hex(submissions) {
+		t.Fatalf("common resource=%+v want submissions payload with SHA-256 %s", r.Resources[0], sha256Hex(submissions))
 	}
 }
 

@@ -2,8 +2,6 @@ package sec
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -13,6 +11,7 @@ import (
 	"time"
 
 	"github.com/luisdourado/invs/internal/model"
+	"github.com/luisdourado/invs/internal/providers"
 )
 
 const defaultBaseURL = "https://data.sec.gov"
@@ -37,6 +36,8 @@ type RawDocument struct {
 	SHA256 string
 }
 type CompanyResult struct {
+	providers.ResourceResult
+
 	Issuer                           model.Issuer
 	StateOfIncorporation             string
 	Filings                          []model.Filing
@@ -59,18 +60,26 @@ func (c *Client) CollectCompany(ctx context.Context, issuerID string, cik int64)
 	if err != nil {
 		return CompanyResult{}, fmt.Errorf("SEC submissions CIK %d: %w", cik, err)
 	}
+	subResource := providers.NewRawResource("submissions", fmt.Sprintf("cik-%010d", cik), subBytes, c.now().UTC().Truncate(time.Microsecond), "application/json")
 	rawDocuments := []RawDocument{
-		{Kind: "submissions", Data: subBytes, SHA256: digest(subBytes)},
+		{Kind: "submissions", Data: subResource.Bytes, SHA256: subResource.SHA256},
+	}
+	result := CompanyResult{
+		ResourceResult: providers.ResourceResult{Resources: []providers.RawResource{subResource}},
+		Raw:            rawDocuments,
 	}
 	factBytes, err := c.http.Get(ctx, factsURL)
 	if err != nil {
-		return CompanyResult{Raw: rawDocuments}, fmt.Errorf("SEC companyfacts CIK %d: %w", cik, err)
+		return result, fmt.Errorf("SEC companyfacts CIK %d: %w", cik, err)
 	}
-	rawDocuments = append(rawDocuments, RawDocument{Kind: "companyfacts", Data: factBytes, SHA256: digest(factBytes)})
+	factsResource := providers.NewRawResource("companyfacts", fmt.Sprintf("cik-%010d", cik), factBytes, c.now().UTC().Truncate(time.Microsecond), "application/json")
+	rawDocuments = append(rawDocuments, RawDocument{Kind: "companyfacts", Data: factsResource.Bytes, SHA256: factsResource.SHA256})
+	result.Resources = append(result.Resources, factsResource)
+	result.Raw = rawDocuments
 	ingested := c.now().UTC().Truncate(time.Microsecond)
 	issuer, filings, receivedFilings, rejectedFilings, err := parseSubmissions(subBytes, issuerID, cik, ingested)
 	if err != nil {
-		return CompanyResult{Raw: rawDocuments}, err
+		return result, err
 	}
 	acceptedByAccession := make(map[string]time.Time, len(filings))
 	for _, filing := range filings {
@@ -80,10 +89,11 @@ func (c *Client) CollectCompany(ctx context.Context, issuerID string, cik int64)
 	}
 	facts, receivedFacts, rejectedFacts, err := parseCompanyFacts(factBytes, issuerID, cik, ingested, acceptedByAccession)
 	if err != nil {
-		return CompanyResult{Raw: rawDocuments}, err
+		return result, err
 	}
 	return CompanyResult{
-		Issuer: issuer, StateOfIncorporation: submissionState(subBytes), Filings: filings, Facts: facts,
+		ResourceResult: providers.ResourceResult{Resources: result.Resources},
+		Issuer:         issuer, StateOfIncorporation: submissionState(subBytes), Filings: filings, Facts: facts,
 		Raw:             rawDocuments,
 		RecordsReceived: receivedFilings + receivedFacts, RecordsRejected: rejectedFilings + rejectedFacts,
 	}, nil
@@ -272,7 +282,7 @@ func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested ti
 	return result, received, rejected, nil
 }
 
-func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+func digest(b []byte) string { return providers.SHA256(b) }
 func isISOCurrency(v string) bool {
 	if len(v) != 3 {
 		return false

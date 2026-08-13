@@ -3,9 +3,7 @@ package bcb
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/csv"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/url"
@@ -14,6 +12,7 @@ import (
 	"time"
 
 	"github.com/luisdourado/invs/internal/model"
+	"github.com/luisdourado/invs/internal/providers"
 )
 
 const defaultBaseURL = "https://api.bcb.gov.br/dados/serie/"
@@ -56,6 +55,10 @@ func NewClient(http Getter) *Client {
 }
 
 type Result struct {
+	providers.ResourceResult
+
+	// Raw and SHA256 are retained as compatibility aliases for this provider's
+	// single response. Resources is the canonical downloaded-resource contract.
 	Observations []model.EconomicObservation
 	Raw          []byte
 	SHA256       string
@@ -83,9 +86,14 @@ func (c *Client) Collect(ctx context.Context, series Series) (Result, error) {
 		return Result{}, fmt.Errorf("BCB SGS series %s: %w", normalized.Code, err)
 	}
 
-	result := Result{Raw: b, SHA256: digest(b)}
-	ingested := c.now().UTC().Truncate(time.Microsecond)
-	observations, received, rejected, missing, err := parseCSV(b, normalized, ingested)
+	fetchedAt := c.now().UTC().Truncate(time.Microsecond)
+	resource := providers.NewRawResource("series", normalized.Code, b, fetchedAt, "text/csv")
+	result := Result{
+		ResourceResult: providers.ResourceResult{Resources: []providers.RawResource{resource}},
+		Raw:            resource.Bytes,
+		SHA256:         resource.SHA256,
+	}
+	observations, received, rejected, missing, err := parseCSV(resource.Bytes, normalized, fetchedAt)
 	result.Observations = observations
 	result.RecordsReceived = received
 	result.RecordsRejected = rejected
@@ -349,7 +357,4 @@ func validFrequency(value string) bool {
 	}
 }
 
-func digest(b []byte) string {
-	h := sha256.Sum256(b)
-	return hex.EncodeToString(h[:])
-}
+func digest(b []byte) string { return providers.SHA256(b) }

@@ -128,6 +128,9 @@ func TestCollectRetainsRawOnParseError(t *testing.T) {
 			if r.SHA256 != sha256Hex(body) {
 				t.Fatalf("sha256=%q want %q", r.SHA256, sha256Hex(body))
 			}
+			if len(r.Resources) != 1 || string(r.Resources[0].Bytes) != string(body) || r.Resources[0].SHA256 != sha256Hex(body) || r.Resources[0].Kind != "price" || r.Resources[0].ContentType != "application/json" || r.Resources[0].FetchedAt.IsZero() {
+				t.Fatalf("common downloaded resource = %+v, want the malformed response and metadata", r.Resources)
+			}
 		})
 	}
 }

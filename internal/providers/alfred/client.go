@@ -3,8 +3,6 @@ package alfred
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +14,7 @@ import (
 	"time"
 
 	"github.com/luisdourado/invs/internal/model"
+	"github.com/luisdourado/invs/internal/providers"
 )
 
 const (
@@ -51,6 +50,8 @@ type RawPage struct {
 }
 
 type Result struct {
+	providers.ResourceResult
+
 	Observations []model.EconomicObservation
 	Pages        []RawPage
 
@@ -95,8 +96,10 @@ func (c *Client) Collect(ctx context.Context, series Series) (Result, error) {
 			return result, fmt.Errorf("ALFRED series %s offset %d: %w", normalized.ID, offset, redactAPIKey(err, c.apiKey))
 		}
 		fetchedAt := c.now().UTC().Truncate(time.Microsecond)
+		resource := providers.NewRawResource("series_page", fmt.Sprintf("%s/offset=%d", normalized.ID, offset), body, fetchedAt, "application/json")
+		result.Resources = append(result.Resources, resource)
 		page := RawPage{
-			Offset: offset, Bytes: append([]byte(nil), body...), SHA256: digest(body),
+			Offset: offset, Bytes: resource.Bytes, SHA256: resource.SHA256,
 			FetchedAt: fetchedAt,
 		}
 		result.Pages = append(result.Pages, page)
@@ -408,7 +411,4 @@ func optionalDate(value string) (time.Time, error) {
 	return time.Parse("2006-01-02", value)
 }
 
-func digest(body []byte) string {
-	hash := sha256.Sum256(body)
-	return hex.EncodeToString(hash[:])
-}
+func digest(body []byte) string { return providers.SHA256(body) }

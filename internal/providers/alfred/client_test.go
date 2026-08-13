@@ -147,6 +147,9 @@ func TestCollectRetainsRawOnParseError(t *testing.T) {
 	if len(result.Pages) != 1 || string(result.Pages[0].Bytes) != string(body) || result.Pages[0].SHA256 != digest(body) {
 		t.Fatalf("raw page was not retained: %+v", result.Pages)
 	}
+	if len(result.Resources) != 1 || string(result.Resources[0].Bytes) != string(body) || result.Resources[0].SHA256 != digest(body) || result.Resources[0].Kind != "series_page" || result.Resources[0].ContentType != "application/json" || result.Resources[0].FetchedAt.IsZero() {
+		t.Fatalf("common downloaded resource was not retained: %+v", result.Resources)
+	}
 }
 
 func TestCollectClassifiesMissingInvalidAndNotYetSafelyAvailableRows(t *testing.T) {

@@ -183,6 +183,9 @@ func TestCollectRetainsRawOnMalformedCSV(t *testing.T) {
 			if !bytes.Equal(result.Raw, body) || result.SHA256 != sha256Hex(body) {
 				t.Fatalf("raw/hash not retained: raw=%q hash=%q", result.Raw, result.SHA256)
 			}
+			if len(result.Resources) != 1 || !bytes.Equal(result.Resources[0].Bytes, body) || result.Resources[0].SHA256 != sha256Hex(body) || result.Resources[0].Kind != "series" || result.Resources[0].ContentType != "text/csv" || result.Resources[0].FetchedAt.IsZero() {
+				t.Fatalf("common downloaded resource = %+v, want the malformed response and metadata", result.Resources)
+			}
 		})
 	}
 }

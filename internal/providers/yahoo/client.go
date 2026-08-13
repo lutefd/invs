@@ -2,8 +2,6 @@ package yahoo
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -14,6 +12,7 @@ import (
 	"time"
 
 	"github.com/luisdourado/invs/internal/model"
+	"github.com/luisdourado/invs/internal/providers"
 )
 
 const defaultBaseURL = "https://query1.finance.yahoo.com/v8/finance/chart/"
@@ -32,6 +31,11 @@ func NewClient(http Getter) *Client {
 }
 
 type Result struct {
+	providers.ResourceResult
+
+	// Raw and SHA256 are retained as compatibility aliases for callers that
+	// only need this provider's single response. Resources is the canonical
+	// downloaded-resource contract.
 	Bars                             []model.PriceBar
 	Raw                              []byte
 	SHA256                           string
@@ -63,8 +67,14 @@ func (c *Client) Collect(ctx context.Context, req model.HistoricalPriceRequest) 
 	if err != nil {
 		return Result{}, fmt.Errorf("Yahoo prices %s: %w", req.VendorSymbol, err)
 	}
-	result := Result{Raw: b, SHA256: digest(b)}
-	bars, received, rejected, err := parse(b, req.SecurityID, req.Currency, c.now().UTC().Truncate(time.Microsecond))
+	fetchedAt := c.now().UTC().Truncate(time.Microsecond)
+	resource := providers.NewRawResource("price", req.VendorSymbol, b, fetchedAt, "application/json")
+	result := Result{
+		ResourceResult: providers.ResourceResult{Resources: []providers.RawResource{resource}},
+		Raw:            resource.Bytes,
+		SHA256:         resource.SHA256,
+	}
+	bars, received, rejected, err := parse(resource.Bytes, req.SecurityID, req.Currency, fetchedAt)
 	result.Bars, result.RecordsReceived, result.RecordsRejected = bars, received, rejected
 	if err != nil {
 		return result, err
@@ -166,7 +176,7 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 	sort.Slice(bars, func(i, j int) bool { return bars[i].Temporal.ObservedAt.Before(bars[j].Temporal.ObservedAt) })
 	return bars, received, rejected, nil
 }
-func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+func digest(b []byte) string { return providers.SHA256(b) }
 func compareDecimal(a, b string) int {
 	x, _ := new(big.Rat).SetString(a)
 	y, _ := new(big.Rat).SetString(b)

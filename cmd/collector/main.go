@@ -24,6 +24,7 @@ import (
 	"github.com/luisdourado/invs/internal/metadata"
 	"github.com/luisdourado/invs/internal/model"
 	"github.com/luisdourado/invs/internal/normalize"
+	"github.com/luisdourado/invs/internal/providers"
 	"github.com/luisdourado/invs/internal/providers/alfred"
 	"github.com/luisdourado/invs/internal/providers/bcb"
 	"github.com/luisdourado/invs/internal/providers/cvm"
@@ -301,9 +302,9 @@ func (a *app) collectSEC(ctx context.Context) error {
 		}
 		r, err := c.CollectCompany(ctx, s.IssuerID, s.CIK)
 		if err != nil {
-			for _, d := range r.Raw {
-				key := rawKey("sec", d.Kind, fmt.Sprintf("cik-%010d", s.CIK), d.Data, m.StartedAt, "json")
-				if _, putErr := a.storeRaw(ctx, &m, key, d.Data, storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, fmt.Sprintf("sec/%s/cik-%010d", d.Kind, s.CIK), "sec/"+d.Kind, d.SHA256); putErr != nil {
+			for _, d := range r.Resources {
+				key := rawKey("sec", d.Kind, fmt.Sprintf("cik-%010d", s.CIK), d.Bytes, resourceFetchedAt(d, m.StartedAt), "json")
+				if _, putErr := a.storeRaw(ctx, &m, key, d.Bytes, storage.RawMetadata{Source: "sec", ContentType: d.ContentType, FetchedAt: resourceFetchedAt(d, m.StartedAt), Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, fmt.Sprintf("sec/%s/cik-%010d", d.Kind, s.CIK), "sec/"+d.Kind, d.SHA256); putErr != nil {
 					errs = append(errs, putErr)
 				}
 			}
@@ -314,9 +315,9 @@ func (a *app) collectSEC(ctx context.Context) error {
 		m.Rejected += r.RecordsRejected
 		rawOK := true
 		rawHashes := map[string]string{}
-		for _, d := range r.Raw {
-			key := rawKey("sec", d.Kind, fmt.Sprintf("cik-%010d", s.CIK), d.Data, m.StartedAt, "json")
-			storedHash, putErr := a.storeRaw(ctx, &m, key, d.Data, storage.RawMetadata{Source: "sec", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, fmt.Sprintf("sec/%s/cik-%010d", d.Kind, s.CIK), "sec/"+d.Kind, d.SHA256)
+		for _, d := range r.Resources {
+			key := rawKey("sec", d.Kind, fmt.Sprintf("cik-%010d", s.CIK), d.Bytes, resourceFetchedAt(d, m.StartedAt), "json")
+			storedHash, putErr := a.storeRaw(ctx, &m, key, d.Bytes, storage.RawMetadata{Source: "sec", ContentType: d.ContentType, FetchedAt: resourceFetchedAt(d, m.StartedAt), Attributes: map[string]string{"issuer_id": s.IssuerID, "cik": fmt.Sprint(s.CIK), "kind": d.Kind}}, fmt.Sprintf("sec/%s/cik-%010d", d.Kind, s.CIK), "sec/"+d.Kind, d.SHA256)
 			if putErr != nil {
 				errs = append(errs, putErr)
 				rawOK = false
@@ -381,9 +382,9 @@ func (a *app) collectPrices(ctx context.Context) error {
 		}
 		r, err := c.Collect(ctx, model.HistoricalPriceRequest{SecurityID: s.SecurityID, VendorSymbol: s.YahooSymbol, Currency: s.Currency, Start: start, End: end})
 		if err != nil {
-			if len(r.Raw) > 0 {
-				key := rawKey("marketdata", "yahoo", s.SecurityID, r.Raw, m.StartedAt, "json")
-				if _, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo/price/security/"+s.SecurityID+"/vendor/"+s.YahooSymbol, "yahoo", r.SHA256); putErr != nil {
+			for _, resource := range r.Resources {
+				key := rawKey("marketdata", "yahoo", s.SecurityID, resource.Bytes, resourceFetchedAt(resource, m.StartedAt), "json")
+				if _, putErr := a.storeRaw(ctx, &m, key, resource.Bytes, storage.RawMetadata{Source: "yahoo", ContentType: resource.ContentType, FetchedAt: resourceFetchedAt(resource, m.StartedAt), Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo/price/security/"+s.SecurityID+"/vendor/"+s.YahooSymbol, "yahoo", resource.SHA256); putErr != nil {
 					errs = append(errs, putErr)
 				}
 			}
@@ -392,13 +393,18 @@ func (a *app) collectPrices(ctx context.Context) error {
 		}
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
-		key := rawKey("marketdata", "yahoo", s.SecurityID, r.Raw, m.StartedAt, "json")
-		_, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "yahoo", ContentType: "application/json", FetchedAt: m.StartedAt, Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo/price/security/"+s.SecurityID+"/vendor/"+s.YahooSymbol, "yahoo", r.SHA256)
+		if len(r.Resources) != 1 {
+			errs = append(errs, fmt.Errorf("yahoo security %s returned %d downloaded resources, want 1", s.SecurityID, len(r.Resources)))
+			continue
+		}
+		resource := r.Resources[0]
+		key := rawKey("marketdata", "yahoo", s.SecurityID, resource.Bytes, resourceFetchedAt(resource, m.StartedAt), "json")
+		_, putErr := a.storeRaw(ctx, &m, key, resource.Bytes, storage.RawMetadata{Source: "yahoo", ContentType: resource.ContentType, FetchedAt: resourceFetchedAt(resource, m.StartedAt), Attributes: map[string]string{"security_id": s.SecurityID, "vendor_symbol": s.YahooSymbol}}, "yahoo/price/security/"+s.SecurityID+"/vendor/"+s.YahooSymbol, "yahoo", resource.SHA256)
 		if putErr != nil {
 			errs = append(errs, putErr)
 			continue
 		}
-		if err := stampPrices(run, r.SHA256, r.Bars); err != nil {
+		if err := stampPrices(run, resource.SHA256, r.Bars); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -434,9 +440,9 @@ func (a *app) collectFRED(ctx context.Context) error {
 	for _, series := range a.cfg.Providers.FRED.Series {
 		r, err := c.Collect(ctx, series)
 		if err != nil {
-			if len(r.Raw) > 0 {
-				key := rawKey("fred", "series", series, r.Raw, m.StartedAt, "csv")
-				if _, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred/series/"+series+"/vintage/current", "fred", r.SHA256); putErr != nil {
+			for _, resource := range r.Resources {
+				key := rawKey("fred", "series", series, resource.Bytes, resourceFetchedAt(resource, m.StartedAt), "csv")
+				if _, putErr := a.storeRaw(ctx, &m, key, resource.Bytes, storage.RawMetadata{Source: "fred", ContentType: resource.ContentType, FetchedAt: resourceFetchedAt(resource, m.StartedAt), Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred/series/"+series+"/vintage/current", "fred", resource.SHA256); putErr != nil {
 					errs = append(errs, putErr)
 				}
 			}
@@ -445,13 +451,18 @@ func (a *app) collectFRED(ctx context.Context) error {
 		}
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
-		key := rawKey("fred", "series", series, r.Raw, m.StartedAt, "csv")
-		_, putErr := a.storeRaw(ctx, &m, key, r.Raw, storage.RawMetadata{Source: "fred", ContentType: "text/csv", FetchedAt: m.StartedAt, Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred/series/"+series+"/vintage/current", "fred", r.SHA256)
+		if len(r.Resources) != 1 {
+			errs = append(errs, fmt.Errorf("FRED series %s returned %d downloaded resources, want 1", series, len(r.Resources)))
+			continue
+		}
+		resource := r.Resources[0]
+		key := rawKey("fred", "series", series, resource.Bytes, resourceFetchedAt(resource, m.StartedAt), "csv")
+		_, putErr := a.storeRaw(ctx, &m, key, resource.Bytes, storage.RawMetadata{Source: "fred", ContentType: resource.ContentType, FetchedAt: resourceFetchedAt(resource, m.StartedAt), Attributes: map[string]string{"series_id": series, "vintage": "current"}}, "fred/series/"+series+"/vintage/current", "fred", resource.SHA256)
 		if putErr != nil {
 			errs = append(errs, putErr)
 			continue
 		}
-		if err := stampEconomics(run, r.SHA256, r.Observations); err != nil {
+		if err := stampEconomics(run, resource.SHA256, r.Observations); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -517,18 +528,26 @@ func (a *app) collectALFRED(ctx context.Context) error {
 
 		storedByAdapterHash := make(map[string]string, len(result.Pages))
 		rawOK := true
-		for _, page := range result.Pages {
-			key := rawKey("alfred", "series", fmt.Sprintf("%s-offset-%d", item.ID, page.Offset), page.Bytes, page.FetchedAt, "json")
-			storedHash, putErr := a.storeRaw(ctx, &m, key, page.Bytes, storage.RawMetadata{
-				Source: "alfred", ContentType: "application/json", FetchedAt: page.FetchedAt,
+		if len(result.Resources) != len(result.Pages) {
+			errs = append(errs, fmt.Errorf("ALFRED series %s returned %d downloaded resources for %d pages", item.ID, len(result.Resources), len(result.Pages)))
+			rawOK = false
+		}
+		for index, page := range result.Pages {
+			if index >= len(result.Resources) {
+				continue
+			}
+			resource := result.Resources[index]
+			key := rawKey("alfred", "series", fmt.Sprintf("%s-offset-%d", item.ID, page.Offset), resource.Bytes, resourceFetchedAt(resource, page.FetchedAt), "json")
+			storedHash, putErr := a.storeRaw(ctx, &m, key, resource.Bytes, storage.RawMetadata{
+				Source: "alfred", ContentType: resource.ContentType, FetchedAt: resourceFetchedAt(resource, page.FetchedAt),
 				Attributes: alfredRawAttributes(item, page),
-			}, alfredLogicalKey(item, page.Offset), "alfred", page.SHA256)
+			}, alfredLogicalKey(item, page.Offset), "alfred", resource.SHA256)
 			if putErr != nil {
 				errs = append(errs, fmt.Errorf("ALFRED series %s raw offset %d: %w", item.ID, page.Offset, putErr))
 				rawOK = false
 				continue
 			}
-			storedByAdapterHash[page.SHA256] = storedHash
+			storedByAdapterHash[resource.SHA256] = storedHash
 		}
 		if collectErr != nil {
 			seriesState["status"] = "failed"
@@ -624,14 +643,17 @@ func (a *app) collectBCB(ctx context.Context) error {
 		}
 		var rawHash, rawKeyValue string
 		var rawErr error
-		if result.SHA256 != "" {
-			rawKeyValue = rawKey("bcb", "series", code, result.Raw, m.StartedAt, "csv")
-			rawHash, rawErr = a.storeRaw(ctx, &m, rawKeyValue, result.Raw, storage.RawMetadata{
+		if len(result.Resources) > 1 {
+			rawErr = fmt.Errorf("expected one downloaded resource, got %d", len(result.Resources))
+		} else if len(result.Resources) == 1 {
+			resource := result.Resources[0]
+			rawKeyValue = rawKey("bcb", "series", code, resource.Bytes, resourceFetchedAt(resource, m.StartedAt), "csv")
+			rawHash, rawErr = a.storeRaw(ctx, &m, rawKeyValue, resource.Bytes, storage.RawMetadata{
 				Source:      "bcb",
-				ContentType: "text/csv",
-				FetchedAt:   m.StartedAt,
+				ContentType: resource.ContentType,
+				FetchedAt:   resourceFetchedAt(resource, m.StartedAt),
 				Attributes:  bcbRawAttributes(configured),
-			}, bcbLogicalKey(configured), "bcb", result.SHA256)
+			}, bcbLogicalKey(configured), "bcb", resource.SHA256)
 			if rawErr == nil {
 				seriesState["raw_payload_hash"] = rawHash
 				seriesState["raw_object_key"] = rawKeyValue
@@ -641,7 +663,7 @@ func (a *app) collectBCB(ctx context.Context) error {
 		if collectErr != nil {
 			if rawErr != nil {
 				seriesState["status"] = "raw_store_failed"
-			} else if result.SHA256 != "" {
+			} else if len(result.Resources) == 1 {
 				seriesState["status"] = "parse_failed"
 			}
 			seriesCursor[code] = seriesState
@@ -657,7 +679,7 @@ func (a *app) collectBCB(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("BCB series %s raw payload: %w", code, rawErr))
 			continue
 		}
-		if result.SHA256 == "" {
+		if len(result.Resources) != 1 {
 			seriesState["status"] = "invalid_result"
 			seriesCursor[code] = seriesState
 			errs = append(errs, fmt.Errorf("BCB series %s returned no raw payload hash", code))
@@ -1210,6 +1232,13 @@ func validateStoredHash(source, expected, stored string) error {
 		return fmt.Errorf("%s raw SHA-256 mismatch: adapter=%s stored=%s", source, expected, stored)
 	}
 	return nil
+}
+
+func resourceFetchedAt(resource providers.RawResource, fallback time.Time) time.Time {
+	if resource.FetchedAt.IsZero() {
+		return canonicalTime(fallback)
+	}
+	return canonicalTime(resource.FetchedAt)
 }
 
 func (a *app) storeRaw(ctx context.Context, m *metrics, key string, data []byte, meta storage.RawMetadata, logicalKey, source, expectedHash string) (string, error) {
