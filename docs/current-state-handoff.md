@@ -62,6 +62,54 @@ calendars/decision clocks; strict schemas and pure Python resolvers exercise
 synthetic US and Brazil fixtures. The slice deliberately stops before PostgreSQL
 historical publication, live calendar/source admission, and the bounded bias audit.
 
+## 2026-08-13 session-transfer boundary
+
+The next v0.2 implementation slice was started after `e16f650` but intentionally
+stopped for transfer to another Codex session. The committed baseline is
+`e16f650` (`docs(roadmap): record historical truth contract slice`). The checkout is
+deliberately dirty and the in-progress files belong to this slice; do not discard,
+reset, or overwrite them.
+
+Current in-progress scope:
+
+- `internal/metadata/historical.go` is a new, uncommitted Go repository boundary for
+  append-only historical identifier, listing, membership, calendar-manifest, and
+  trading-session records. It includes validation, deterministic record hashes,
+  atomic batch publication, explicit-source as-of queries, ambiguity checks, and
+  half-open session lookup. It has not been compiled, formatted, or tested yet.
+- `migrations/000006_historical_truth.up.sql` and `.down.sql` are uncommitted worker
+  output for the five durable historical tables, revision-aware exclusion
+  constraints, immutable record hashes, and rollback. They must be reviewed against
+  ADRs 0006/0007 and the Go SQL before application.
+- `docker/postgres.Dockerfile` and `Makefile` have uncommitted migration wiring from
+  the same worker. At the transfer instant, the worker had not reported completion
+  and no database integration-test script was visible yet.
+- Background worker `019ffc63-3d26-7503-85af-c622f311b33e` owns only the migration,
+  PostgreSQL image, Makefile migration wiring, and database-test harness. It was
+  still running when this handoff was written and must be allowed to finish; do not
+  terminate it merely because the session is changing.
+
+No validation claim exists for this dirty slice. In particular, `go test`, `go vet`,
+`make test`, migration apply/idempotence/rollback, and live PostgreSQL as-of queries
+have not been run since these files appeared. No v0.2 roadmap checkbox should be
+changed and no source-backed historical-publication acceptance should be claimed.
+
+Resume sequence for the next session:
+
+1. Inspect `git status` and collect the migration worker's final result without
+   resetting its files.
+2. Review migration/Go column names and constraints together, especially calendar
+   manifest foreign keys, immutable `record_hash`, same-source/same-revision
+   exclusions, and `available_at <= recorded_at`.
+3. Run `gofmt` and add focused Go tests for batch validation, deterministic calendar
+   fingerprints, immutable replay conflicts, ranking, ambiguity, and exact
+   availability/session boundaries.
+4. Run the worker's real PostgreSQL test harness, then prove forward migration,
+   idempotent `make migrate`, rollback, re-apply, and fresh-image initialization.
+5. Run `make test`, `make notebook`, `make dashboard-smoke`, and the relevant image
+   builds before committing. Only then synchronize migration documentation and the
+   roadmap with the exact implementation commit.
+
 ## B3 market-data source-selection discovery
 
 The current planning discovery for Brazil is to use Yahoo Finance as the primary B3
