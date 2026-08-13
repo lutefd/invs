@@ -159,6 +159,22 @@ func TestCatalogIncludesBCBMacroSource(t *testing.T) {
 	t.Fatal("BCB source is missing from catalog")
 }
 
+func TestCatalogIncludesALFREDMacroSource(t *testing.T) {
+	for _, candidate := range sources {
+		if candidate.code != "alfred" {
+			continue
+		}
+		if candidate.kind != "macro" {
+			t.Fatalf("ALFRED source kind = %q, want macro", candidate.kind)
+		}
+		if candidate.baseURL != "https://api.stlouisfed.org/fred/" {
+			t.Fatalf("ALFRED base URL = %q", candidate.baseURL)
+		}
+		return
+	}
+	t.Fatal("ALFRED source is missing from catalog")
+}
+
 func TestCatalogIncludesCVMFilingSource(t *testing.T) {
 	for _, candidate := range sources {
 		if candidate.code != "cvm" {

@@ -38,16 +38,19 @@ type RunInputs struct {
 }
 
 type ProviderInputs struct {
-	Name                    string            `json:"name"`
-	Kind                    string            `json:"kind"`
-	ConfiguredUniverseCount int               `json:"configured_universe_count,omitempty"`
-	ConfiguredSeriesCount   int               `json:"configured_series_count,omitempty"`
-	SecurityRequests        []SecurityRequest `json:"security_requests,omitempty"`
-	IssuerRequests          []IssuerRequest   `json:"issuer_requests,omitempty"`
-	SeriesIDs               []string          `json:"series_ids,omitempty"`
-	Series                  []BCBSeriesInput  `json:"series,omitempty"`
-	Format                  string            `json:"format,omitempty"`
-	Vintage                 string            `json:"vintage,omitempty"`
+	Name                    string              `json:"name"`
+	Kind                    string              `json:"kind"`
+	ConfiguredUniverseCount int                 `json:"configured_universe_count,omitempty"`
+	ConfiguredSeriesCount   int                 `json:"configured_series_count,omitempty"`
+	SecurityRequests        []SecurityRequest   `json:"security_requests,omitempty"`
+	IssuerRequests          []IssuerRequest     `json:"issuer_requests,omitempty"`
+	SeriesIDs               []string            `json:"series_ids,omitempty"`
+	Series                  []BCBSeriesInput    `json:"series,omitempty"`
+	HistoricalSeries        []ALFREDSeriesInput `json:"historical_series,omitempty"`
+	Format                  string              `json:"format,omitempty"`
+	Vintage                 string              `json:"vintage,omitempty"`
+	PageSize                int                 `json:"page_size,omitempty"`
+	OutputType              int                 `json:"output_type,omitempty"`
 }
 
 type SecurityRequest struct {
@@ -75,6 +78,18 @@ type BCBSeriesInput struct {
 	SeasonalAdjustment string `json:"seasonal_adjustment"`
 	Start              string `json:"start"`
 	End                string `json:"end"`
+}
+
+type ALFREDSeriesInput struct {
+	ID                 string `json:"id"`
+	Geography          string `json:"geography"`
+	Unit               string `json:"unit"`
+	Frequency          string `json:"frequency"`
+	SeasonalAdjustment string `json:"seasonal_adjustment"`
+	RealtimeStart      string `json:"realtime_start"`
+	RealtimeEnd        string `json:"realtime_end"`
+	ObservationStart   string `json:"observation_start,omitempty"`
+	ObservationEnd     string `json:"observation_end,omitempty"`
 }
 
 type canonicalRunInputs struct {
@@ -276,7 +291,7 @@ type source struct {
 	enabled                   bool
 }
 
-var sources = []source{{"sec", "SEC EDGAR", "fundamentals", "https://data.sec.gov", true}, {"yahoo", "Yahoo Finance", "market_data", "https://query1.finance.yahoo.com", true}, {"fred", "Federal Reserve Economic Data", "macro", "https://fred.stlouisfed.org", true}, {"bcb", "Banco Central do Brasil SGS", "macro", "https://api.bcb.gov.br/dados/serie/", true}, {"cvm", "CVM Dados Abertos", "filings", "https://dados.cvm.gov.br/dados/", true}}
+var sources = []source{{"sec", "SEC EDGAR", "fundamentals", "https://data.sec.gov", true}, {"yahoo", "Yahoo Finance", "market_data", "https://query1.finance.yahoo.com", true}, {"fred", "Federal Reserve Economic Data", "macro", "https://fred.stlouisfed.org", true}, {"alfred", "Archival FRED", "macro", "https://api.stlouisfed.org/fred/", true}, {"bcb", "Banco Central do Brasil SGS", "macro", "https://api.bcb.gov.br/dados/serie/", true}, {"cvm", "CVM Dados Abertos", "filings", "https://dados.cvm.gov.br/dados/", true}}
 
 func Open(ctx context.Context, databaseURL string) (*Repository, error) {
 	if strings.TrimSpace(databaseURL) == "" {
@@ -308,7 +323,7 @@ func (r *Repository) SyncCatalog(ctx context.Context, cfg config.Config) error {
 	}
 	defer tx.Rollback(ctx)
 	for _, s := range sources {
-		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled, "bcb": cfg.Providers.BCB.Enabled, "cvm": cfg.Providers.CVM.Enabled}[s.code]
+		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled, "alfred": cfg.Providers.ALFRED.Enabled, "bcb": cfg.Providers.BCB.Enabled, "cvm": cfg.Providers.CVM.Enabled}[s.code]
 		_, err = tx.Exec(ctx, `INSERT INTO data_sources(code,name,source_kind,base_url,enabled) VALUES($1,$2,$3,$4,$5) ON CONFLICT(code) DO UPDATE SET name=excluded.name,source_kind=excluded.source_kind,base_url=excluded.base_url,enabled=excluded.enabled,updated_at=now()`, s.code, s.name, s.kind, s.baseURL, enabled)
 		if err != nil {
 			return fmt.Errorf("upsert data source %s: %w", s.code, err)
