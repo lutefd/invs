@@ -140,6 +140,16 @@ type Run struct {
 	StartedAt                                time.Time
 	Skip                                     bool
 }
+
+// ReconciliationRun is the read-only metadata projection used by operational
+// reconciliation. It intentionally exposes no mutation affordance: an active
+// run may be recommended for explicit operator cancellation, but reconciliation
+// never changes its state.
+type ReconciliationRun struct {
+	ID, DataSourceID, Source, RunKey, Status string
+	StartedAt, FinishedAt                    time.Time
+	RawPayloadManifestHash                   string
+}
 type Metrics struct {
 	Received, Written, Rejected, RawPayloads int64
 	RawBytes                                 int64
@@ -275,6 +285,19 @@ SELECT r.id::text, r.data_source_id::text, s.code, r.run_key, r.status::text, r.
 FROM ingestion_runs r
 JOIN data_sources s ON s.id=r.data_source_id
 WHERE r.id=$1::uuid`
+
+const listRunsForReconciliationSQL = `
+SELECT r.id::text,
+       r.data_source_id::text,
+       s.code,
+       r.run_key,
+       r.status::text,
+       r.started_at,
+       r.finished_at,
+       COALESCE(r.raw_payload_manifest_hash, '')
+FROM ingestion_runs r
+JOIN data_sources s ON s.id=r.data_source_id
+ORDER BY r.started_at, r.id`
 
 const upsertIssuerSQL = `
 INSERT INTO issuers(id,legal_name,country_code,cik,cvm_code,metadata)
@@ -471,6 +494,42 @@ func (r *Repository) LookupRun(ctx context.Context, source, runKey, runID string
 		return Run{}, err
 	}
 	return run, nil
+}
+
+// ListRunsForReconciliation returns every ingestion run in stable order. The
+// query is deliberately read-only and includes terminal timestamps plus the
+// raw-manifest hash needed to compare PostgreSQL state with filesystem truth.
+func (r *Repository) ListRunsForReconciliation(ctx context.Context) ([]ReconciliationRun, error) {
+	if r == nil {
+		return nil, errors.New("PostgreSQL metadata repository is required for reconciliation")
+	}
+	rows, err := r.pool.Query(ctx, listRunsForReconciliationSQL)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]ReconciliationRun, 0)
+	for rows.Next() {
+		var run ReconciliationRun
+		if err := rows.Scan(
+			&run.ID,
+			&run.DataSourceID,
+			&run.Source,
+			&run.RunKey,
+			&run.Status,
+			&run.StartedAt,
+			&run.FinishedAt,
+			&run.RawPayloadManifestHash,
+		); err != nil {
+			return nil, err
+		}
+		result = append(result, run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func classify(m Metrics) string {

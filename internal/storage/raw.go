@@ -364,6 +364,36 @@ func NewFileRawStore(root string) (*FileRawStore, error) {
 	return &FileRawStore{root: abs}, nil
 }
 
+// OpenFileRawStore opens an existing filesystem raw store without creating or
+// changing any directories. Read-only operational commands use this boundary
+// so a missing data root remains visible instead of being silently initialized.
+func OpenFileRawStore(root string) (*FileRawStore, error) {
+	if strings.TrimSpace(root) == "" {
+		return nil, errors.New("raw store root is required")
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolve raw root: %w", err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return nil, fmt.Errorf("stat raw root: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("raw root %s is not a directory", abs)
+	}
+	return &FileRawStore{root: abs}, nil
+}
+
+// Root returns the canonical filesystem root for diagnostics and read-only
+// reconciliation. Callers must not mutate it through this accessor.
+func (s *FileRawStore) Root() string {
+	if s == nil {
+		return ""
+	}
+	return s.root
+}
+
 func (s *FileRawStore) Put(ctx context.Context, key string, data io.Reader, metadata RawMetadata) (RawMetadata, error) {
 	path, err := s.resolve(key)
 	if err != nil {

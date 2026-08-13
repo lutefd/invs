@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate health urls ingest rerun feature feature-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate health urls ingest rerun reconcile backup restore feature feature-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -59,6 +59,18 @@ rerun:
 	@run_key="operator-retry-$(SOURCE)-$$(date +%s)"; \
 		$(MAKE) ingest SOURCE=$(SOURCE) RUN_KEY="$$run_key" && \
 		$(MAKE) ingest SOURCE=$(SOURCE) RUN_KEY="$$run_key"
+
+reconcile: setup config
+	@$(COMPOSE) --profile collect run --rm collector reconcile --data-root /data --fail-on-issues
+
+backup: setup config
+	@test -n "$(BACKUP_DIR)" || (echo "BACKUP_DIR is required" >&2; exit 2)
+	@scripts/backup.sh "$(BACKUP_DIR)"
+
+restore: config
+	@test -n "$(BACKUP_DIR)" || (echo "BACKUP_DIR is required" >&2; exit 2)
+	@test -n "$(RESTORE_DIR)" || (echo "RESTORE_DIR is required" >&2; exit 2)
+	@scripts/restore.sh "$(BACKUP_DIR)" "$(RESTORE_DIR)" $(if $(RESTORE_DB),--database-name $(RESTORE_DB),)
 
 feature: config
 	@test -n "$(SECURITY_ID)" || (echo "SECURITY_ID is required" >&2; exit 2)
