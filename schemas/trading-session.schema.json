@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/trading-session.schema.json",
+  "title": "TradingSession",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "calendar_version",
+    "mic",
+    "exchange_timezone",
+    "session_date",
+    "session_status",
+    "open_at",
+    "close_at",
+    "is_early_close",
+    "available_at",
+    "source_reference",
+    "recorded_at",
+    "data_source_id",
+    "raw_payload_hash",
+    "revision"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "calendar_version": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "mic": { "$ref": "common.schema.json#/$defs/mic" },
+    "exchange_timezone": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._+-]+/[A-Za-z0-9._+-]+$"
+    },
+    "session_date": { "$ref": "common.schema.json#/$defs/date" },
+    "session_status": { "enum": ["open", "closed"] },
+    "open_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }]
+    },
+    "close_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }]
+    },
+    "is_early_close": { "type": "boolean" },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "source_reference": { "type": "string", "minLength": 1 },
+    "recorded_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "data_source_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "raw_payload_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+    "revision": { "type": "integer", "minimum": 0 }
+  }
+}

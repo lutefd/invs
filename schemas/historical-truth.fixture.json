@@ -1,0 +1,209 @@
+{
+  "schema_version": "1.0.0",
+  "us": {
+    "security_identifiers": [
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000001",
+        "security_id": "469fc20f-7d4b-45bb-b827-05f8410e71aa",
+        "identifier_type": "ticker",
+        "value": "OLD",
+        "normalized_value": "OLD",
+        "identifier_scope": "XNAS",
+        "valid_from": "2021-01-01T00:00:00Z",
+        "valid_until": "2022-01-03T00:00:00Z",
+        "available_at": "2021-01-02T00:00:00Z",
+        "source_reference": "fixture-us/listing/old-xnas",
+        "recorded_at": "2021-01-02T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 0,
+        "is_primary": true
+      },
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000002",
+        "security_id": "469fc20f-7d4b-45bb-b827-05f8410e71aa",
+        "identifier_type": "ticker",
+        "value": "NEW",
+        "normalized_value": "NEW",
+        "identifier_scope": "XNAS",
+        "valid_from": "2022-01-03T00:00:00Z",
+        "valid_until": "2023-07-01T00:00:00Z",
+        "available_at": "2022-01-04T00:00:00Z",
+        "source_reference": "fixture-us/listing/new-xnas",
+        "recorded_at": "2022-01-04T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "revision": 0,
+        "is_primary": true
+      },
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000003",
+        "security_id": "5b27f9b7-2c2a-4ab7-9691-7ad013a0a2b1",
+        "identifier_type": "ticker",
+        "value": "OLD",
+        "normalized_value": "OLD",
+        "identifier_scope": "XNYS",
+        "valid_from": "2021-01-01T00:00:00Z",
+        "valid_until": null,
+        "available_at": "2021-01-02T00:00:00Z",
+        "source_reference": "fixture-us/listing/old-xnys",
+        "recorded_at": "2021-01-02T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "revision": 0,
+        "is_primary": true
+      }
+    ],
+    "listings": [
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000101",
+        "security_id": "469fc20f-7d4b-45bb-b827-05f8410e71aa",
+        "issuer_id": "1b3d88f5-55b8-4dc5-a6be-2f77e9e99201",
+        "exchange": "Fixture National Exchange",
+        "mic": "XNAS",
+        "currency": "USD",
+        "primary_listing": true,
+        "valid_from": "2021-01-01T00:00:00Z",
+        "valid_until": "2023-07-01T00:00:00Z",
+        "available_at": "2021-01-02T00:00:00Z",
+        "source_reference": "fixture-us/listing/xnas",
+        "recorded_at": "2021-01-02T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "revision": 0
+      },
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000102",
+        "security_id": "5b27f9b7-2c2a-4ab7-9691-7ad013a0a2b1",
+        "issuer_id": "7d1b7f10-1d75-4f49-8898-2f5f0e7e8ac2",
+        "exchange": "Fixture York Exchange",
+        "mic": "XNYS",
+        "currency": "USD",
+        "primary_listing": true,
+        "valid_from": "2021-01-01T00:00:00Z",
+        "valid_until": null,
+        "available_at": "2021-01-02T00:00:00Z",
+        "source_reference": "fixture-us/listing/xnys",
+        "recorded_at": "2021-01-02T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "revision": 0
+      }
+    ],
+    "memberships": [
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000201",
+        "universe_id": "us-benchmark",
+        "security_id": "469fc20f-7d4b-45bb-b827-05f8410e71aa",
+        "member": true,
+        "valid_from": "2021-01-01T00:00:00Z",
+        "valid_until": null,
+        "announced_at": "2021-01-02T00:00:00Z",
+        "available_at": "2021-01-03T00:00:00Z",
+        "source_reference": "fixture-us/universe/a-member",
+        "recorded_at": "2021-01-03T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "revision": 0
+      },
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000202",
+        "universe_id": "us-benchmark",
+        "security_id": "469fc20f-7d4b-45bb-b827-05f8410e71aa",
+        "member": false,
+        "valid_from": "2023-07-01T00:00:00Z",
+        "valid_until": null,
+        "announced_at": "2023-07-04T00:00:00Z",
+        "available_at": "2023-07-05T00:00:00Z",
+        "source_reference": "fixture-us/universe/a-removed",
+        "recorded_at": "2023-07-05T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "1212121212121212121212121212121212121212121212121212121212121212",
+        "revision": 1
+      },
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000203",
+        "universe_id": "us-benchmark",
+        "security_id": "5b27f9b7-2c2a-4ab7-9691-7ad013a0a2b1",
+        "member": true,
+        "valid_from": "2021-01-01T00:00:00Z",
+        "valid_until": null,
+        "announced_at": "2021-01-02T00:00:00Z",
+        "available_at": "2021-01-03T00:00:00Z",
+        "source_reference": "fixture-us/universe/b-member",
+        "recorded_at": "2021-01-03T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "1313131313131313131313131313131313131313131313131313131313131313",
+        "revision": 0
+      }
+    ]
+  },
+  "brazil": {
+    "security_identifiers": [
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000004",
+        "security_id": "8a3d9d9d-0d9e-4a23-915b-2f94d0f62311",
+        "identifier_type": "ticker",
+        "value": "BR3",
+        "normalized_value": "BR3",
+        "identifier_scope": "BVMF",
+        "valid_from": "2021-01-01T00:00:00Z",
+        "valid_until": null,
+        "available_at": "2021-01-02T00:00:00Z",
+        "source_reference": "fixture-br/listing/br3-bvmf",
+        "recorded_at": "2021-01-02T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "1414141414141414141414141414141414141414141414141414141414141414",
+        "revision": 0,
+        "is_primary": true
+      }
+    ],
+    "listings": [
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000103",
+        "security_id": "8a3d9d9d-0d9e-4a23-915b-2f94d0f62311",
+        "issuer_id": "0e6bd3b6-8cb9-45b6-a9c3-e8a7ad4f31c0",
+        "exchange": "Fixture Brasil Exchange",
+        "mic": "BVMF",
+        "currency": "BRL",
+        "primary_listing": true,
+        "valid_from": "2021-01-01T00:00:00Z",
+        "valid_until": null,
+        "available_at": "2021-01-02T00:00:00Z",
+        "source_reference": "fixture-br/listing/bvmf",
+        "recorded_at": "2021-01-02T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "1515151515151515151515151515151515151515151515151515151515151515",
+        "revision": 0
+      }
+    ],
+    "memberships": [
+      {
+        "schema_version": "1.0.0",
+        "id": "10000000-0000-4000-8000-000000000204",
+        "universe_id": "brazil-benchmark",
+        "security_id": "8a3d9d9d-0d9e-4a23-915b-2f94d0f62311",
+        "member": true,
+        "valid_from": "2021-01-01T00:00:00Z",
+        "valid_until": null,
+        "announced_at": "2021-01-02T00:00:00Z",
+        "available_at": "2021-01-03T00:00:00Z",
+        "source_reference": "fixture-br/universe/br3-member",
+        "recorded_at": "2021-01-03T00:00:00Z",
+        "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
+        "raw_payload_hash": "1616161616161616161616161616161616161616161616161616161616161616",
+        "revision": 0
+      }
+    ]
+  }
+}

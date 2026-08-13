@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/calendar-manifest.schema.json",
+  "title": "CalendarManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "calendar_version",
+    "mic",
+    "exchange_timezone",
+    "available_at",
+    "source_reference",
+    "recorded_at",
+    "data_source_id",
+    "raw_payload_hash",
+    "session_fingerprint",
+    "session_count"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "calendar_version": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "mic": { "$ref": "common.schema.json#/$defs/mic" },
+    "exchange_timezone": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._+-]+/[A-Za-z0-9._+-]+$"
+    },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "source_reference": { "type": "string", "minLength": 1 },
+    "recorded_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "data_source_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "raw_payload_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+    "session_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "session_count": { "type": "integer", "minimum": 0 }
+  }
+}

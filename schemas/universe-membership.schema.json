@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/universe-membership.schema.json",
+  "title": "UniverseMembership",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "universe_id",
+    "security_id",
+    "member",
+    "valid_from",
+    "valid_until",
+    "announced_at",
+    "available_at",
+    "source_reference",
+    "recorded_at",
+    "data_source_id",
+    "raw_payload_hash",
+    "revision"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "universe_id": { "$ref": "common.schema.json#/$defs/slug" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "member": { "type": "boolean" },
+    "valid_from": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "valid_until": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }]
+    },
+    "announced_at": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }]
+    },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "source_reference": { "type": "string", "minLength": 1 },
+    "recorded_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "data_source_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "raw_payload_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+    "revision": { "type": "integer", "minimum": 0 }
+  }
+}

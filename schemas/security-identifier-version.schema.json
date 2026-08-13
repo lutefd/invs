@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/security-identifier-version.schema.json",
+  "title": "SecurityIdentifierVersion",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "security_id",
+    "identifier_type",
+    "value",
+    "normalized_value",
+    "identifier_scope",
+    "valid_from",
+    "valid_until",
+    "available_at",
+    "source_reference",
+    "recorded_at",
+    "data_source_id",
+    "raw_payload_hash",
+    "revision",
+    "is_primary"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "identifier_type": { "$ref": "common.schema.json#/$defs/slug" },
+    "value": { "type": "string", "minLength": 1 },
+    "normalized_value": { "type": "string", "minLength": 1 },
+    "identifier_scope": {
+      "type": "string",
+      "minLength": 1,
+      "$comment": "MIC or an explicit identifier namespace; never an implicit current-universe scope."
+    },
+    "valid_from": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "valid_until": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }]
+    },
+    "available_at": {
+      "$ref": "common.schema.json#/$defs/utcTimestamp",
+      "$comment": "Earliest conservative instant at which this version may be selected."
+    },
+    "source_reference": { "type": "string", "minLength": 1 },
+    "recorded_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "data_source_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "raw_payload_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+    "revision": { "type": "integer", "minimum": 0 },
+    "is_primary": { "type": "boolean" }
+  }
+}

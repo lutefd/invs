@@ -100,7 +100,9 @@ test: config
 	@python3 schemas/validate_schemas.py
 	@$(COMPOSE) run --rm --no-deps \
 		-v "$(CURDIR)/docker:/repo/docker:ro" \
+		-v "$(CURDIR)/schemas:/repo/schemas:ro" \
 		-e INVS_DASHBOARD_PATH=/repo/docker/grafana/dashboards/market-overview.json \
+		-e INVS_SCHEMA_ROOT=/repo/schemas \
 		jupyter sh -c "pip install -q -e '.[dev]' && python -m pytest && python -m ruff check research tests"
 
 notebook: config
