@@ -362,7 +362,10 @@ func parseCAD(body []byte) ([]CADRow, ParseStats, string, error) {
 	reader := csv.NewReader(strings.NewReader(text))
 	reader.Comma = ';'
 	reader.FieldsPerRecord = -1
-	reader.LazyQuotes = false
+	// CVM's CAD export can contain bare quotes inside otherwise unquoted
+	// fields. Preserve those quotes as field text and reject only the affected
+	// row when the CSV reader cannot recover its record shape.
+	reader.LazyQuotes = true
 	header, err := reader.Read()
 	if err != nil {
 		return nil, ParseStats{}, charset, fmt.Errorf("decode CSV header: %w", err)
@@ -387,6 +390,10 @@ func parseCAD(body []byte) ([]CADRow, ParseStats, string, error) {
 		}
 		rowNumber++
 		stats.RecordsReceived++
+		if readErr != nil {
+			stats.RecordsRejected++
+			continue
+		}
 		if len(row) != len(cadHeader) {
 			stats.RecordsRejected++
 			continue
@@ -660,16 +667,27 @@ func deduplicateIPE(rows []IPERow, stats ParseStats, seen map[string]string) ([]
 }
 
 func parseIPERow(row []string, year int, member string, rowNumber int, ingested time.Time) (IPERow, error) {
-	for _, index := range []int{0, 1, 2, 8, 10, 11} {
+	for _, index := range []int{0, 1, 2, 8, 11} {
 		if row[index] == "" || strings.TrimSpace(row[index]) != row[index] {
 			return IPERow{}, fmt.Errorf("IPE row %d has missing or padded key field", rowNumber)
 		}
+	}
+	if row[10] != "" && strings.TrimSpace(row[10]) != row[10] {
+		return IPERow{}, fmt.Errorf("IPE row %d has missing or padded key field", rowNumber)
 	}
 	if !decimalLexeme(row[2]) {
 		return IPERow{}, fmt.Errorf("IPE row %d has invalid Codigo_CVM", rowNumber)
 	}
 	if row[12] != "" {
 		if err := validateDocumentURL(row[12]); err != nil {
+			return IPERow{}, fmt.Errorf("IPE row %d: %w", rowNumber, err)
+		}
+	}
+	sourceDocumentID := "cvm-ipe:" + row[2] + ":" + row[10] + ":v" + row[11]
+	if row[10] == "" {
+		var err error
+		sourceDocumentID, err = ipeURLDocumentID(row[12], row[2], row[11])
+		if err != nil {
 			return IPERow{}, fmt.Errorf("IPE row %d: %w", rowNumber, err)
 		}
 	}
@@ -699,10 +717,41 @@ func parseIPERow(row []string, year int, member string, rowNumber int, ingested 
 		CompanyCNPJ: row[0], CompanyName: row[1], CVMCode: row[2], ReferenceDateText: row[3], ReferenceDate: referenceDate,
 		Category: row[4], Type: row[5], Species: row[6], Subject: row[7], DeliveryDateText: row[8], DeliveryDate: *deliveryDate,
 		PresentationType: row[9], Protocol: row[10], Version: row[11], DownloadURL: row[12],
-		SourceDocumentID: "cvm-ipe:" + row[2] + ":" + row[10] + ":v" + row[11], AccessionNumber: row[10], FormType: "cvm_ipe",
+		SourceDocumentID: sourceDocumentID, AccessionNumber: row[10], FormType: "cvm_ipe",
 		ObservedAt: observedAt, ObservedPrecision: observedPrecision, PublishedAt: nil, PublishedPrecision: PrecisionUnknown,
 		AvailableAt: ingested, IngestedAt: ingested, RawFields: append([]string(nil), row...), RawRecordLocator: fmt.Sprintf("zip/year=%04d/member=%s/row=%d", year, member, rowNumber),
 	}, nil
+}
+
+func ipeURLDocumentID(rawURL, cvmCode, sourceVersion string) (string, error) {
+	if err := validateDocumentURL(rawURL); err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid Link_Download URL %q", rawURL)
+	}
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return "", fmt.Errorf("invalid Link_Download query: %w", err)
+	}
+	for _, name := range []string{"numProtocolo", "numSequencia", "numVersao"} {
+		values, ok := query[name]
+		if !ok || len(values) != 1 || values[0] == "" {
+			return "", fmt.Errorf("Link_Download is missing %s", name)
+		}
+		if name != "numVersao" && !decimalLexeme(values[0]) {
+			return "", fmt.Errorf("Link_Download has invalid %s", name)
+		}
+	}
+	urlVersion := query.Get("numVersao")
+	if !decimalLexeme(sourceVersion) || !decimalLexeme(urlVersion) {
+		return "", fmt.Errorf("IPE row has invalid version")
+	}
+	if !sameDecimalLexeme(sourceVersion, urlVersion) {
+		return "", fmt.Errorf("Link_Download numVersao %q does not match Versao %q", urlVersion, sourceVersion)
+	}
+	return "cvm-ipe:" + cvmCode + ":urlsha256-" + digest([]byte(rawURL)) + ":v" + sourceVersion, nil
 }
 
 func parseOptionalDate(value, field string) (*time.Time, error) {
@@ -796,6 +845,21 @@ func decimalLexeme(value string) bool {
 		}
 	}
 	return true
+}
+
+func sameDecimalLexeme(left, right string) bool {
+	if !decimalLexeme(left) || !decimalLexeme(right) {
+		return false
+	}
+	left = strings.TrimLeft(left, "0")
+	right = strings.TrimLeft(right, "0")
+	if left == "" {
+		left = "0"
+	}
+	if right == "" {
+		right = "0"
+	}
+	return left == right
 }
 
 func equalStrings(left, right []string) bool {

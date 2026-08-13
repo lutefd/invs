@@ -199,6 +199,23 @@ func TestParseCADRejectsMalformedRows(t *testing.T) {
 	}
 }
 
+func TestParseCADPreservesUnescapedQuotesAndRejectsMalformedRows(t *testing.T) {
+	body := readFixture(t, "cad_cia_aberta.csv")
+	body = []byte(strings.Replace(string(body), "AÇÚCAR S.A.", `AÇÚCAR "S.A."`, 1))
+	body = append(body, []byte(strings.Join(cadHeader[:len(cadHeader)-1], ";")+"\n")...)
+
+	rows, stats, _, err := parseCAD(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || stats.RecordsReceived != 2 || stats.RecordsRejected != 1 {
+		t.Fatalf("CAD rows/stats = %d/%+v, want 1 row and received=2 rejected=1", len(rows), stats)
+	}
+	if rows[0].LegalName != `AÇÚCAR "S.A."` || len(rows[0].RawFields) != len(cadHeader) {
+		t.Fatalf("CAD literal quote/raw fields = %q/%d", rows[0].LegalName, len(rows[0].RawFields))
+	}
+}
+
 func TestParseIPECSVPreservesUnescapedQuotesWithOfficialFieldShape(t *testing.T) {
 	text := string(readFixture(t, "ipe_cia_aberta_2026_unescaped_quote.csv"))
 	rows, stats, err := parseIPECSV(text, 2026, "ipe_cia_aberta_2026.csv", time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC))
@@ -214,6 +231,51 @@ func TestParseIPECSVPreservesUnescapedQuotesWithOfficialFieldShape(t *testing.T)
 	}
 	if rows[1].Protocol != "001023IPE290420260199594482-48" {
 		t.Fatalf("valid row after structural rejection = %+v", rows[1])
+	}
+}
+
+func TestParseIPECSVRetainsBlankProtocolWithExactURLIdentity(t *testing.T) {
+	text := string(readFixture(t, "ipe_cia_aberta_2026_blank_protocol.csv"))
+	rows, stats, err := parseIPECSV(text, 2026, "ipe_cia_aberta_2026_blank_protocol.csv", time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || stats.RecordsReceived != 5 || stats.RecordsRejected != 2 || stats.Duplicates != 1 {
+		t.Fatalf("rows/stats = %d/%+v, want 2 rows and received=5 rejected=2 duplicates=1", len(rows), stats)
+	}
+
+	wantByURL := map[string][]string{
+		"https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=4321&numProtocolo=987654&numSequencia=123456&numVersao=1": {
+			"98.765.432/0001-01", "IDENTIDADE URL S.A.", "004321", "2026-06-30", "FRE", "Comunicado", "Comunicado ao mercado", "Documento sem protocolo", "2026-07-10", "AP", "", "01",
+			"https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=4321&numProtocolo=987654&numSequencia=123456&numVersao=1",
+		},
+		"https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=4321&numProtocolo=987655&numSequencia=123457&numVersao=2": {
+			"98.765.432/0001-01", "IDENTIDADE URL S.A.", "004321", "2026-06-30", "FRE", "Comunicado", "Comunicado ao mercado", "Segundo documento sem protocolo", "2026-07-11", "AP", "", "2",
+			"https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=4321&numProtocolo=987655&numSequencia=123457&numVersao=2",
+		},
+	}
+	for _, row := range rows {
+		wantFields, ok := wantByURL[row.DownloadURL]
+		if !ok {
+			t.Fatalf("unexpected retained URL %q", row.DownloadURL)
+		}
+		gotFields := []string{
+			row.CompanyCNPJ, row.CompanyName, row.CVMCode, row.ReferenceDateText, row.Category, row.Type, row.Species,
+			row.Subject, row.DeliveryDateText, row.PresentationType, row.Protocol, row.Version, row.DownloadURL,
+		}
+		if !equalStrings(gotFields, wantFields) {
+			t.Fatalf("typed fields for %q = %q, want %q", row.DownloadURL, gotFields, wantFields)
+		}
+		if !equalStrings(row.RawFields, wantFields) || len(row.RawFields) != len(ipeHeader) {
+			t.Fatalf("raw fields for %q = %q, want exact 13 fields %q", row.DownloadURL, row.RawFields, wantFields)
+		}
+		if row.Protocol != "" || row.AccessionNumber != "" {
+			t.Fatalf("blank source protocol was rewritten: protocol=%q accession=%q", row.Protocol, row.AccessionNumber)
+		}
+		wantID := "cvm-ipe:" + wantFields[2] + ":urlsha256-" + hashHex([]byte(wantFields[12])) + ":v" + wantFields[11]
+		if row.SourceDocumentID != wantID || row.SourceDocumentID == "" {
+			t.Fatalf("URL-derived identity = %q, want exact %q", row.SourceDocumentID, wantID)
+		}
 	}
 }
 
