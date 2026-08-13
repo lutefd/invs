@@ -66,7 +66,7 @@ func TestCollectBuildsBoundedRequestAndKeepsCredentialsOutOfResult(t *testing.T)
 	query := request.Query()
 	for key, want := range map[string]string{
 		"api_key": testAPIKey, "file_type": "json", "series_id": "CPIAUCSL", "units": "lin",
-		"output_type": "1", "realtime_start": earliestRealtimeStart, "realtime_end": "2024-12-31",
+		"output_type": "1", "realtime_start": EarliestRealtimeStart, "realtime_end": "2024-12-31",
 		"observation_start": "2019-01-01", "observation_end": "2024-11-01",
 		"sort_order": "asc", "limit": "100000", "offset": "0",
 	} {
@@ -78,7 +78,7 @@ func TestCollectBuildsBoundedRequestAndKeepsCredentialsOutOfResult(t *testing.T)
 		t.Fatal("result exposed API key")
 	}
 	page := result.Pages[0]
-	if string(page.Bytes) != string(body) || page.SHA256 != digest(body) || page.Offset != 0 || page.Count != 1 || page.Limit != pageLimit {
+	if string(page.Bytes) != string(body) || page.SHA256 != digest(body) || page.Offset != 0 || page.Count != 1 || page.Limit != PageLimit {
 		t.Fatalf("unexpected raw page: %+v", page)
 	}
 }

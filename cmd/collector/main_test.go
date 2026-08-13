@@ -96,6 +96,28 @@ func TestStampEconomicsAddsRunProvenance(t *testing.T) {
 	assertStamped(t, observations[0].RawPayloadHash, observations[0].Provenance, observations[0].Temporal, run)
 }
 
+func TestStampEconomicsUsesEachALFREDRawPageHash(t *testing.T) {
+	const secondHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	ingestedAt := time.Date(2026, 8, 12, 12, 2, 0, 0, time.UTC)
+	observations := []model.EconomicObservation{
+		{RawPayloadHash: testRawHash, Temporal: model.Temporal{IngestedAt: ingestedAt}, Provenance: model.Provenance{RawPayloadHash: testRawHash, RawRecordLocator: "json/offset=0/observations/0"}},
+		{RawPayloadHash: secondHash, Temporal: model.Temporal{IngestedAt: ingestedAt}, Provenance: model.Provenance{RawPayloadHash: secondHash, RawRecordLocator: "json/offset=100000/observations/0"}},
+	}
+	run := testRun()
+	if err := stampEconomicsFromRawHashes(run, map[string]string{testRawHash: testRawHash, secondHash: secondHash}, observations); err != nil {
+		t.Fatal(err)
+	}
+	if observations[0].Provenance.RawPayloadHash != testRawHash || observations[1].Provenance.RawPayloadHash != secondHash {
+		t.Fatalf("page lineage collapsed: %+v", observations)
+	}
+	if observations[0].Provenance.IngestionRunID != run.ID || observations[1].Provenance.IngestionRunID != run.ID {
+		t.Fatalf("run lineage missing: %+v", observations)
+	}
+	if err := stampEconomicsFromRawHashes(run, map[string]string{testRawHash: testRawHash}, observations); err == nil {
+		t.Fatal("missing stored page hash accepted")
+	}
+}
+
 type collectorHTTPFake struct {
 	payload   []byte
 	responses map[string][]byte
@@ -381,6 +403,25 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		t.Fatalf("FRED run inputs = %+v", fredInputs)
 	}
 
+	alfredInputs := alfredRunInputs([]config.ALFREDSeries{{
+		ID: " CPIAUCSL ", Geography: " US ", Unit: " index ", Frequency: " monthly ",
+		SeasonalAdjustment: " seasonally_adjusted ", RealtimeEnd: " 2026-08-11 ",
+		ObservationStart: " 2018-01-01 ", ObservationEnd: " 2026-07-01 ",
+	}})
+	if alfredInputs.Provider.ConfiguredSeriesCount != 1 || alfredInputs.Provider.PageSize != 100000 || alfredInputs.Provider.OutputType != 1 || alfredInputs.Provider.Vintage != "historical_realtime_periods" {
+		t.Fatalf("ALFRED run inputs = %+v", alfredInputs)
+	}
+	if got := alfredInputs.Provider.HistoricalSeries[0]; got.ID != "CPIAUCSL" || got.RealtimeStart != "1776-07-04" || got.RealtimeEnd != "2026-08-11" || got.ObservationStart != "2018-01-01" || got.ObservationEnd != "2026-07-01" {
+		t.Fatalf("ALFRED series input = %+v", got)
+	}
+	encoded, err := json.Marshal(alfredInputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "api_key") || strings.Contains(string(encoded), "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") {
+		t.Fatalf("ALFRED run inputs exposed credentials: %s", encoded)
+	}
+
 	bcbInputs := bcbRunInputs([]config.BCBSeries{{
 		Code: " 432 ", Geography: " BR ", Unit: " percent ", Frequency: " daily ",
 		SeasonalAdjustment: " not_adjusted ", Start: " 2024-01-01 ", End: " 2024-12-31 ",
@@ -389,7 +430,7 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		t.Fatalf("BCB series input = %+v", got)
 	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, bcbInputs} {
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -604,6 +645,103 @@ func TestCollectorFREDStoresRawBeforeNormalizedWrite(t *testing.T) {
 	}
 	if got := len(app.normalized.(*orderingNormalizedStore).economics); got != 1 {
 		t.Fatalf("economic observations = %d, want 1", got)
+	}
+}
+
+func TestCollectorALFREDStoresRawPagesBeforeHistoricalPublication(t *testing.T) {
+	payload := []byte(`{"output_type":1,"count":2,"offset":0,"limit":100000,"observations":[{"realtime_start":"2024-02-13","realtime_end":"2024-03-10","date":"2024-01-01","value":"308.417"},{"realtime_start":"2024-03-11","realtime_end":"2026-08-11","date":"2024-01-01","value":"308.491"}]}`)
+	raw := &orderingRawStore{}
+	run := testRun()
+	var finalized metadata.Metrics
+	var snapshots []model.EconomicObservation
+	app := &app{
+		cfg: config.Config{
+			FREDAPIKey: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Providers: config.Providers{ALFRED: config.ALFREDProvider{Enabled: true, Series: []config.ALFREDSeries{{
+				ID: "CPIAUCSL", Geography: "US", Unit: "index", Frequency: "monthly",
+				SeasonalAdjustment: "seasonally_adjusted", RealtimeEnd: "2026-08-11",
+				ObservationStart: "2024-01-01", ObservationEnd: "2024-01-01",
+			}}}},
+		},
+		raw: raw,
+		normalized: &orderingNormalizedStore{
+			raw: raw, expectedRun: run, expectedHash: hashPayload(payload), expectedSource: "alfred", locatorPrefix: "json/offset=",
+		},
+		http: collectorHTTPFake{payload: payload},
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, _ []model.PriceBar, macros []model.EconomicObservation) {
+			finalized = m
+			snapshots = append(snapshots, macros...)
+			raw.events = append(raw.events, "metadata:finalize")
+		}},
+		batchKey: "alfred-ordering-test",
+		now:      func() time.Time { return time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC) },
+	}
+
+	if err := app.run(context.Background(), "alfred"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "canonical:economics:write", "metadata:finalize"}) {
+		t.Fatalf("ALFRED publication order = %v", raw.events)
+	}
+	if len(raw.rawKeys) != 1 || !strings.HasPrefix(raw.rawKeys[0], "alfred/series/") || !strings.Contains(raw.rawKeys[0], "/CPIAUCSL-offset-0/") {
+		t.Fatalf("ALFRED raw object keys = %v", raw.rawKeys)
+	}
+	attributes := raw.rawMetadata[0].Attributes
+	if attributes["series_id"] != "CPIAUCSL" || attributes["realtime_start"] != "1776-07-04" || attributes["realtime_end"] != "2026-08-11" || attributes["output_type"] != "1" || attributes["offset"] != "0" {
+		t.Fatalf("ALFRED raw attributes = %+v", attributes)
+	}
+	for key, value := range attributes {
+		if strings.Contains(strings.ToLower(key), "api_key") || strings.Contains(value, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") {
+			t.Fatalf("ALFRED raw metadata exposed credentials: %s=%q", key, value)
+		}
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 1 || !strings.Contains(manifest.Entries[0].LogicalKey, "/realtime/1776-07-04/2026-08-11/") {
+		t.Fatalf("ALFRED raw manifest entries = %+v", manifest.Entries)
+	}
+	if len(snapshots) != 2 || snapshots[0].Revision != 0 || snapshots[1].Revision != 1 || snapshots[0].Source != "alfred" {
+		t.Fatalf("ALFRED snapshots = %+v", snapshots)
+	}
+	if finalized.Written != 2 || finalized.RawPayloads != 1 || finalized.Cursor["last_series_id"] != "CPIAUCSL" {
+		t.Fatalf("ALFRED final metrics = %+v", finalized)
+	}
+}
+
+func TestCollectorALFREDRetainsRawPageOnParseFailure(t *testing.T) {
+	payload := []byte(`{"output_type":1,"count":1,"offset":0,"limit":100000,"observations":[`)
+	raw := &orderingRawStore{}
+	run := testRun()
+	var finalized metadata.Metrics
+	app := &app{
+		cfg: config.Config{
+			FREDAPIKey: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Providers: config.Providers{ALFRED: config.ALFREDProvider{Enabled: true, Series: []config.ALFREDSeries{{
+				ID: "CPIAUCSL", Geography: "US", Unit: "index", Frequency: "monthly", RealtimeEnd: "2026-08-11",
+			}}}},
+		},
+		raw:        raw,
+		normalized: &orderingNormalizedStore{raw: raw, expectedRun: run, expectedSource: "alfred", locatorPrefix: "json/offset="},
+		http:       collectorHTTPFake{payload: payload},
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, _ []model.PriceBar, macros []model.EconomicObservation) {
+			finalized = m
+			if len(macros) != 0 {
+				t.Errorf("parse failure finalized %d macro snapshots", len(macros))
+			}
+			raw.events = append(raw.events, "metadata:finalize")
+		}},
+		batchKey: "alfred-parse-error-test",
+	}
+
+	if err := app.run(context.Background(), "alfred"); err == nil {
+		t.Fatal("expected ALFRED parse error")
+	}
+	if len(raw.payloads) != 1 || string(raw.payloads[0]) != string(payload) {
+		t.Fatalf("persisted ALFRED raw payload = %q", raw.payloads)
+	}
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "metadata:finalize"}) || finalized.RawPayloads != 1 || finalized.Written != 0 {
+		t.Fatalf("ALFRED parse-error state events=%v metrics=%+v", raw.events, finalized)
 	}
 }
 

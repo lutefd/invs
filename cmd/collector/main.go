@@ -24,6 +24,7 @@ import (
 	"github.com/luisdourado/invs/internal/metadata"
 	"github.com/luisdourado/invs/internal/model"
 	"github.com/luisdourado/invs/internal/normalize"
+	"github.com/luisdourado/invs/internal/providers/alfred"
 	"github.com/luisdourado/invs/internal/providers/bcb"
 	"github.com/luisdourado/invs/internal/providers/cvm"
 	"github.com/luisdourado/invs/internal/providers/fred"
@@ -98,7 +99,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, prices, fred, bcb, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -226,7 +227,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "bcb": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -238,6 +239,9 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "fred" && !a.cfg.Providers.FRED.Enabled {
 		return errors.New("FRED provider is disabled")
+	}
+	if source == "alfred" && !a.cfg.Providers.ALFRED.Enabled {
+		return errors.New("ALFRED provider is disabled")
 	}
 	if source == "bcb" && !a.cfg.Providers.BCB.Enabled {
 		return errors.New("BCB provider is disabled")
@@ -258,6 +262,11 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "fred") && a.cfg.Providers.FRED.Enabled {
 		if err := a.collectFRED(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "alfred") && a.cfg.Providers.ALFRED.Enabled {
+		if err := a.collectALFRED(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -455,6 +464,100 @@ func (a *app) collectFRED(ctx context.Context) error {
 			m.Cursor["last_series_id"] = series
 			a.log.Info("normalized dataset", "source", "fred", "series_id", series, "path", path, "rows", len(r.Observations))
 		}
+	}
+	if m.Rejected > 0 {
+		errs = append(errs, fmt.Errorf("%d records rejected", m.Rejected))
+	}
+	collectErr := errors.Join(errs...)
+	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, snapshots))
+}
+
+func (a *app) collectALFRED(ctx context.Context) error {
+	c := alfred.NewClient(a.http, a.cfg.FREDAPIKey)
+	configured := a.cfg.Providers.ALFRED.Series
+	seriesCursor := make(map[string]any, len(configured))
+	m := metrics{
+		Source:    "alfred",
+		StartedAt: a.nowUTC(),
+		Cursor: map[string]any{
+			"provider":         "alfred",
+			"series_total":     len(configured),
+			"series_completed": 0,
+			"series":           seriesCursor,
+		},
+	}
+	run, skip, err := a.start(ctx, &m, alfredRunInputs(configured))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+	var errs []error
+	var snapshots []model.EconomicObservation
+	for _, item := range configured {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, err)
+			break
+		}
+		seriesState := map[string]any{"status": "collecting", "raw_pages": 0}
+		seriesCursor[item.ID] = seriesState
+		result, collectErr := c.Collect(ctx, alfred.Series{
+			ID: item.ID, Geography: item.Geography, Unit: item.Unit,
+			Frequency: item.Frequency, SeasonalAdjustment: item.SeasonalAdjustment,
+			RealtimeEnd: item.RealtimeEnd, ObservationStart: item.ObservationStart,
+			ObservationEnd: item.ObservationEnd,
+		})
+		m.Received += result.RecordsReceived
+		m.Rejected += result.RecordsRejected
+		seriesState["records_received"] = result.RecordsReceived
+		seriesState["records_rejected"] = result.RecordsRejected
+		seriesState["records_missing"] = result.RecordsMissing
+		seriesState["raw_pages"] = len(result.Pages)
+
+		storedByAdapterHash := make(map[string]string, len(result.Pages))
+		rawOK := true
+		for _, page := range result.Pages {
+			key := rawKey("alfred", "series", fmt.Sprintf("%s-offset-%d", item.ID, page.Offset), page.Bytes, page.FetchedAt, "json")
+			storedHash, putErr := a.storeRaw(ctx, &m, key, page.Bytes, storage.RawMetadata{
+				Source: "alfred", ContentType: "application/json", FetchedAt: page.FetchedAt,
+				Attributes: alfredRawAttributes(item, page),
+			}, alfredLogicalKey(item, page.Offset), "alfred", page.SHA256)
+			if putErr != nil {
+				errs = append(errs, fmt.Errorf("ALFRED series %s raw offset %d: %w", item.ID, page.Offset, putErr))
+				rawOK = false
+				continue
+			}
+			storedByAdapterHash[page.SHA256] = storedHash
+		}
+		if collectErr != nil {
+			seriesState["status"] = "failed"
+			seriesState["error"] = collectErr.Error()
+			errs = append(errs, collectErr)
+			continue
+		}
+		if !rawOK {
+			seriesState["status"] = "failed"
+			continue
+		}
+		if err := stampEconomicsFromRawHashes(run, storedByAdapterHash, result.Observations); err != nil {
+			seriesState["status"] = "failed"
+			errs = append(errs, fmt.Errorf("ALFRED series %s provenance: %w", item.ID, err))
+			continue
+		}
+		path, n, writeErr := a.normalized.WriteEconomics(item.ID, result.Observations)
+		if writeErr != nil {
+			seriesState["status"] = "failed"
+			errs = append(errs, fmt.Errorf("ALFRED series %s normalize: %w", item.ID, writeErr))
+			continue
+		}
+		snapshots = append(snapshots, result.Observations...)
+		m.OutputRows += n
+		m.Cursor["last_series_id"] = item.ID
+		m.Cursor["series_completed"] = m.Cursor["series_completed"].(int) + 1
+		seriesState["status"] = "completed"
+		seriesState["output_rows_changed"] = n
+		a.log.Info("normalized dataset", "source", "alfred", "series_id", item.ID, "path", path, "rows", len(result.Observations), "raw_pages", len(result.Pages))
 	}
 	if m.Rejected > 0 {
 		errs = append(errs, fmt.Errorf("%d records rejected", m.Rejected))
@@ -906,6 +1009,43 @@ func bcbRawAttributes(series config.BCBSeries) map[string]string {
 	}
 }
 
+func alfredRawAttributes(series config.ALFREDSeries, page alfred.RawPage) map[string]string {
+	return map[string]string{
+		"provider_format":     "fred-json",
+		"series_id":           strings.TrimSpace(series.ID),
+		"geography":           strings.TrimSpace(series.Geography),
+		"unit":                strings.TrimSpace(series.Unit),
+		"frequency":           strings.TrimSpace(series.Frequency),
+		"seasonal_adjustment": strings.TrimSpace(series.SeasonalAdjustment),
+		"realtime_start":      alfred.EarliestRealtimeStart,
+		"realtime_end":        strings.TrimSpace(series.RealtimeEnd),
+		"observation_start":   strings.TrimSpace(series.ObservationStart),
+		"observation_end":     strings.TrimSpace(series.ObservationEnd),
+		"output_type":         strconv.Itoa(alfred.OutputType),
+		"page_size":           strconv.Itoa(alfred.PageLimit),
+		"offset":              strconv.Itoa(page.Offset),
+		"response_count":      strconv.Itoa(page.Count),
+		"response_limit":      strconv.Itoa(page.Limit),
+		"vintage":             "historical_realtime_periods",
+	}
+}
+
+func alfredLogicalKey(series config.ALFREDSeries, offset int) string {
+	observationStart := strings.TrimSpace(series.ObservationStart)
+	if observationStart == "" {
+		observationStart = "beginning"
+	}
+	observationEnd := strings.TrimSpace(series.ObservationEnd)
+	if observationEnd == "" {
+		observationEnd = "latest"
+	}
+	return fmt.Sprintf(
+		"alfred/series/%s/realtime/%s/%s/observations/%s/%s/output-type/%d/offset/%d",
+		strings.TrimSpace(series.ID), alfred.EarliestRealtimeStart, strings.TrimSpace(series.RealtimeEnd),
+		observationStart, observationEnd, alfred.OutputType, offset,
+	)
+}
+
 func bcbLogicalKey(series config.BCBSeries) string {
 	start, end := strings.TrimSpace(series.Start), strings.TrimSpace(series.End)
 	if start == "" {
@@ -979,6 +1119,28 @@ func fredRunInputs(series []string) metadata.RunInputs {
 			SeriesIDs:             seriesIDs,
 			Format:                "csv",
 			Vintage:               "current",
+		},
+	}
+}
+
+func alfredRunInputs(series []config.ALFREDSeries) metadata.RunInputs {
+	configured := make([]metadata.ALFREDSeriesInput, 0, len(series))
+	for _, item := range series {
+		configured = append(configured, metadata.ALFREDSeriesInput{
+			ID: strings.TrimSpace(item.ID), Geography: strings.TrimSpace(item.Geography),
+			Unit: strings.TrimSpace(item.Unit), Frequency: strings.TrimSpace(item.Frequency),
+			SeasonalAdjustment: strings.TrimSpace(item.SeasonalAdjustment),
+			RealtimeStart:      alfred.EarliestRealtimeStart, RealtimeEnd: strings.TrimSpace(item.RealtimeEnd),
+			ObservationStart: strings.TrimSpace(item.ObservationStart), ObservationEnd: strings.TrimSpace(item.ObservationEnd),
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "alfred",
+		Provider: metadata.ProviderInputs{
+			Name: "alfred", Kind: "macro", ConfiguredSeriesCount: len(configured),
+			HistoricalSeries: configured, Format: "json", Vintage: "historical_realtime_periods",
+			PageSize: alfred.PageLimit, OutputType: alfred.OutputType,
 		},
 	}
 }
@@ -1104,6 +1266,20 @@ func stampFundamentals(run metadata.Run, rawHash string, observations []model.Fu
 func stampEconomics(run metadata.Run, rawHash string, observations []model.EconomicObservation) error {
 	for i := range observations {
 		if err := stampProvenance(run, rawHash, &observations[i].RawPayloadHash, &observations[i].Provenance, observations[i].Temporal); err != nil {
+			return fmt.Errorf("economic observation %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func stampEconomicsFromRawHashes(run metadata.Run, storedByAdapterHash map[string]string, observations []model.EconomicObservation) error {
+	for i := range observations {
+		adapterHash := observations[i].RawPayloadHash
+		storedHash := storedByAdapterHash[adapterHash]
+		if storedHash == "" {
+			return fmt.Errorf("economic observation %d has no stored raw page for %s", i, adapterHash)
+		}
+		if err := stampProvenance(run, storedHash, &observations[i].RawPayloadHash, &observations[i].Provenance, observations[i].Temporal); err != nil {
 			return fmt.Errorf("economic observation %d: %w", i, err)
 		}
 	}

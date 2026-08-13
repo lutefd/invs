@@ -20,8 +20,9 @@ import (
 
 const (
 	defaultBaseURL        = "https://api.stlouisfed.org/fred/series/observations"
-	earliestRealtimeStart = "1776-07-04"
-	pageLimit             = 100000
+	EarliestRealtimeStart = "1776-07-04"
+	PageLimit             = 100000
+	OutputType            = 1
 	source                = "alfred"
 )
 
@@ -202,10 +203,10 @@ func parsePage(body []byte, series Series, expectedOffset int, fetchedAt time.Ti
 	if response.ErrorCode != 0 || response.ErrorMessage != "" {
 		return page, fmt.Errorf("API error %d: %s", response.ErrorCode, response.ErrorMessage)
 	}
-	if response.OutputType != 1 {
+	if response.OutputType != OutputType {
 		return page, fmt.Errorf("unexpected output_type %d", response.OutputType)
 	}
-	if response.Offset != expectedOffset || response.Count < 0 || response.Limit <= 0 || response.Limit > pageLimit {
+	if response.Offset != expectedOffset || response.Count < 0 || response.Limit <= 0 || response.Limit > PageLimit {
 		return page, fmt.Errorf("invalid pagination metadata count=%d offset=%d limit=%d", response.Count, response.Offset, response.Limit)
 	}
 	if len(response.Observations) > response.Limit || response.Offset+len(response.Observations) > response.Count {
@@ -278,11 +279,11 @@ func buildURL(baseURL, apiKey string, series Series, offset int) (string, error)
 	query.Set("file_type", "json")
 	query.Set("series_id", series.ID)
 	query.Set("units", "lin")
-	query.Set("output_type", "1")
-	query.Set("realtime_start", earliestRealtimeStart)
+	query.Set("output_type", strconv.Itoa(OutputType))
+	query.Set("realtime_start", EarliestRealtimeStart)
 	query.Set("realtime_end", series.RealtimeEnd)
 	query.Set("sort_order", "asc")
-	query.Set("limit", strconv.Itoa(pageLimit))
+	query.Set("limit", strconv.Itoa(PageLimit))
 	query.Set("offset", strconv.Itoa(offset))
 	if series.ObservationStart != "" {
 		query.Set("observation_start", series.ObservationStart)
@@ -313,7 +314,7 @@ func normalizeSeries(series Series) (Series, error) {
 	if err != nil {
 		return Series{}, fmt.Errorf("realtime_end: %w", err)
 	}
-	earliest, _ := time.Parse("2006-01-02", earliestRealtimeStart)
+	earliest, _ := time.Parse("2006-01-02", EarliestRealtimeStart)
 	if realtimeEnd.Before(earliest) {
 		return Series{}, errors.New("realtime_end precedes ALFRED's earliest supported realtime date")
 	}
