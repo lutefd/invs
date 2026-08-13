@@ -146,7 +146,7 @@ make dashboard-smoke
 
 The market dashboard shows configured securities even when no accepted Yahoo snapshot exists, exposes explicit no-snapshot rows for macro sources, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED and BCB series still live only in YAML, so the dashboard deliberately reports source-level presence rather than claiming per-series coverage.
 
-CVM is not included in the original r3 acceptance table above. A later bounded IPE replay passed at implementation commit `742e5ae`: 199 configured Petrobras filing rows were published with complete provenance and identical-key retry behavior. CAD responses remain raw ingestion-only current snapshots, and IPE receipt-time availability supports installation replay rather than historical public-availability claims. See [the current-state handoff](docs/current-state-handoff.md#current-cvm-live-evidence-status) for the retained evidence hashes and archive location.
+CVM is not included in the original r3 acceptance table above. A later bounded IPE replay passed at implementation commit `742e5ae`: 199 configured Petrobras filing rows were published with complete provenance and identical-key retry behavior. CAD responses remain raw ingestion-only current snapshots, and IPE receipt-time availability supports installation replay rather than historical public-availability claims. See [the current-state handoff](docs/current-state-handoff.md#current-cvm-live-evidence-status) for the retained CVM evidence and [the market-basic acceptance report](docs/acceptance/2026-08-12-market-basic.md) for the first supported feature replay.
 
 Stop containers while retaining PostgreSQL and Grafana volumes:
 

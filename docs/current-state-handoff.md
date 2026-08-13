@@ -5,6 +5,24 @@ intended for the next engineering session, not as a product brochure. The
 repository is the first actively developed version of the platform. It is not a
 deprecated production version.
 
+## Post-handoff continuation update
+
+On 2026-08-13, the first three immediate actions from this handoff were completed:
+
+- README, architecture, schema guidance, and ADR wording were aligned with the
+  accepted CVM IPE boundary and implemented `market-basic` engine.
+- The lingering zero-record FRED run was confirmed orphaned and explicitly
+  cancelled; PostgreSQL subsequently reported zero queued/running runs.
+- A supported `make feature` / `make feature-validate` operator path was added and
+  exercised against the real manifest-backed AAPL slice, including identical replay
+  and the exact point-in-time cutoff.
+
+The durable evidence is in
+[the market-basic operator acceptance report](acceptance/2026-08-12-market-basic.md).
+The next data-integrity milestone is ALFRED/historical-vintage ingestion; optional
+CVM filing and feature-inspection notebook cells remain separate presentation work.
+No strategy, backtest, portfolio, or ML boundary was introduced.
+
 ## Exact implementation handoff point
 
 - Repository: `/home/luis/dev/invs`
