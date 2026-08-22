@@ -83,10 +83,10 @@ terms also require a separate permission review for unattended automated collect
 and restrict redistribution.
 
 Yahoo `.SA` remains a candidate **price bridge only**, subject to that terms review.
-Official B3 data must own the Brazil security-master identity/listing path, including
-ISIN and historical lifecycle evidence. No Brazilian security-master source,
-historical-fitness acceptance, or broad instrument discovery is present in this
-checkout yet.
+The bounded official B3 path now owns current/reference Brazil identity and listing
+evidence, including exact ISINs, through the raw-first collector and historical
+metadata boundary. It does not yet provide historical lifecycle, universe
+membership, or broad instrument-discovery coverage. See the [B3 acceptance report](acceptance/2026-08-22-b3-instruments-security-master.md).
 
 ## Current continuation boundary
 
@@ -99,6 +99,8 @@ checkout yet.
 - Latest roadmap discovery boundary: `0be506c` (`docs(roadmap): record Yahoo B3 market-data bridge discovery`)
 - Latest v0.2 contract/fixture boundary: `4d483ac` (`feat(data): add historical truth contracts and fixtures`)
 - Latest v0.2 durable metadata boundary: `d963180` (`feat(data): publish historical truth metadata boundary`)
+- Latest bounded B3 instrument boundary: `c43204f` (`feat(data): add bounded B3 instrument source`)
+- B3 live source evidence: [bounded InstrumentsConsolidated acceptance](acceptance/2026-08-22-b3-instruments-security-master.md)
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
@@ -840,12 +842,14 @@ The following are not accidental omissions:
 - The bounded ALFRED CPIAUCSL work package is live-accepted; broader v0.2 historical
   truth is not accepted.
 - Historical identity/listing/membership and calendar contracts now have a durable
-  PostgreSQL publication/resolution boundary plus synthetic resolver fixtures, but
-  no admitted live security-master or exchange-calendar source has populated it yet.
-- No broad B3/CVM market instrument discovery or integrated Brazilian market-data
+  PostgreSQL publication/resolution boundary plus synthetic resolver fixtures. The
+  bounded B3 public instrument source populates only exact current/reference
+  identifier/listing rows; it is not a full historical security-master or exchange
+  calendar source.
+- No broad B3/CVM market instrument discovery or complete Brazilian market-data
   path. Yahoo `.SA` passed a bounded quote/price verification but failed the
-  security-master evidence gate; official B3 identity/listing data, source terms,
-  fixtures, mappings, coverage, and historical-availability policy remain pending.
+  security-master evidence gate; B3 lifecycle, membership, corporate-action, and
+  long-history coverage remain pending.
 - No canonical CVM CAD dataset or CAD snapshot table.
 - No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.
@@ -865,12 +869,12 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Integrate an admitted source-backed security-master path with the historical
-   publication boundary for bounded US/Brazil identifiers, listings, and universe
-   membership, including raw evidence and live acceptance.
+1. Extend the admitted B3 snapshot path (and add the bounded US source) with
+   historical lifecycle/membership evidence and the corresponding point-in-time
+   bias audit, including raw evidence and live acceptance.
 2. Admit and publish bounded US/Brazil calendar inputs, then connect the pinned
    decision-clock semantics to the research selection path.
-3. Admit an official B3-backed Brazil identity/listing path and a separate US source;
-   revisit Yahoo `.SA` only as a price bridge after its terms, fixture, coverage, and
-   availability checks pass. Do not start strategy or execution work by treating
-   current-vintage backfills as historical truth.
+3. Complete the admitted B3-backed Brazil path with lifecycle/membership evidence
+   and add a separate US source; revisit Yahoo `.SA` only as a price bridge after
+   its terms, fixture, coverage, and availability checks pass. Do not start strategy
+   or execution work by treating current-vintage backfills as historical truth.

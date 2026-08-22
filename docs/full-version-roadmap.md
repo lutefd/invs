@@ -72,12 +72,14 @@ The following baseline limitations drive the version order:
 - The bounded ALFRED CPIAUCSL ingestion work package and exact-boundary selection are
   live-accepted. ADRs, synthetic fixtures, and the durable metadata publication/
   resolution boundary now exist; corporate actions, admitted historical universe
-  membership, exchange calendars, and live source-backed identifier evidence remain
-  outstanding.
-- Brazilian market-data integration and broad instrument discovery are not yet
-  implemented. The bounded Yahoo `.SA` check supports a candidate price bridge but
-  failed the security-master evidence gate; official B3 identity/listing evidence and
-  the separate Yahoo terms/price-bridge review remain outstanding.
+  membership, exchange calendars, and full historical source-backed identifier
+  evidence remain outstanding.
+- A bounded official B3 InstrumentsConsolidated path is implemented and live-accepted
+  for exact current/reference Brazil identity/listing snapshots. It retains ISIN and
+  source trading intervals but does not provide long historical lifecycle,
+  membership, or corporate-action coverage. The bounded Yahoo `.SA` check supports a
+  candidate price bridge but failed the security-master evidence gate; its separate
+  terms/price-bridge review remains outstanding.
 - SEC filing metadata is not yet a canonical dataset, and CVM CAD is intentionally
   raw-only.
 - The feature engine publishes a single bounded feature set and lacks a dataset-wide
@@ -95,16 +97,17 @@ universe membership, revision, and historical-availability evidence.
 
 The product boundary remains medium- to long-term portfolio research, backtesting,
 simulation, and ML, not intraday trading. That scope does not waive source identity
-or availability requirements. Official B3 data is the candidate owner for instrument
-metadata, listings, ISINs, delistings, and lifecycle evidence; Yahoo remains separate
+or availability requirements. Official B3 data now owns the bounded instrument
+identity/listing path; its public snapshot is not yet the lifecycle, delisting, or
+membership source required for historical-bias acceptance. Yahoo remains separate
 price-bridge discovery.
 
-This is a source-admission result, not an implementation or historical-fitness
-acceptance. The v0.2 work must still capture fixtures, review access and terms,
-document coverage and availability semantics, map identifiers, and prove that the
-resulting Brazil slice is fit for its intended research use. A paid B3 or replacement
-provider may be reconsidered only if an explicit requirement exposes a gap, such as
-intraday coverage.
+The [B3 bounded source-admission report](acceptance/2026-08-22-b3-instruments-security-master.md)
+records the implementation, raw fixture, live hash, exact mappings, and conservative
+availability policy. This is not full historical-fitness acceptance: the v0.2 work
+must still capture lifecycle/membership coverage and prove that the resulting Brazil
+slice is fit for its intended research use. A paid B3 or replacement provider may be
+reconsidered only if an explicit requirement exposes a gap, such as intraday coverage.
 
 ## Product boundary and non-negotiable rules
 
@@ -548,16 +551,16 @@ invariants.
 
 ### 7. Brazil market-data bridge and selective B3 enrichment
 
-- Use official B3 instrument/listing data as the candidate security-master source for
-  the first Brazil slice, including ISIN, listing identity, and historical lifecycle
-  evidence where the source supports it.
+- Use official B3 instrument/listing data for the bounded first Brazil identity/listing
+  slice. The implemented public snapshot path is accepted for exact ISIN and
+  source-defined trading-interval evidence; historical lifecycle/membership remains
+  a separate gate.
 - Keep Yahoo Finance `.SA` as a separate candidate price bridge. It is not a source
   for issuer/security identity or universe membership unless a future source review
   establishes those fields and the required access/retention permission.
 - Record the Yahoo and B3 source terms, unattended-access behavior, stable endpoints,
-  captured fixtures, instrument identifiers, historical coverage, and rate limits
-  before accepting either path. The bounded Yahoo verification report documents the
-  current failed security-master admission.
+  captured fixtures, instrument identifiers, historical coverage, and rate limits.
+  The bounded B3 and Yahoo acceptance reports document the current source boundaries.
 - Expand BCB series only from a research question, with source metadata and bounded
   acceptance for each family.
 - Keep CVM IPE canonical, CAD raw-only until a versioned issuer-snapshot contract is
@@ -665,7 +668,8 @@ historical use. Present-day convenience methods must remain visibly separate.
 7. `feat(data): add canonical foreign exchange observations`
 8. `feat(data): publish SEC filing metadata`
 9. `docs(acceptance): record Yahoo .SA source-admission boundary`
-10. `test(acceptance): audit v0.2 point-in-time truth`
+10. `feat(data): add bounded B3 instrument source`
+11. `docs(acceptance): audit v0.2 point-in-time truth`
 
 ## Explicit non-goals
 

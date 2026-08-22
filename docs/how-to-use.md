@@ -262,6 +262,45 @@ BCB is represented as canonical macro observations with revision-aware keys.
 The source's explicit values and timestamps are retained; the collector does
 not collapse a revision sequence such as A -> B -> A.
 
+### B3 public instrument identity/listing snapshot
+
+B3 collection is deliberately exact and bounded. Add the security to the universe
+with its stable internal IDs and explicit B3 mapping, including the B3 ISIN, then
+request one known report date and a ticker allowlist:
+
+```yaml
+providers:
+  b3:
+    enabled: true
+    report_date: 2026-08-21
+    tickers: [PETR4]
+universe:
+  - issuer_id: 3b6f2f34-1f0e-4c39-8e68-35c53c1b9a10
+    security_id: 60c2cc0f-3f5c-4a0a-a7d1-2e7f0b8d9c11
+    legal_name: Example Brazilian Issuer
+    country_code: BR
+    security_type: common_stock
+    primary_listing: true
+    cik: 1
+    ticker: PETR4
+    isin: BRPETRACNPR6
+    identifier_valid_from: 2020-01-01
+    exchange: B3
+    mic: BVMF
+    currency: BRL
+```
+
+Every requested ticker must match exactly one universe row with the declared
+`BR`/`B3`/`BVMF`/`BRL` mapping and matching ISIN. The collector stores the complete
+CSV before publishing BVMF-scoped ticker and listing versions. `TradgStartDt` and
+`TradgEndDt` are B3's source-defined trading interval; receipt time is used for
+`available_at`. This path does not infer universe membership, original legal
+listing dates, delistings, or corporate actions. See the [B3 acceptance report](acceptance/2026-08-22-b3-instruments-security-master.md).
+
+```sh
+make ingest SOURCE=b3 RUN_KEY=b3-instruments-2026-08-21
+```
+
 ### CVM IPE filings and CAD
 
 CVM IPE archives are global. Only rows whose `Codigo_CVM` exactly matches one

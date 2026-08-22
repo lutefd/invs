@@ -60,11 +60,15 @@ not. The historical-contract slice in `4d483ac` added ADRs 0006 and 0007, strict
 identity/listing/membership/calendar schemas, and executable synthetic US/Brazil
 fixtures. The durable publication/resolution boundary and PostgreSQL migration
 harness landed in `d963180`; this establishes a tested storage/API boundary but
-is not source admission or live historical-fitness acceptance. The next unaccepted
-cohesive units are:
+is not the complete v0.2 exit gate. The bounded B3 public
+`InstrumentsConsolidatedFile` slice landed in `c43204f` with exact ticker/ISIN
+mapping, raw-first retention, historical identifier/listing publication, and a
+live acceptance; it is current/reference evidence only and does not provide
+historical lifecycle or universe membership. The next unaccepted cohesive units
+are:
 
-1. integrate an admitted source-backed security-master path with the durable
-   publication boundary for historical identifiers, listings, and universe membership;
+1. extend the B3 snapshot path and add a bounded US source with historical
+   lifecycle, revision, and universe-membership evidence;
 2. admit and publish explicit US and Brazil exchange calendars with source evidence
    and the pinned decision-clock behavior;
 3. revisit Yahoo `.SA` only as a price bridge after its source, terms, fixture,
@@ -82,8 +86,9 @@ Yahoo is a candidate price bridge, but it is **not admitted as security-master
 evidence**: the checked responses lack stable identity, MIC/primary-listing facts,
 historical intervals, membership events, revisions, and historical availability
 semantics, and its terms require a separate unattended-access/retention review.
-Selective official B3 data must therefore own the Brazil identity/listing path.
-Source admission, fixtures, coverage, and the Brazil bias audit remain pending.
+Selective official B3 data now owns the bounded Brazil identity/listing path.
+Long-history coverage, lifecycle/membership evidence, and the Brazil bias audit
+remain pending. Yahoo remains a separate price-bridge candidate.
 
 No general strategy/backtest implementation should start before the historical-truth
 gate in v0.2 passes.

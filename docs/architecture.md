@@ -42,21 +42,23 @@ joined into an as-of research snapshot. The Python catalog exposes dedicated
 needs a separate optional filings-inspection cell; filings will not be joined
 one-to-many into the existing price/fundamental/macro snapshot.
 
-B3 market data is not implemented in this foundation. The bounded Yahoo `.SA`
-verification supports a candidate price bridge, but it does not provide admissible
-security-master evidence: issuer/security identity, ISIN/MIC, historical listing
-intervals, universe membership, revisions, and historical availability remain
-unproven. Official B3 public data is therefore the candidate source for Brazilian
-instrument identity, listings, delistings, and validation; Yahoo remains separate
-price-bridge discovery pending terms and access review.
+B3 public `InstrumentsConsolidatedFile` is now integrated as a bounded
+identity/listing source. It requires an explicit report date and exact configured
+tickers, retains the complete public CSV, and publishes BVMF-scoped ticker and
+listing versions through the historical metadata boundary. Its
+`TradgStartDt`/`TradgEndDt` values remain source-defined trading intervals, and
+receipt time is used for conservative `available_at`; the file does not establish
+original legal listing history or universe membership. The public source's short
+history also leaves the full historical-fitness gate open. See the [B3 acceptance
+report](acceptance/2026-08-22-b3-instruments-security-master.md).
 
-This is a planning boundary, not a historical-availability claim. Unattended access,
-source terms, captured fixtures, instrument mapping, coverage, rate limits, and the
-required market-data policy must still be established before Brazilian support is
-accepted.
+The bounded Yahoo `.SA` verification still supports only a candidate price bridge:
+it does not provide admissible security-master evidence, and its unattended-access
+and retention terms remain a separate review. Yahoo is not consulted for B3
+identity/listing publication.
 
 ```text
-SEC / FRED / ALFRED / BCB / Yahoo / CVM provider
+SEC / FRED / ALFRED / BCB / B3 / Yahoo / CVM provider
             |
             v
  collector + source adapter -----> PostgreSQL

@@ -43,7 +43,9 @@ availability/session states.
 
 ## Explicit non-claims
 
-This report does not claim that v0.2 is complete. No live security-master or exchange
-calendar source has been admitted, no source-backed rows have been accepted for the
-bounded US/Brazil slices, and no point-in-time bias audit has passed. The current YAML
-universe remains current configuration rather than historical identity evidence.
+This report does not claim that v0.2 is complete. At the time of this metadata
+boundary acceptance, no live security-master or exchange-calendar source had been
+admitted and no point-in-time bias audit had passed. The later bounded B3 snapshot
+admission is recorded separately in the [B3 acceptance report](2026-08-22-b3-instruments-security-master.md);
+the current YAML universe remains current configuration rather than historical
+identity evidence outside that explicit B3 mapping.

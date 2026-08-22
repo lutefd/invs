@@ -2,7 +2,7 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE and the bounded ALFRED CPIAUCSL historical-vintage work package subsequently passed live acceptance, and the repository includes the closed deterministic `market-basic` feature engine. Future ALFRED runs require a configured `FRED_API_KEY`. Brazilian security-master integration is not yet implemented; the bounded Yahoo `.SA` check found a candidate price bridge but not admissible identity/listing evidence, so official B3 data remains the candidate Brazil security-master source.
+Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE and the bounded ALFRED CPIAUCSL historical-vintage work package subsequently passed live acceptance, and the repository includes the closed deterministic `market-basic` feature engine. Future ALFRED runs require a configured `FRED_API_KEY`. A bounded official B3 InstrumentsConsolidated path now provides exact Brazil identity/listing evidence for configured current/reference snapshots; it is not complete historical lifecycle or universe-membership coverage. The bounded Yahoo `.SA` check remains a price-bridge result, not security-master evidence.
 
 The product path is documented in the [full-version roadmap](docs/full-version-roadmap.md), with granular execution views in the [roadmap index](docs/roadmap/README.md).
 The operator recovery procedure is in [docs/operations-recovery.md](docs/operations-recovery.md).
@@ -25,7 +25,7 @@ make setup
 
 This creates untracked `.env` and `config/config.local.yaml` files with private permissions. Before SEC ingestion:
 
-The committed `config/config.example.yaml` is the safe starter configuration: Yahoo and FRED are enabled, while SEC, ALFRED, BCB, and CVM are disabled by default. `make setup` copies it to the untracked `config/config.local.yaml`; the completed acceptance used a local override with SEC and BCB enabled and a bounded BCB end date. That local acceptance override is not the committed example configuration.
+The committed `config/config.example.yaml` is the safe starter configuration: Yahoo and FRED are enabled, while SEC, ALFRED, BCB, B3, and CVM are disabled by default. `make setup` copies it to the untracked `config/config.local.yaml`; the completed acceptance used a local override with SEC and BCB enabled and a bounded BCB end date. That local acceptance override is not the committed example configuration.
 
 1. Set `SEC_USER_AGENT` in `.env` to a descriptive value with your contact address.
 2. Review the starting universe and date range in `config/config.local.yaml`, then set `providers.sec.enabled: true` when the contact is ready. SEC is disabled in the safe starter configuration.
