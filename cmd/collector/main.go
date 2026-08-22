@@ -26,6 +26,7 @@ import (
 	"github.com/luisdourado/invs/internal/normalize"
 	"github.com/luisdourado/invs/internal/providers"
 	"github.com/luisdourado/invs/internal/providers/alfred"
+	"github.com/luisdourado/invs/internal/providers/b3"
 	"github.com/luisdourado/invs/internal/providers/bcb"
 	"github.com/luisdourado/invs/internal/providers/cvm"
 	"github.com/luisdourado/invs/internal/providers/fred"
@@ -53,6 +54,10 @@ type metadataStore interface {
 	EnrichSECIssuer(context.Context, model.Issuer, string) error
 	StartRun(context.Context, string, string, time.Time, metadata.RunInputs) (metadata.Run, error)
 	FinalizeRun(context.Context, metadata.Run, time.Time, metadata.Metrics, []model.PriceBar, []model.EconomicObservation) error
+}
+
+type historicalTruthPublisher interface {
+	PublishHistoricalTruth(context.Context, metadata.HistoricalTruthBatch) error
 }
 
 type normalizedStore interface {
@@ -100,7 +105,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -228,7 +233,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -246,6 +251,9 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "bcb" && !a.cfg.Providers.BCB.Enabled {
 		return errors.New("BCB provider is disabled")
+	}
+	if source == "b3" && !a.cfg.Providers.B3.Enabled {
+		return errors.New("B3 provider is disabled")
 	}
 	if source == "cvm" && !a.cfg.Providers.CVM.Enabled {
 		return errors.New("CVM provider is disabled")
@@ -273,6 +281,11 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "bcb") && a.cfg.Providers.BCB.Enabled {
 		if err := a.collectBCB(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "b3") && a.cfg.Providers.B3.Enabled {
+		if err := a.collectB3(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -714,6 +727,194 @@ func (a *app) collectBCB(ctx context.Context) error {
 	}
 	collectErr := errors.Join(errs...)
 	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, snapshots))
+}
+
+func (a *app) collectB3(ctx context.Context) error {
+	provider := a.cfg.Providers.B3
+	reportDate, err := time.Parse(time.DateOnly, strings.TrimSpace(provider.ReportDate))
+	if err != nil {
+		return fmt.Errorf("B3 report_date: %w", err)
+	}
+	securityByTicker := make(map[string]config.Security, len(provider.Tickers))
+	for _, security := range a.cfg.Universe {
+		securityByTicker[strings.TrimSpace(security.Ticker)] = security
+	}
+	m := metrics{
+		Source:    "b3",
+		StartedAt: a.nowUTC(),
+		Cursor: map[string]any{
+			"provider":                       "b3",
+			"report_date":                    reportDate.Format(time.DateOnly),
+			"requested_tickers":              append([]string(nil), provider.Tickers...),
+			"canonical_publication_policy":   "instrument_identifier_and_listing_only",
+			"universe_memberships_published": false,
+		},
+	}
+	run, skip, err := a.start(ctx, &m, b3RunInputs(provider, a.cfg.Universe))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+
+	client := b3.NewClient(a.http)
+	result, collectErr := client.Collect(ctx, b3.Request{ReportDate: reportDate, Tickers: provider.Tickers})
+	m.Received += result.RecordsReceived
+	m.Rejected += result.RecordsRejected
+	m.Cursor["records_received"] = result.RecordsReceived
+	m.Cursor["records_rejected"] = result.RecordsRejected
+	m.Cursor["resources_returned"] = len(result.Resources)
+
+	var rawHash string
+	var rawErr error
+	if len(result.Resources) != 1 {
+		rawErr = fmt.Errorf("B3 instruments returned %d downloaded resources, want 1", len(result.Resources))
+	} else {
+		resource := result.Resources[0]
+		resourceFetched := resourceFetchedAt(resource, m.StartedAt)
+		attributes := make(map[string]string, len(resource.ParserMetadata)+4)
+		for key, value := range resource.ParserMetadata {
+			attributes[key] = value
+		}
+		attributes["source_url"] = resource.ParserMetadata["request_url"]
+		attributes["parser_version"] = resource.ParserVersion
+		attributes["adapter_sha256"] = resource.SHA256
+		key := rawKey("b3", "instruments", "report-date-"+reportDate.Format(time.DateOnly), resource.Bytes, resourceFetched, "csv")
+		rawHash, rawErr = a.storeRaw(ctx, &m, key, resource.Bytes, storage.RawMetadata{
+			Source:      "b3",
+			ContentType: resource.ContentType,
+			FetchedAt:   resourceFetched,
+			Attributes:  attributes,
+		}, "b3/instruments/report_date="+reportDate.Format(time.DateOnly)+"/file="+resource.Key, "b3", resource.SHA256)
+		if rawErr == nil {
+			m.Cursor["raw_payload_hash"] = rawHash
+			m.Cursor["raw_object_key"] = key
+		}
+	}
+	if collectErr != nil {
+		m.Cursor["status"] = "source_rejected"
+		if rawErr != nil {
+			collectErr = errors.Join(collectErr, fmt.Errorf("B3 raw payload: %w", rawErr))
+		}
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	if rawErr != nil {
+		m.Cursor["status"] = "raw_store_failed"
+		collectErr = fmt.Errorf("B3 raw payload: %w", rawErr)
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+
+	publisher, ok := a.metadata.(historicalTruthPublisher)
+	if !ok {
+		collectErr = errors.New("B3 canonical publication requires a historical-truth metadata repository")
+		m.Cursor["status"] = "canonical_publication_unavailable"
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	resource := result.Resources[0]
+	batch, err := b3HistoricalTruthBatch(run, result.Instruments, securityByTicker, rawHash, resourceFetchedAt(resource, m.StartedAt))
+	if err != nil {
+		m.Cursor["status"] = "canonical_validation_failed"
+		collectErr = err
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	if err := publisher.PublishHistoricalTruth(ctx, batch); err != nil {
+		m.Cursor["status"] = "canonical_publication_failed"
+		collectErr = fmt.Errorf("B3 historical truth publication: %w", err)
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	m.OutputRows = len(batch.Identifiers) + len(batch.Listings)
+	m.Cursor["status"] = "canonical_published"
+	m.Cursor["identifier_rows"] = len(batch.Identifiers)
+	m.Cursor["listing_rows"] = len(batch.Listings)
+	m.Cursor["revision_policy"] = "B3 report-date ordinal; source does not expose a correction revision"
+	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+func b3HistoricalTruthBatch(run metadata.Run, instruments []b3.Instrument, securityByTicker map[string]config.Security, rawHash string, availableAt time.Time) (metadata.HistoricalTruthBatch, error) {
+	availableAt = canonicalTime(availableAt)
+	if availableAt.IsZero() {
+		return metadata.HistoricalTruthBatch{}, errors.New("B3 historical truth requires a non-zero receipt time")
+	}
+	batch := metadata.HistoricalTruthBatch{
+		Identifiers: make([]metadata.SecurityIdentifierVersion, 0, len(instruments)),
+		Listings:    make([]metadata.SecurityListingVersion, 0, len(instruments)),
+	}
+	for _, instrument := range instruments {
+		security, exists := securityByTicker[instrument.Ticker]
+		if !exists {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("B3 ticker %s has no exact configured security mapping", instrument.Ticker)
+		}
+		if strings.ToUpper(strings.TrimSpace(security.ISIN)) != instrument.ISIN {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("B3 ticker %s ISIN %s does not match configured ISIN %s", instrument.Ticker, instrument.ISIN, security.ISIN)
+		}
+		if security.Exchange != "B3" || security.MIC != "BVMF" || security.Currency != "BRL" {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("B3 ticker %s has an invalid configured B3 listing mapping", instrument.Ticker)
+		}
+		revision, err := b3ReportRevision(instrument.ReportDate)
+		if err != nil {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("B3 ticker %s: %w", instrument.Ticker, err)
+		}
+		validFrom := canonicalTime(instrument.TradingStartDate)
+		validUntil := instrument.TradingEndDate
+		sourceReference := fmt.Sprintf("b3/instruments/report_date=%s/distribution_id=%s/ticker=%s/isin=%s", instrument.ReportDate.Format(time.DateOnly), nonEmptyOr(instrument.DistributionID, "unspecified"), instrument.Ticker, instrument.ISIN)
+		identifierID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("b3/identifier/"+run.DataSourceID+"/"+security.SecurityID+"/"+sourceReference)).String()
+		listingID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("b3/listing/"+run.DataSourceID+"/"+security.SecurityID+"/"+sourceReference)).String()
+		batch.Identifiers = append(batch.Identifiers, metadata.SecurityIdentifierVersion{
+			SchemaVersion:   metadata.HistoricalSchemaVersion,
+			ID:              identifierID,
+			SecurityID:      security.SecurityID,
+			IdentifierType:  "ticker",
+			Value:           instrument.Ticker,
+			NormalizedValue: strings.ToUpper(instrument.Ticker),
+			IdentifierScope: "BVMF",
+			ValidFrom:       validFrom,
+			ValidUntil:      validUntil,
+			AvailableAt:     availableAt,
+			SourceReference: sourceReference + "/field=TckrSymb",
+			RecordedAt:      availableAt,
+			DataSourceID:    run.DataSourceID,
+			RawPayloadHash:  rawHash,
+			Revision:        revision,
+			IsPrimary:       true,
+		})
+		issuerID := security.IssuerID
+		batch.Listings = append(batch.Listings, metadata.SecurityListingVersion{
+			SchemaVersion:   metadata.HistoricalSchemaVersion,
+			ID:              listingID,
+			SecurityID:      security.SecurityID,
+			IssuerID:        &issuerID,
+			Exchange:        security.Exchange,
+			MIC:             security.MIC,
+			Currency:        instrument.TradingCurrency,
+			PrimaryListing:  security.PrimaryListing,
+			ValidFrom:       validFrom,
+			ValidUntil:      validUntil,
+			AvailableAt:     availableAt,
+			SourceReference: sourceReference + "/fields=CrpnNm,TradgCcy,TradgStartDt,TradgEndDt",
+			RecordedAt:      availableAt,
+			DataSourceID:    run.DataSourceID,
+			RawPayloadHash:  rawHash,
+			Revision:        revision,
+		})
+	}
+	return batch, nil
+}
+
+func b3ReportRevision(reportDate time.Time) (int, error) {
+	epoch := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
+	date := time.Date(reportDate.UTC().Year(), reportDate.UTC().Month(), reportDate.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	if date.Before(epoch) {
+		return 0, errors.New("report date precedes revision epoch")
+	}
+	return int(date.Sub(epoch) / (24 * time.Hour)), nil
+}
+
+func nonEmptyOr(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(value)
 }
 
 func (a *app) collectCVM(ctx context.Context) error {
@@ -1190,6 +1391,37 @@ func bcbRunInputs(series []config.BCBSeries) metadata.RunInputs {
 			Series:                configured,
 			Format:                "csv",
 			Vintage:               "current",
+		},
+	}
+}
+
+func b3RunInputs(provider config.B3Provider, universe []config.Security) metadata.RunInputs {
+	byTicker := make(map[string]config.Security, len(universe))
+	for _, security := range universe {
+		byTicker[strings.TrimSpace(security.Ticker)] = security
+	}
+	tickers := append([]string(nil), provider.Tickers...)
+	sort.Strings(tickers)
+	instruments := make([]metadata.B3InstrumentInput, 0, len(tickers))
+	for _, ticker := range tickers {
+		security := byTicker[strings.TrimSpace(ticker)]
+		instruments = append(instruments, metadata.B3InstrumentInput{
+			SecurityID: security.SecurityID,
+			Ticker:     strings.TrimSpace(ticker),
+			ISIN:       strings.TrimSpace(security.ISIN),
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "b3",
+		Provider: metadata.ProviderInputs{
+			Name:                    "b3",
+			Kind:                    "security_master",
+			ConfiguredUniverseCount: len(instruments),
+			B3ReportDate:            strings.TrimSpace(provider.ReportDate),
+			B3Instruments:           instruments,
+			Format:                  "instruments_consolidated_csv",
+			Vintage:                 "report_date_snapshot",
 		},
 	}
 }

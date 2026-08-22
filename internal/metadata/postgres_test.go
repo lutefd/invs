@@ -191,6 +191,22 @@ func TestCatalogIncludesCVMFilingSource(t *testing.T) {
 	t.Fatal("CVM source is missing from catalog")
 }
 
+func TestCatalogIncludesB3SecurityMasterSource(t *testing.T) {
+	for _, candidate := range sources {
+		if candidate.code != "b3" {
+			continue
+		}
+		if candidate.kind != "security_master" {
+			t.Fatalf("B3 source kind = %q, want security_master", candidate.kind)
+		}
+		if candidate.baseURL != "https://arquivos.b3.com.br/tabelas/" {
+			t.Fatalf("B3 base URL = %q", candidate.baseURL)
+		}
+		return
+	}
+	t.Fatal("B3 source is missing from catalog")
+}
+
 func TestIssuerUpsertPreservesExistingCVMCode(t *testing.T) {
 	for _, fragment := range []string{
 		"cvm_code",

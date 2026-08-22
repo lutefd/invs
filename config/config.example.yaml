@@ -36,6 +36,11 @@ providers:
         frequency: daily
         seasonal_adjustment: not_adjusted
         start: 2020-01-01
+  b3:
+    enabled: false
+    # B3 requests are explicit current/reference snapshots; do not omit the date.
+    report_date: 2026-08-21
+    tickers: []
   cvm:
     enabled: false
     cad: true

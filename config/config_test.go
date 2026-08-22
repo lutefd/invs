@@ -75,6 +75,48 @@ func TestValidateBCBProviderRequirements(t *testing.T) {
 	}
 }
 
+func TestValidateB3ProviderRequiresExplicitUniverseMapping(t *testing.T) {
+	c := validConfig()
+	c.Universe[0].CountryCode = "BR"
+	c.Universe[0].Ticker = "PETR4"
+	c.Universe[0].ISIN = "BRPETRACNPR6"
+	c.Universe[0].Exchange = "B3"
+	c.Universe[0].MIC = "BVMF"
+	c.Universe[0].Currency = "BRL"
+	c.Providers.B3 = B3Provider{
+		Enabled:    true,
+		ReportDate: time.Now().UTC().Add(-24 * time.Hour).Format("2006-01-02"),
+		Tickers:    []string{"PETR4"},
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, mutate := range map[string]func(*Config){
+		"missing report date": func(candidate *Config) { candidate.Providers.B3.ReportDate = "" },
+		"missing ticker":      func(candidate *Config) { candidate.Providers.B3.Tickers = nil },
+		"unknown ticker":      func(candidate *Config) { candidate.Providers.B3.Tickers = []string{"VALE3"} },
+		"wrong market mapping": func(candidate *Config) {
+			candidate.Universe[0].MIC = "XBSP"
+		},
+		"missing isin": func(candidate *Config) {
+			candidate.Universe[0].ISIN = ""
+		},
+		"duplicate ticker": func(candidate *Config) {
+			candidate.Providers.B3.Tickers = []string{"PETR4", "PETR4"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := c
+			candidate.Providers.B3.Tickers = append([]string(nil), c.Providers.B3.Tickers...)
+			mutate(&candidate)
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid B3 configuration accepted")
+			}
+		})
+	}
+}
+
 func TestValidateALFREDProviderRequirements(t *testing.T) {
 	c := validConfig()
 	c.FREDAPIKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

@@ -65,6 +65,7 @@ type Providers struct {
 	FRED   FREDProvider    `yaml:"fred"`
 	ALFRED ALFREDProvider  `yaml:"alfred"`
 	BCB    BCBProvider     `yaml:"bcb"`
+	B3     B3Provider      `yaml:"b3"`
 	CVM    CVMProvider     `yaml:"cvm"`
 }
 
@@ -107,6 +108,11 @@ type BCBSeries struct {
 	Start              string `yaml:"start"`
 	End                string `yaml:"end"`
 }
+type B3Provider struct {
+	Enabled    bool     `yaml:"enabled"`
+	ReportDate string   `yaml:"report_date"`
+	Tickers    []string `yaml:"tickers"`
+}
 type CVMProvider struct {
 	Enabled bool         `yaml:"enabled"`
 	CAD     bool         `yaml:"cad"`
@@ -125,6 +131,7 @@ type Security struct {
 	CIK                 int64  `yaml:"cik"`
 	CVMCode             string `yaml:"cvm_code"`
 	Ticker              string `yaml:"ticker"`
+	ISIN                string `yaml:"isin"`
 	IdentifierValidFrom string `yaml:"identifier_valid_from"`
 	YahooSymbol         string `yaml:"yahoo_symbol"`
 	Exchange            string `yaml:"exchange"`
@@ -313,6 +320,47 @@ func (c Config) Validate() error {
 			}
 		}
 	}
+	if c.Providers.B3.Enabled {
+		reportDate, reportDateErr := requiredISODate(c.Providers.B3.ReportDate)
+		if reportDateErr != nil {
+			errs = append(errs, errors.New("enabled B3 provider requires a valid report_date"))
+		}
+		if len(c.Providers.B3.Tickers) == 0 {
+			errs = append(errs, errors.New("enabled B3 provider requires at least one ticker"))
+		}
+		seenTickers := make(map[string]bool, len(c.Providers.B3.Tickers))
+		universeByTicker := make(map[string][]Security)
+		for _, security := range c.Universe {
+			ticker := strings.ToUpper(strings.TrimSpace(security.Ticker))
+			universeByTicker[ticker] = append(universeByTicker[ticker], security)
+		}
+		for i, value := range c.Providers.B3.Tickers {
+			pfx := fmt.Sprintf("providers.b3.tickers[%d]", i)
+			ticker := strings.TrimSpace(value)
+			if ticker != value || ticker == "" || !validB3Ticker(ticker) {
+				errs = append(errs, fmt.Errorf("%s must be an uppercase canonical B3 ticker", pfx))
+			}
+			if seenTickers[ticker] {
+				errs = append(errs, fmt.Errorf("%s duplicates %q", pfx, ticker))
+			}
+			seenTickers[ticker] = true
+			matches := universeByTicker[ticker]
+			if len(matches) != 1 {
+				errs = append(errs, fmt.Errorf("%s must match exactly one universe ticker", pfx))
+				continue
+			}
+			security := matches[0]
+			if security.CountryCode != "BR" || security.Exchange != "B3" || security.MIC != "BVMF" || security.Currency != "BRL" {
+				errs = append(errs, fmt.Errorf("%s universe mapping must declare BR/B3/BVMF/BRL", pfx))
+			}
+			if !validISIN(security.ISIN) {
+				errs = append(errs, fmt.Errorf("%s universe mapping requires a valid uppercase ISIN", pfx))
+			}
+		}
+		if reportDateErr == nil && reportDate.After(time.Now().UTC().Truncate(24*time.Hour)) {
+			errs = append(errs, errors.New("enabled B3 provider report_date must not be in the future"))
+		}
+	}
 	if c.Providers.CVM.Enabled {
 		if !c.Providers.CVM.CAD && len(c.Providers.CVM.IPE.Years) == 0 {
 			errs = append(errs, errors.New("enabled CVM provider requires cad or at least one IPE year"))
@@ -329,7 +377,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -399,6 +447,36 @@ func validBCBCode(value string) bool {
 	}
 	for _, r := range value {
 		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func validB3Ticker(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func validISIN(value string) bool {
+	if len(value) != 12 || value != strings.ToUpper(value) {
+		return false
+	}
+	for i, r := range value {
+		if i < 2 && (r < 'A' || r > 'Z') {
+			return false
+		}
+		if i >= 2 && i < 11 && !(r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return false
+		}
+		if i == 11 && (r < '0' || r > '9') {
 			return false
 		}
 	}

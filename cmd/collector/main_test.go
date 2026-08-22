@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	"github.com/luisdourado/invs/config"
 	"github.com/luisdourado/invs/internal/metadata"
 	"github.com/luisdourado/invs/internal/model"
+	"github.com/luisdourado/invs/internal/providers/b3"
 	"github.com/luisdourado/invs/internal/providers/cvm"
 	"github.com/luisdourado/invs/internal/storage"
 )
@@ -291,6 +293,7 @@ type collectorMetadataFake struct {
 	onStart       func(time.Time)
 	onStartInputs func(metadata.RunInputs)
 	onFinish      func(time.Time)
+	onHistorical  func(metadata.HistoricalTruthBatch)
 	finalizeError error
 }
 
@@ -430,7 +433,18 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		t.Fatalf("BCB series input = %+v", got)
 	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs} {
+	b3Inputs := b3RunInputs(config.B3Provider{ReportDate: "2026-08-21", Tickers: []string{"VALE3", "PETR4"}}, []config.Security{
+		{SecurityID: "security-vale", Ticker: "VALE3", ISIN: "BRVALEACNOR0"},
+		{SecurityID: "security-petr", Ticker: "PETR4", ISIN: "BRPETRACNPR6"},
+	})
+	if b3Inputs.Source != "b3" || b3Inputs.Provider.Kind != "security_master" || b3Inputs.Provider.B3ReportDate != "2026-08-21" || len(b3Inputs.Provider.B3Instruments) != 2 {
+		t.Fatalf("B3 run inputs = %+v", b3Inputs)
+	}
+	if got := b3Inputs.Provider.B3Instruments[0]; got.Ticker != "PETR4" || got.ISIN != "BRPETRACNPR6" {
+		t.Fatalf("B3 inputs were not sorted/captured exactly: %+v", b3Inputs.Provider.B3Instruments)
+	}
+
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -438,6 +452,52 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		if got.RunInputs.CanonicalJSONSHA256 == "" {
 			t.Fatalf("%s run input hash is empty", inputs.Source)
 		}
+	}
+}
+
+func TestB3HistoricalTruthBatchUsesExactISINMappingAndNoMembershipClaim(t *testing.T) {
+	availableAt := time.Date(2026, 8, 22, 12, 34, 56, 123456000, time.UTC)
+	instrument := b3.Instrument{
+		ReportDate:       time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC),
+		Ticker:           "PETR4",
+		TradingStartDate: time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC),
+		ISIN:             "BRPETRACNPR6",
+		TradingCurrency:  "BRL",
+		CompanyName:      "PETROLEO BRASILEIRO S.A. PETROBRAS",
+		DistributionID:   "229",
+		RawRecordLocator: "instruments/report_date=2026-08-21/row=4/ticker=PETR4/isin=BRPETRACNPR6",
+	}
+	security := config.Security{
+		IssuerID:       testIssuerID,
+		SecurityID:     testSecurityID,
+		Ticker:         "PETR4",
+		ISIN:           "BRPETRACNPR6",
+		Exchange:       "B3",
+		MIC:            "BVMF",
+		Currency:       "BRL",
+		PrimaryListing: true,
+	}
+	batch, err := b3HistoricalTruthBatch(testRun(), []b3.Instrument{instrument}, map[string]config.Security{"PETR4": security}, testRawHash, availableAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Identifiers) != 1 || len(batch.Listings) != 1 || len(batch.Memberships) != 0 {
+		t.Fatalf("B3 historical batch = %+v", batch)
+	}
+	wantRevision, err := b3ReportRevision(instrument.ReportDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if batch.Identifiers[0].IdentifierScope != "BVMF" || batch.Identifiers[0].Revision != wantRevision || batch.Identifiers[0].RawPayloadHash != testRawHash {
+		t.Fatalf("B3 identifier = %+v", batch.Identifiers[0])
+	}
+	if batch.Listings[0].MIC != "BVMF" || batch.Listings[0].Currency != "BRL" || batch.Listings[0].IssuerID == nil || *batch.Listings[0].IssuerID != testIssuerID {
+		t.Fatalf("B3 listing = %+v", batch.Listings[0])
+	}
+
+	security.ISIN = "BRPETRACNOR9"
+	if _, err := b3HistoricalTruthBatch(testRun(), []b3.Instrument{instrument}, map[string]config.Security{"PETR4": security}, testRawHash, availableAt); err == nil || !strings.Contains(err.Error(), "does not match configured ISIN") {
+		t.Fatalf("mismatched configured ISIN accepted: %v", err)
 	}
 }
 
@@ -507,6 +567,13 @@ func (f collectorMetadataFake) FinalizeRun(_ context.Context, _ metadata.Run, fi
 	return f.finalizeError
 }
 
+func (f collectorMetadataFake) PublishHistoricalTruth(_ context.Context, batch metadata.HistoricalTruthBatch) error {
+	if f.onHistorical != nil {
+		f.onHistorical(batch)
+	}
+	return nil
+}
+
 func assertMicrosecondUTC(t *testing.T, name string, got time.Time) {
 	t.Helper()
 	if got.Location() != time.UTC || got.Nanosecond()%int(time.Microsecond) != 0 {
@@ -574,6 +641,56 @@ func TestCollectorStoresRawBeforeCanonicalPublication(t *testing.T) {
 	manifest := decodeTestManifest(t, raw.manifestPayload)
 	if len(manifest.Entries) != 1 || manifest.Entries[0].LogicalKey == "" || manifest.Entries[0].ObjectKey == "" {
 		t.Fatalf("successful raw manifest entries = %+v", manifest.Entries)
+	}
+}
+
+func TestCollectorB3StoresRawBeforeHistoricalPublication(t *testing.T) {
+	body, err := os.ReadFile("../../internal/providers/b3/testdata/instruments-2026-08-21.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokenResponse, err := json.Marshal(map[string]any{
+		"token": "fixture-token",
+		"file":  map[string]string{"name": "InstrumentsConsolidatedFile_20260821_1", "extension": ".csv"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := &orderingRawStore{}
+	run := testRun()
+	var published metadata.HistoricalTruthBatch
+	app := &app{
+		cfg: config.Config{
+			Universe: []config.Security{{
+				IssuerID: testIssuerID, SecurityID: testSecurityID, LegalName: "Petrobras",
+				CountryCode: "BR", SecurityType: "common_stock", PrimaryListing: true, CIK: 1,
+				Ticker: "PETR4", ISIN: "BRPETRACNPR6", IdentifierValidFrom: "2020-01-01",
+				Exchange: "B3", MIC: "BVMF", Currency: "BRL",
+			}},
+			Providers: config.Providers{B3: config.B3Provider{Enabled: true, ReportDate: "2026-08-21", Tickers: []string{"PETR4"}}},
+		},
+		raw:  raw,
+		http: collectorHTTPFake{responses: map[string][]byte{"requestname?": tokenResponse, "download/?token": body}},
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onHistorical: func(batch metadata.HistoricalTruthBatch) {
+			published = batch
+		}},
+		batchKey: "b3-ordering-test",
+		now:      func() time.Time { return time.Date(2026, 8, 22, 12, 34, 56, 123456789, time.UTC) },
+	}
+
+	if err := app.run(context.Background(), "b3"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete"}) {
+		t.Fatalf("B3 publication order = %v", raw.events)
+	}
+	if len(published.Identifiers) != 1 || len(published.Listings) != 1 || len(published.Memberships) != 0 {
+		t.Fatalf("published B3 batch = %+v", published)
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 1 || manifest.Entries[0].Attributes["report_date"] != "2026-08-21" || manifest.Entries[0].Attributes["parser_version"] != "b3-v1" {
+		t.Fatalf("B3 raw manifest entry = %+v", manifest.Entries)
 	}
 }
 
