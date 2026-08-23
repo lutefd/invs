@@ -38,9 +38,10 @@ type Getter interface {
 }
 
 type Client struct {
-	http       Getter
-	apiBaseURL string
-	now        func() time.Time
+	http                   Getter
+	apiBaseURL             string
+	listedCompaniesBaseURL string
+	now                    func() time.Time
 }
 
 func NewClient(getter Getter) *Client {

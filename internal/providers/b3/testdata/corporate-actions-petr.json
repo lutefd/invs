@@ -1,0 +1,56 @@
+[
+  {
+    "stockCapital": "205,431,960,490.52",
+    "quotedPerSharSince": "06/23/2000",
+    "commonSharesForm": "Escritural",
+    "preferredSharesForm": "Escritural",
+    "hasCommom": "BRADESCO",
+    "hasPreferred": "BRADESCO",
+    "roundLot": "100",
+    "tradingName": "PETROBRAS   ",
+    "numberCommonShares": "7,442,231,382",
+    "numberPreferredShares": "5,446,501,379",
+    "totalNumberShares": "12,888,732,761",
+    "code": "PETR",
+    "codeCVM": "9512",
+    "segment": "N2",
+    "cashDividends": [
+      {
+        "assetIssued": "BRPETRACNOR9",
+        "paymentDate": "12/21/2026",
+        "rate": "0.47156696000",
+        "relatedTo": "Anual/2026",
+        "approvedOn": "08/06/2026",
+        "isinCode": "BRPETRACNOR9",
+        "label": "DIVIDENDO",
+        "lastDatePrior": "08/21/2026",
+        "remarks": ""
+      }
+    ],
+    "stockDividends": [
+      {
+        "assetIssued": "BRPETRACNPR6",
+        "factor": "100.00000000000",
+        "approvedOn": "04/25/2008",
+        "isinCode": "BRPETRACNPR6",
+        "label": "DESDOBRAMENTO",
+        "lastDatePrior": "04/25/2008",
+        "remarks": ""
+      }
+    ],
+    "subscriptions": [
+      {
+        "assetIssued": "BRPETRACPPR1",
+        "percentage": "20.00000000000",
+        "priceUnit": "1.00000000000",
+        "tradingPeriod": "01/01/1900 a 01/01/1900",
+        "subscriptionDate": "12/31/9999",
+        "approvedOn": "08/15/1974",
+        "isinCode": "BRPETRACPPR1",
+        "label": "SUBSCRICAO",
+        "lastDatePrior": "11/14/1974",
+        "remarks": ""
+      }
+    ]
+  }
+]

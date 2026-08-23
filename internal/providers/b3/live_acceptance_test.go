@@ -56,3 +56,40 @@ func TestLiveInstrumentsConsolidated(t *testing.T) {
 	}
 	t.Logf("report_date=%s file=%s bytes=%d sha256=%s records_received=%d", reportDateText, result.Resources[0].Key, len(result.Resources[0].Bytes), result.Resources[0].SHA256, result.RecordsReceived)
 }
+
+// TestLiveListedCompanyCorporateActions is opt-in and intentionally reports
+// source-native evidence only. The current B3 display does not expose a
+// source event ID, public publication instant, or correction revision.
+func TestLiveListedCompanyCorporateActions(t *testing.T) {
+	if os.Getenv("INVS_B3_LIVE") != "1" {
+		t.Skip("set INVS_B3_LIVE=1 to run the bounded B3 live acceptance")
+	}
+	company := strings.TrimSpace(os.Getenv("B3_ACTION_COMPANY"))
+	if company == "" {
+		company = "PETR"
+	}
+	getter, err := httpx.New(httpx.Config{
+		UserAgent:         "invs-b3-corporate-actions-live-acceptance research@example.com",
+		Timeout:           90 * time.Second,
+		RequestsPerSecond: 1,
+		Burst:             1,
+		MaxAttempts:       2,
+		InitialBackoff:    250 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := NewClient(getter).CollectCorporateActions(context.Background(), CorporateActionRequest{IssuingCompany: company, Language: "en-US"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Resources) != 1 || result.Company.Code != strings.ToUpper(company) {
+		t.Fatalf("live result resources=%d company=%+v", len(result.Resources), result.Company)
+	}
+	for _, action := range result.Actions {
+		if action.ISINCode == "" || action.ApprovedOn.IsZero() || action.ActionLabel == "" {
+			t.Fatalf("incomplete live corporate action: %+v", action)
+		}
+	}
+	t.Logf("company=%s cvm_code=%s cash=%d stock=%d subscriptions=%d bytes=%d sha256=%s", result.Company.Code, result.Company.CVMCode, countCorporateActions(result.Actions, "cash_dividend"), countCorporateActions(result.Actions, "stock_action"), countCorporateActions(result.Actions, "subscription"), len(result.Resources[0].Bytes), result.Resources[0].SHA256)
+}
