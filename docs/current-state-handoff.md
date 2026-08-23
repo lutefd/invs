@@ -87,6 +87,10 @@ The bounded official B3 path now owns current/reference Brazil identity and list
 evidence, including exact ISINs, through the raw-first collector and historical
 metadata boundary. It does not yet provide historical lifecycle, universe
 membership, or broad instrument-discovery coverage. See the [B3 acceptance report](acceptance/2026-08-22-b3-instruments-security-master.md).
+The separate B3 listed-company endpoint now has a source-native corporate-action
+evidence adapter and live acceptance, but no canonical action publication: the
+endpoint does not expose a provider event ID, earliest public publication time,
+or correction revision. See the [corporate-action evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md).
 
 ## Current continuation boundary
 
@@ -101,6 +105,8 @@ membership, or broad instrument-discovery coverage. See the [B3 acceptance repor
 - Latest v0.2 durable metadata boundary: `d963180` (`feat(data): publish historical truth metadata boundary`)
 - Latest bounded B3 instrument boundary: `c43204f` (`feat(data): add bounded B3 instrument source`)
 - B3 live source evidence: [bounded InstrumentsConsolidated acceptance](acceptance/2026-08-22-b3-instruments-security-master.md)
+- Latest B3 corporate-action evidence boundary: `0ad46c8` (`feat(provider): add bounded B3 corporate-action evidence`)
+- B3 corporate-action evidence: [source-native acceptance](acceptance/2026-08-23-b3-corporate-actions-evidence.md); canonical publication remains blocked
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
@@ -848,12 +854,16 @@ The following are not accidental omissions:
   calendar source.
 - No broad B3/CVM market instrument discovery or complete Brazilian market-data
   path. Yahoo `.SA` passed a bounded quote/price verification but failed the
-  security-master evidence gate; B3 lifecycle, membership, corporate-action, and
-  long-history coverage remain pending.
+  security-master evidence gate; B3 lifecycle, membership, and long-history
+  coverage remain pending. B3 listed-company corporate-action evidence is now
+  retained source-natively, but its missing publication/revision semantics keep
+  canonical adjustment publication blocked.
 - No canonical CVM CAD dataset or CAD snapshot table.
 - No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.
-- No corporate-action collector despite the schema boundary existing.
+- No canonical corporate-action collector or adjustment publication despite the
+  schema boundary existing; only the bounded source-native B3 evidence adapter is
+  present.
 - Current security-to-issuer mappings are current YAML configuration, not historical
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
@@ -870,11 +880,12 @@ Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
 1. Extend the admitted B3 snapshot path (and add the bounded US source) with
-   historical lifecycle/membership evidence and the corresponding point-in-time
-   bias audit, including raw evidence and live acceptance.
+   historical lifecycle/membership evidence, a versioned corporate-action source
+   or explicit receipt-time-only policy, and the corresponding point-in-time bias
+   audit.
 2. Admit and publish bounded US/Brazil calendar inputs, then connect the pinned
    decision-clock semantics to the research selection path.
-3. Complete the admitted B3-backed Brazil path with lifecycle/membership evidence
-   and add a separate US source; revisit Yahoo `.SA` only as a price bridge after
-   its terms, fixture, coverage, and availability checks pass. Do not start strategy
-   or execution work by treating current-vintage backfills as historical truth.
+3. Complete the admitted B3-backed Brazil path with lifecycle/membership and
+   corporate-action evidence; revisit Yahoo `.SA` only as a price bridge after its
+   terms, fixture, coverage, and availability checks pass. Do not start strategy or
+   execution work by treating current-vintage backfills as historical truth.

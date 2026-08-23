@@ -93,7 +93,7 @@ The checked raw fixture is a small three-row source sample at
 | Historical lifecycle coverage | Fail for full gate | Public file is a short current/reference window; `TradgStartDt` is not original legal listing history |
 | Universe membership history | Not provided | No membership rows are emitted |
 | Correction/publication revision chain | Partial | Source distribution ID is retained; no source correction chronology is exposed |
-| Corporate actions and delistings | Not provided | Requires a separate B3 source/admission slice |
+| Corporate actions and delistings | Separate evidence slice only | See the [B3 corporate-action evidence report](2026-08-23-b3-corporate-actions-evidence.md); canonical publication remains blocked |
 
 ## Consequence
 

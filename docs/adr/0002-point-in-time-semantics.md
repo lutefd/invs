@@ -111,6 +111,12 @@ exact current/reference identity and listing snapshots. Its
 receipt-time `available_at` does not establish original legal listing history; the
 short public history and absent membership/correction chain leave the full
 historical gate open. See the [B3 acceptance report](../acceptance/2026-08-22-b3-instruments-security-master.md).
+A separate B3 listed-company endpoint now supplies source-native corporate-action
+evidence, but its `approvedOn` field is a decision/approval date rather than a
+proven earliest-publication timestamp, and the endpoint exposes no provider event
+ID or correction revision. The adapter therefore retains raw evidence without
+promoting it to canonical `published_at` or adjustment history. See the
+[B3 corporate-action evidence report](../acceptance/2026-08-23-b3-corporate-actions-evidence.md).
 A bounded Yahoo `.SA` verification supports a candidate price bridge but failed the
 security-master evidence gate; Yahoo remains separate pending its own terms review.
 

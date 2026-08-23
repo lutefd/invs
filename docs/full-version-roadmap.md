@@ -76,10 +76,13 @@ The following baseline limitations drive the version order:
   evidence remain outstanding.
 - A bounded official B3 InstrumentsConsolidated path is implemented and live-accepted
   for exact current/reference Brazil identity/listing snapshots. It retains ISIN and
-  source trading intervals but does not provide long historical lifecycle,
-  membership, or corporate-action coverage. The bounded Yahoo `.SA` check supports a
-  candidate price bridge but failed the security-master evidence gate; its separate
-  terms/price-bridge review remains outstanding.
+  source trading intervals but does not provide long historical lifecycle or
+  membership coverage. A separate B3 listed-company corporate-action adapter now
+  retains source-native evidence, but the endpoint does not expose public publication
+  or correction-revision semantics, so canonical adjustments remain unadmitted. The
+  bounded Yahoo `.SA` check supports a candidate price bridge but failed the
+  security-master evidence gate; its separate terms/price-bridge review remains
+  outstanding.
 - SEC filing metadata is not yet a canonical dataset, and CVM CAD is intentionally
   raw-only.
 - The feature engine publishes a single bounded feature set and lacks a dataset-wide
@@ -99,15 +102,19 @@ The product boundary remains medium- to long-term portfolio research, backtestin
 simulation, and ML, not intraday trading. That scope does not waive source identity
 or availability requirements. Official B3 data now owns the bounded instrument
 identity/listing path; its public snapshot is not yet the lifecycle, delisting, or
-membership source required for historical-bias acceptance. Yahoo remains separate
-price-bridge discovery.
+membership source required for historical-bias acceptance. The listed-company
+endpoint supplies raw-first corporate-action evidence, but not enough
+publication/revision metadata for canonical adjustment publication. Yahoo remains
+separate price-bridge discovery.
 
 The [B3 bounded source-admission report](acceptance/2026-08-22-b3-instruments-security-master.md)
 records the implementation, raw fixture, live hash, exact mappings, and conservative
-availability policy. This is not full historical-fitness acceptance: the v0.2 work
-must still capture lifecycle/membership coverage and prove that the resulting Brazil
-slice is fit for its intended research use. A paid B3 or replacement provider may be
-reconsidered only if an explicit requirement exposes a gap, such as intraday coverage.
+availability policy. The [B3 corporate-action evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md)
+records the separate source-native endpoint and its canonical-publication block.
+This is not full historical-fitness acceptance: the v0.2 work must still capture
+lifecycle/membership coverage and prove that the resulting Brazil slice is fit for
+its intended research use. A paid B3 or replacement provider may be reconsidered
+only if an explicit requirement exposes a gap, such as intraday coverage.
 
 ## Product boundary and non-negotiable rules
 

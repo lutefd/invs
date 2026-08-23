@@ -64,11 +64,16 @@ is not the complete v0.2 exit gate. The bounded B3 public
 `InstrumentsConsolidatedFile` slice landed in `c43204f` with exact ticker/ISIN
 mapping, raw-first retention, historical identifier/listing publication, and a
 live acceptance; it is current/reference evidence only and does not provide
-historical lifecycle or universe membership. The next unaccepted cohesive units
-are:
+historical lifecycle or universe membership. The B3 listed-company corporate-action
+evidence adapter landed in `0ad46c8`; it is source-native and live-accepted, but
+canonical action publication remains blocked because the endpoint exposes neither
+an event ID nor public-availability/correction-revision semantics. See the
+[corporate-action evidence report](../acceptance/2026-08-23-b3-corporate-actions-evidence.md).
+The next unaccepted cohesive units are:
 
 1. extend the B3 snapshot path and add a bounded US source with historical
-   lifecycle, revision, and universe-membership evidence;
+   lifecycle, revision, universe-membership, and admissible corporate-action
+   evidence;
 2. admit and publish explicit US and Brazil exchange calendars with source evidence
    and the pinned decision-clock behavior;
 3. revisit Yahoo `.SA` only as a price bridge after its source, terms, fixture,
