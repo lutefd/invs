@@ -69,11 +69,17 @@ evidence adapter landed in `0ad46c8`; it is source-native and live-accepted, but
 canonical action publication remains blocked because the endpoint exposes neither
 an event ID nor public-availability/correction-revision semantics. See the
 [corporate-action evidence report](../acceptance/2026-08-23-b3-corporate-actions-evidence.md).
+The official UP2DATA sample now also has a transport-agnostic
+`CorporateActionLifeCycleFileV2` parser in `8b9916f` with source event/control
+IDs, date fields, action state, and correction fields. It is sample-layout evidence only;
+UP2DATA product access and canonical publication remain unaccepted. See the
+[UP2DATA sample report](../acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
 The next unaccepted cohesive units are:
 
 1. extend the B3 snapshot path and add a bounded US source with historical
    lifecycle, revision, universe-membership, and admissible corporate-action
-   evidence;
+   evidence; for B3 specifically, resolve authorized UP2DATA access or a public
+   versioned alternative before adding a production corporate-action transport;
 2. admit and publish explicit US and Brazil exchange calendars with source evidence
    and the pinned decision-clock behavior;
 3. revisit Yahoo `.SA` only as a price bridge after its source, terms, fixture,

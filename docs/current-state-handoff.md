@@ -90,7 +90,11 @@ membership, or broad instrument-discovery coverage. See the [B3 acceptance repor
 The separate B3 listed-company endpoint now has a source-native corporate-action
 evidence adapter and live acceptance, but no canonical action publication: the
 endpoint does not expose a provider event ID, earliest public publication time,
-or correction revision. See the [corporate-action evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md).
+or correction revision. The public UP2DATA sample now has a separate
+transport-agnostic lifecycle parser with event/control IDs, source dates,
+action state, and correction fields, but no product transport or production
+access dependency was added. See the [listed-company evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md)
+and [UP2DATA sample report](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
 
 ## Current continuation boundary
 
@@ -105,8 +109,9 @@ or correction revision. See the [corporate-action evidence report](acceptance/20
 - Latest v0.2 durable metadata boundary: `d963180` (`feat(data): publish historical truth metadata boundary`)
 - Latest bounded B3 instrument boundary: `c43204f` (`feat(data): add bounded B3 instrument source`)
 - B3 live source evidence: [bounded InstrumentsConsolidated acceptance](acceptance/2026-08-22-b3-instruments-security-master.md)
-- Latest B3 corporate-action evidence boundary: `0ad46c8` (`feat(provider): add bounded B3 corporate-action evidence`)
-- B3 corporate-action evidence: [source-native acceptance](acceptance/2026-08-23-b3-corporate-actions-evidence.md); canonical publication remains blocked
+- Latest B3 listed-company corporate-action boundary: `0ad46c8` (`feat(provider): add bounded B3 corporate-action evidence`)
+- Latest B3 UP2DATA lifecycle parser boundary: `8b9916f` (`feat(provider): parse B3 UP2DATA corporate-action lifecycle`)
+- B3 UP2DATA sample acceptance: [source-native lifecycle evidence](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md); product access and canonical publication remain blocked
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
@@ -862,8 +867,8 @@ The following are not accidental omissions:
 - No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.
 - No canonical corporate-action collector or adjustment publication despite the
-  schema boundary existing; only the bounded source-native B3 evidence adapter is
-  present.
+  schema boundary existing; B3 listed-company evidence and the UP2DATA sample
+  parser remain source-native only.
 - Current security-to-issuer mappings are current YAML configuration, not historical
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
@@ -880,9 +885,10 @@ Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
 1. Extend the admitted B3 snapshot path (and add the bounded US source) with
-   historical lifecycle/membership evidence, a versioned corporate-action source
-   or explicit receipt-time-only policy, and the corresponding point-in-time bias
-   audit.
+   historical lifecycle/membership evidence. For corporate actions, obtain
+   authorized UP2DATA Corporate Action access (or a public versioned alternative),
+   then define delivery availability, revision semantics, and the corresponding
+   point-in-time bias audit.
 2. Admit and publish bounded US/Brazil calendar inputs, then connect the pinned
    decision-clock semantics to the research selection path.
 3. Complete the admitted B3-backed Brazil path with lifecycle/membership and

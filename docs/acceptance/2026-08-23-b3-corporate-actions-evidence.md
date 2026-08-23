@@ -95,7 +95,9 @@ available at its approval date.
 
 The B3 lifecycle/corporate-action gate remains open. This slice improves the
 evidence boundary without turning a current web display into point-in-time
-truth. The next safe work is to find a source with versioned publication or
-correction semantics, or explicitly design a receipt-time-only action dataset
-whose consumers block historical adjustment claims until that limitation is
-resolved.
+truth. B3's documented UP2DATA product now has a separate sample-layout
+acceptance and transport/access gate in the [UP2DATA corporate-action evidence
+report](2026-08-23-b3-up2data-corporate-actions-evidence.md). The next safe work
+is authorized access to that product (or a public versioned alternative), then
+an explicit availability and correction policy before canonical adjustments are
+published.

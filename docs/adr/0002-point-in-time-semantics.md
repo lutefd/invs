@@ -117,6 +117,10 @@ proven earliest-publication timestamp, and the endpoint exposes no provider even
 ID or correction revision. The adapter therefore retains raw evidence without
 promoting it to canonical `published_at` or adjustment history. See the
 [B3 corporate-action evidence report](../acceptance/2026-08-23-b3-corporate-actions-evidence.md).
+The official UP2DATA sample also supports a separate source-native lifecycle
+parser with control IDs and correction/action fields, but its product access and
+date-only publication semantics do not yet satisfy canonical availability or
+revision requirements. See the [UP2DATA sample evidence report](../acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
 A bounded Yahoo `.SA` verification supports a candidate price bridge but failed the
 security-master evidence gate; Yahoo remains separate pending its own terms review.
 
