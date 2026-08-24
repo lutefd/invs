@@ -20,7 +20,15 @@ _REGIONS = frozenset({"US", "BR"})
 _CLASSIFICATIONS = frozenset(
     {"backtest_safe", "current_research_only", "installation_replay_only", "unsupported"}
 )
-_KINDS = frozenset({"availability_transition", "blocked_before_receipt", "unsupported_blocks"})
+_KINDS = frozenset(
+    {
+        "availability_transition",
+        "blocked_before_receipt",
+        "removal_transition",
+        "revision_transition",
+        "unsupported_blocks",
+    }
+)
 _REQUIRED_CATEGORIES = {
     "US": frozenset(
         {
@@ -38,6 +46,12 @@ _REQUIRED_CATEGORIES = {
 _EXPECTED_STATES = {
     "availability_transition": ((False, "absent"), (True, "eligible"), (True, "eligible")),
     "blocked_before_receipt": ((False, "absent"), (True, "eligible"), (True, "eligible")),
+    "removal_transition": ((True, "eligible"), (False, "absent"), (False, "absent")),
+    "revision_transition": (
+        (True, "prior_revision"),
+        (True, "eligible"),
+        (True, "eligible"),
+    ),
     "unsupported_blocks": ((False, "absent"), (False, "unsupported"), (False, "unsupported")),
 }
 
@@ -266,7 +280,9 @@ def _validate_spec(spec_path: Path) -> tuple[dict[str, Any], list[dict[str, str]
             "unsupported",
         }:
             raise BiasAuditValidationError(f"probe {probe_id!r} must use a blocking dataset")
-        if kind == "availability_transition" and classification != "backtest_safe":
+        if kind in {"availability_transition", "removal_transition", "revision_transition"} and (
+            classification != "backtest_safe"
+        ):
             raise BiasAuditValidationError(f"probe {probe_id!r} cannot claim a safe transition")
 
         boundary_text, boundary = _timestamp(

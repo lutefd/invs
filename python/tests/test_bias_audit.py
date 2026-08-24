@@ -41,7 +41,13 @@ def _write_spec(tmp_path: Path) -> Path:
             kind = "availability_transition"
             classification = "backtest_safe"
             states = ((False, "absent"), (True, "eligible"), (True, "eligible"))
-            if region == "BR" and category == "price":
+            if category == "membership":
+                kind = "removal_transition"
+                states = ((True, "eligible"), (False, "absent"), (False, "absent"))
+            elif (region, category) in {("US", "macro_vintage"), ("BR", "calendar")}:
+                kind = "revision_transition"
+                states = ((True, "prior_revision"), (True, "eligible"), (True, "eligible"))
+            elif region == "BR" and category == "price":
                 kind = "blocked_before_receipt"
                 classification = "installation_replay_only"
             elif region == "BR" and category == "corporate_action":
