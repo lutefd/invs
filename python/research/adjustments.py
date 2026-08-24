@@ -345,6 +345,10 @@ def _read_raw_rows(
     for index, row in enumerate(table.to_pylist()):
         if row["security_id"] != security_id:
             raise AdjustmentArtifactError(f"raw price row {index} has another security")
+        if row["source"] == "yahoo":
+            raise AdjustmentArtifactError(
+                "Yahoo chart prices are split_adjusted and cannot be a raw adjustment input"
+            )
         if row["price_basis"] != "raw" or row["interval"] != "1d":
             raise AdjustmentArtifactError("policy 1.0.0 requires raw daily prices")
         timestamp, moment = _canonical_timestamp(row["observed_at"], field="observed_at")

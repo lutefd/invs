@@ -491,6 +491,9 @@ func priceRow(o model.PriceBar) (PriceRow, error) {
 	if o.Source == "" {
 		return PriceRow{}, errors.New("price source required")
 	}
+	if o.Source == "yahoo" && o.PriceBasis != "split_adjusted" {
+		return PriceRow{}, errors.New("Yahoo chart prices must be split_adjusted")
+	}
 	if o.Interval != "1d" || !isPriceBasis(o.PriceBasis) {
 		return PriceRow{}, errors.New("price interval/basis must be 1d and supported")
 	}
@@ -1311,6 +1314,9 @@ func validateStoredPrice(r PriceRow) error {
 	}
 	if _, err := uuid.Parse(r.SecurityID); err != nil {
 		return errors.New("security_id must be UUID")
+	}
+	if r.Source == "yahoo" && r.PriceBasis != "split_adjusted" {
+		return errors.New("legacy Yahoo raw price basis requires archive and reingestion")
 	}
 	if r.Interval != "1d" || !isPriceBasis(r.PriceBasis) || !isCurrency(r.Currency) {
 		return errors.New("invalid price domain fields")

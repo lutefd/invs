@@ -47,7 +47,7 @@ func provenance(at time.Time) model.Provenance {
 }
 func price(at time.Time) model.PriceBar {
 	at = at.Truncate(time.Microsecond)
-	return model.PriceBar{Source: "yahoo", SecurityID: securityID, Interval: "1d", PriceBasis: "raw", Currency: "USD", Temporal: model.Temporal{ObservedAt: at, PublishedAt: at.Add(time.Hour), AvailableAt: at.Add(time.Hour), IngestedAt: at.Add(2 * time.Hour), PublishedPrecision: model.PrecisionSecond}, Open: "1.000000000000000001", High: "3", Low: "1", Close: "2", Volume: "10", RawPayloadHash: rawHash, Provenance: provenance(at.Add(2 * time.Hour))}
+	return model.PriceBar{Source: "yahoo", SecurityID: securityID, Interval: "1d", PriceBasis: "split_adjusted", Currency: "USD", Temporal: model.Temporal{ObservedAt: at, PublishedAt: at.Add(time.Hour), AvailableAt: at.Add(time.Hour), IngestedAt: at.Add(2 * time.Hour), PublishedPrecision: model.PrecisionSecond}, Open: "1.000000000000000001", High: "3", Low: "1", Close: "2", Volume: "10", RawPayloadHash: rawHash, Provenance: provenance(at.Add(2 * time.Hour))}
 }
 
 func TestObservedPrecisionIsValidatedAndDefaultsToUnknown(t *testing.T) {
@@ -272,7 +272,7 @@ func TestPriceV1LosslessIdempotentAndQueryable(t *testing.T) {
 		t.Fatalf("rows=%d", len(rows))
 	}
 	r := rows[0]
-	if r.SchemaVersion != "1.0.0" || r.Open != "1.000000000000000001" || r.Interval != "1d" || r.PriceBasis != "raw" || r.DataSourceID != sourceID {
+	if r.SchemaVersion != "1.0.0" || r.Open != "1.000000000000000001" || r.Interval != "1d" || r.PriceBasis != "split_adjusted" || r.DataSourceID != sourceID {
 		t.Fatalf("row=%+v", r)
 	}
 	if output := os.Getenv("INVS_PARQUET_TEST_OUTPUT"); output != "" {
@@ -286,17 +286,27 @@ func TestPriceV1LosslessIdempotentAndQueryable(t *testing.T) {
 	}
 }
 
-func TestPriceV1PreservesAdjustedBasis(t *testing.T) {
+func TestPriceV1PreservesRawBasisForExplicitRawSource(t *testing.T) {
 	w, _ := NewWriter(t.TempDir())
 	bar := price(time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC))
-	bar.PriceBasis = "split_adjusted"
+	bar.Source = "fixture"
+	bar.PriceBasis = "raw"
 	path, n, err := w.WritePrices(securityID, []model.PriceBar{bar})
 	if err != nil || n != 1 {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
 	rows := rowsFromManifest[PriceRow](t, path)
-	if len(rows) != 1 || rows[0].PriceBasis != "split_adjusted" {
+	if len(rows) != 1 || rows[0].PriceBasis != "raw" {
 		t.Fatalf("rows=%+v", rows)
+	}
+}
+
+func TestPriceV1RejectsLegacyYahooRawBasis(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	bar := price(time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC))
+	bar.PriceBasis = "raw"
+	if _, _, err := w.WritePrices(securityID, []model.PriceBar{bar}); err == nil {
+		t.Fatal("legacy Yahoo raw basis was accepted")
 	}
 }
 

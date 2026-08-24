@@ -21,8 +21,14 @@ SOURCE_ID = "5d6ac836-54fd-4df2-a745-0744180420db"
 RUN_ID = "c7286917-ce45-4879-834f-fc975c80c49e"
 
 
-def _write_raw_prices(root: Path) -> Path:
-    directory = root / "normalized" / "prices" / "source=fixture" / f"security_id={SECURITY_ID}"
+def _write_raw_prices(root: Path, *, source: str = "fixture") -> Path:
+    directory = (
+        root
+        / "normalized"
+        / "prices"
+        / f"source={source}"
+        / f"security_id={SECURITY_ID}"
+    )
     directory.mkdir(parents=True)
     rows = []
     for index, (date, close, volume) in enumerate(
@@ -36,7 +42,7 @@ def _write_raw_prices(root: Path) -> Path:
         rows.append(
             {
                 "schema_version": "1.0.0",
-                "source": "fixture",
+                "source": source,
                 "security_id": SECURITY_ID,
                 "interval": "1d",
                 "price_basis": "raw",
@@ -62,12 +68,12 @@ def _write_raw_prices(root: Path) -> Path:
         "schema_version": "1.0.0",
         "normalizer_version": "fixture-v1",
         "git_commit": "0" * 40,
-        "source": "fixture",
+        "source": source,
         "data_source_id": SOURCE_ID,
         "ingestion_run_id": RUN_ID,
         "partition": {
             "dataset": "prices",
-            "source": "fixture",
+            "source": source,
             "security_id": SECURITY_ID,
         },
         "row_count": len(rows),
@@ -243,3 +249,16 @@ def test_adjustment_validation_detects_tampering_and_cli_round_trip(
     artifact.part_path.write_bytes(artifact.part_path.read_bytes() + b"tampered")
     with pytest.raises(AdjustmentArtifactValidationError, match="hash mismatch"):
         validate_adjustment_artifact(manifest_path)
+
+
+def test_legacy_yahoo_raw_basis_is_not_adjustable(tmp_path: Path) -> None:
+    raw_manifest = _write_raw_prices(tmp_path / "data", source="yahoo")
+    root = tmp_path / "adjusted"
+    with pytest.raises(AdjustmentArtifactError, match="split_adjusted"):
+        publish_adjusted_prices(
+            raw_manifest,
+            _actions(),
+            decision_at="2025-01-09T00:00:00Z",
+            adjustments_root=root,
+        )
+    assert not root.exists()
