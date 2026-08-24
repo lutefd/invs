@@ -60,13 +60,14 @@ func (h *HTTP) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type Providers struct {
-	SEC    EnabledProvider `yaml:"sec"`
-	Prices PriceProvider   `yaml:"prices"`
-	FRED   FREDProvider    `yaml:"fred"`
-	ALFRED ALFREDProvider  `yaml:"alfred"`
-	BCB    BCBProvider     `yaml:"bcb"`
-	B3     B3Provider      `yaml:"b3"`
-	CVM    CVMProvider     `yaml:"cvm"`
+	SEC    EnabledProvider  `yaml:"sec"`
+	Prices PriceProvider    `yaml:"prices"`
+	FRED   FREDProvider     `yaml:"fred"`
+	ALFRED ALFREDProvider   `yaml:"alfred"`
+	BCB    BCBProvider      `yaml:"bcb"`
+	B3     B3Provider       `yaml:"b3"`
+	NYSE   CalendarProvider `yaml:"nyse"`
+	CVM    CVMProvider      `yaml:"cvm"`
 }
 
 type EnabledProvider struct {
@@ -109,9 +110,16 @@ type BCBSeries struct {
 	End                string `yaml:"end"`
 }
 type B3Provider struct {
-	Enabled    bool     `yaml:"enabled"`
-	ReportDate string   `yaml:"report_date"`
-	Tickers    []string `yaml:"tickers"`
+	Enabled    bool             `yaml:"enabled"`
+	ReportDate string           `yaml:"report_date"`
+	Tickers    []string         `yaml:"tickers"`
+	Calendar   CalendarProvider `yaml:"calendar"`
+}
+type CalendarProvider struct {
+	Enabled       bool   `yaml:"enabled"`
+	Year          int    `yaml:"year"`
+	CoverageStart string `yaml:"coverage_start"`
+	CoverageEnd   string `yaml:"coverage_end"`
 }
 type CVMProvider struct {
 	Enabled bool         `yaml:"enabled"`
@@ -360,6 +368,14 @@ func (c Config) Validate() error {
 		if reportDateErr == nil && reportDate.After(time.Now().UTC().Truncate(24*time.Hour)) {
 			errs = append(errs, errors.New("enabled B3 provider report_date must not be in the future"))
 		}
+		if c.Providers.B3.Calendar.Enabled {
+			errs = append(errs, validateCalendarProvider("providers.b3.calendar", c.Providers.B3.Calendar)...)
+		}
+	} else if c.Providers.B3.Calendar.Enabled {
+		errs = append(errs, errors.New("providers.b3.calendar requires providers.b3.enabled"))
+	}
+	if c.Providers.NYSE.Enabled {
+		errs = append(errs, validateCalendarProvider("providers.nyse", c.Providers.NYSE)...)
 	}
 	if c.Providers.CVM.Enabled {
 		if !c.Providers.CVM.CAD && len(c.Providers.CVM.IPE.Years) == 0 {
@@ -377,7 +393,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -438,6 +454,34 @@ func (c Config) Validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func validateCalendarProvider(prefix string, provider CalendarProvider) []error {
+	var errs []error
+	currentYear := time.Now().UTC().Year()
+	if provider.Year < 2000 || provider.Year > currentYear+2 {
+		errs = append(errs, fmt.Errorf("%s.year must be between 2000 and %d", prefix, currentYear+2))
+	}
+	start, startErr := requiredISODate(provider.CoverageStart)
+	end, endErr := requiredISODate(provider.CoverageEnd)
+	if startErr != nil {
+		errs = append(errs, fmt.Errorf("%s.coverage_start must be an ISO date", prefix))
+	}
+	if endErr != nil {
+		errs = append(errs, fmt.Errorf("%s.coverage_end must be an ISO date", prefix))
+	}
+	if startErr == nil && endErr == nil {
+		if end.Before(start) {
+			errs = append(errs, fmt.Errorf("%s.coverage_end must not precede coverage_start", prefix))
+		}
+		if start.Year() != provider.Year || end.Year() != provider.Year {
+			errs = append(errs, fmt.Errorf("%s coverage dates must be within year %d", prefix, provider.Year))
+		}
+		if end.Sub(start) > 369*24*time.Hour {
+			errs = append(errs, fmt.Errorf("%s coverage cannot exceed 370 days", prefix))
+		}
+	}
+	return errs
 }
 
 func validBCBCode(value string) bool {

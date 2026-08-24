@@ -117,6 +117,46 @@ func TestValidateB3ProviderRequiresExplicitUniverseMapping(t *testing.T) {
 	}
 }
 
+func TestValidateExchangeCalendarProviders(t *testing.T) {
+	c := validConfig()
+	c.Providers.NYSE = CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-01-01", CoverageEnd: "2026-12-31"}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, mutate := range map[string]func(*CalendarProvider){
+		"missing year":  func(provider *CalendarProvider) { provider.Year = 0 },
+		"invalid start": func(provider *CalendarProvider) { provider.CoverageStart = "01/01/2026" },
+		"reversed coverage": func(provider *CalendarProvider) {
+			provider.CoverageStart, provider.CoverageEnd = provider.CoverageEnd, provider.CoverageStart
+		},
+		"year mismatch": func(provider *CalendarProvider) { provider.CoverageEnd = "2027-01-01" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := c
+			mutate(&candidate.Providers.NYSE)
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid NYSE calendar configuration accepted")
+			}
+		})
+	}
+
+	b3 := validConfig()
+	b3.Universe[0].CountryCode = "BR"
+	b3.Universe[0].Ticker = "PETR4"
+	b3.Universe[0].ISIN = "BRPETRACNPR6"
+	b3.Universe[0].Exchange = "B3"
+	b3.Universe[0].MIC = "BVMF"
+	b3.Universe[0].Currency = "BRL"
+	b3.Providers.B3 = B3Provider{
+		Enabled: true, ReportDate: time.Now().UTC().Add(-24 * time.Hour).Format(time.DateOnly), Tickers: []string{"PETR4"},
+		Calendar: CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-08-24", CoverageEnd: "2026-08-28"},
+	}
+	if err := b3.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestValidateALFREDProviderRequirements(t *testing.T) {
 	c := validConfig()
 	c.FREDAPIKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

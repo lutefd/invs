@@ -443,8 +443,12 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	if got := b3Inputs.Provider.B3Instruments[0]; got.Ticker != "PETR4" || got.ISIN != "BRPETRACNPR6" {
 		t.Fatalf("B3 inputs were not sorted/captured exactly: %+v", b3Inputs.Provider.B3Instruments)
 	}
+	calendarInputs := calendarRunInputs("nyse", "XNYS", config.CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-01-01", CoverageEnd: "2026-12-31"})
+	if calendarInputs.Source != "nyse" || calendarInputs.Provider.Kind != "market_calendar" || calendarInputs.Provider.CalendarYear != 2026 || calendarInputs.Provider.CalendarMIC != "XNYS" || calendarInputs.Provider.CalendarCoverageStart != "2026-01-01" || calendarInputs.Provider.Vintage != "current_reference_receipt_time" {
+		t.Fatalf("calendar run inputs = %+v", calendarInputs)
+	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs} {
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -691,6 +695,81 @@ func TestCollectorB3StoresRawBeforeHistoricalPublication(t *testing.T) {
 	manifest := decodeTestManifest(t, raw.manifestPayload)
 	if len(manifest.Entries) != 1 || manifest.Entries[0].Attributes["report_date"] != "2026-08-21" || manifest.Entries[0].Attributes["parser_version"] != "b3-v1" {
 		t.Fatalf("B3 raw manifest entry = %+v", manifest.Entries)
+	}
+}
+
+func TestCollectorB3CalendarPublishesExplicitLateOpenSession(t *testing.T) {
+	calendarBody, err := os.ReadFile("../../internal/providers/b3/testdata/market-calendar-2026.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hoursBody, err := os.ReadFile("../../internal/providers/b3/testdata/trading-hours.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := &orderingRawStore{}
+	var published metadata.HistoricalTruthBatch
+	app := &app{
+		cfg: config.Config{Providers: config.Providers{B3: config.B3Provider{
+			Enabled:  true,
+			Calendar: config.CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-02-18", CoverageEnd: "2026-02-18"},
+		}}},
+		raw: raw,
+		http: collectorHTTPFake{responses: map[string][]byte{
+			"trading-calendar/holidays": calendarBody,
+			"trading-hours/equities":    hoursBody,
+		}},
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: testRun(), onHistorical: func(batch metadata.HistoricalTruthBatch) {
+			published = batch
+		}},
+		batchKey: "b3-calendar-test",
+		now:      func() time.Time { return time.Date(2026, 8, 23, 20, 0, 0, 123456789, time.UTC) },
+	}
+	if err := app.run(context.Background(), "b3-calendar"); err != nil {
+		t.Fatal(err)
+	}
+	if len(raw.events) != 3 {
+		t.Fatalf("raw publication events = %v", raw.events)
+	}
+	if len(published.Calendars) != 1 || len(published.Sessions) != 1 {
+		t.Fatalf("published calendar = %+v", published)
+	}
+	session := published.Sessions[0]
+	if session.SessionStatus != "open" || session.OpenAt == nil || session.CloseAt == nil || session.OpenAt.Format(time.RFC3339) != "2026-02-18T16:00:00Z" || session.CloseAt.Format(time.RFC3339) != "2026-02-18T20:00:00Z" {
+		t.Fatalf("B3 late-open session = %+v", session)
+	}
+	if published.Calendars[0].RawPayloadHash != session.RawPayloadHash || !strings.Contains(published.Calendars[0].SourceReference, "calendar-evidence") {
+		t.Fatalf("calendar evidence lineage = %+v/%+v", published.Calendars[0], session)
+	}
+}
+
+func TestCollectorNYSECalendarPublishesHolidayAndEarlyClose(t *testing.T) {
+	body, err := os.ReadFile("../../internal/providers/nyse/testdata/hours-calendars-2026.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := &orderingRawStore{}
+	var published metadata.HistoricalTruthBatch
+	app := &app{
+		cfg:  config.Config{Providers: config.Providers{NYSE: config.CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-11-26", CoverageEnd: "2026-11-27"}}},
+		raw:  raw,
+		http: collectorHTTPFake{payload: body},
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: testRun(), onHistorical: func(batch metadata.HistoricalTruthBatch) {
+			published = batch
+		}},
+		batchKey: "nyse-calendar-test",
+		now:      func() time.Time { return time.Date(2026, 8, 23, 20, 0, 0, 123456789, time.UTC) },
+	}
+	if err := app.run(context.Background(), "nyse"); err != nil {
+		t.Fatal(err)
+	}
+	if len(raw.events) != 2 || len(published.Calendars) != 1 || len(published.Sessions) != 2 {
+		t.Fatalf("raw/published = %v/%+v", raw.events, published)
+	}
+	if published.Sessions[0].SessionStatus != "closed" || published.Sessions[1].SessionStatus != "open" || !published.Sessions[1].IsEarlyClose || published.Sessions[1].CloseAt == nil || published.Sessions[1].CloseAt.Format(time.RFC3339) != "2026-11-27T18:00:00Z" {
+		t.Fatalf("NYSE sessions = %+v", published.Sessions)
 	}
 }
 

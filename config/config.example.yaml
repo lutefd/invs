@@ -41,6 +41,18 @@ providers:
     # B3 requests are explicit current/reference snapshots; do not omit the date.
     report_date: 2026-08-21
     tickers: []
+    calendar:
+      enabled: false
+      year: 2026
+      # B3 trading-hours HTML is current/reference evidence. Keep coverage
+      # deliberately bounded to dates supported by the retained page version.
+      coverage_start: 2026-08-24
+      coverage_end: 2026-08-28
+  nyse:
+    enabled: false
+    year: 2026
+    coverage_start: 2026-01-01
+    coverage_end: 2026-12-31
   cvm:
     enabled: false
     cad: true

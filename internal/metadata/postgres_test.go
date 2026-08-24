@@ -207,6 +207,19 @@ func TestCatalogIncludesB3SecurityMasterSource(t *testing.T) {
 	t.Fatal("B3 source is missing from catalog")
 }
 
+func TestCatalogIncludesNYSECalendarSource(t *testing.T) {
+	for _, candidate := range sources {
+		if candidate.code != "nyse" {
+			continue
+		}
+		if candidate.kind != "market_calendar" || candidate.baseURL != "https://www.nyse.com/trade/hours-calendars" {
+			t.Fatalf("NYSE source = %+v", candidate)
+		}
+		return
+	}
+	t.Fatal("NYSE calendar source is missing from catalog")
+}
+
 func TestIssuerUpsertPreservesExistingCVMCode(t *testing.T) {
 	for _, fragment := range []string{
 		"cvm_code",

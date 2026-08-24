@@ -460,7 +460,9 @@ func keyForCalendar(dataSourceID, mic, version string) calendarKey {
 	return calendarKey{DataSourceID: dataSourceID, MIC: mic, CalendarVersion: version}
 }
 
-func calendarSessionFingerprint(records []TradingSession) (string, error) {
+// CalendarSessionFingerprint returns the canonical semantic fingerprint used
+// by calendar manifests and publication validation.
+func CalendarSessionFingerprint(records []TradingSession) (string, error) {
 	canonical := make([]fingerprintSession, len(records))
 	for i, record := range records {
 		canonical[i] = fingerprintSession{
@@ -483,6 +485,10 @@ func calendarSessionFingerprint(records []TradingSession) (string, error) {
 	}
 	digest := sha256.Sum256(encoded)
 	return hex.EncodeToString(digest[:]), nil
+}
+
+func calendarSessionFingerprint(records []TradingSession) (string, error) {
+	return CalendarSessionFingerprint(records)
 }
 
 func fingerprintSortKey(record fingerprintSession) string {
@@ -561,6 +567,12 @@ func validateHistoricalTruthBatch(batch HistoricalTruthBatch) error {
 		}
 	}
 	return nil
+}
+
+// ValidateHistoricalTruthBatch exposes the same fail-closed validation used by
+// PostgreSQL publication to deterministic compilers and acceptance tests.
+func ValidateHistoricalTruthBatch(batch HistoricalTruthBatch) error {
+	return validateHistoricalTruthBatch(batch)
 }
 
 // PublishHistoricalTruth atomically inserts a batch of source-backed history.

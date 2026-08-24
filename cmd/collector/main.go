@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/luisdourado/invs/config"
 	"github.com/luisdourado/invs/internal/httpx"
+	"github.com/luisdourado/invs/internal/marketcalendar"
 	"github.com/luisdourado/invs/internal/metadata"
 	"github.com/luisdourado/invs/internal/model"
 	"github.com/luisdourado/invs/internal/normalize"
@@ -30,6 +32,7 @@ import (
 	"github.com/luisdourado/invs/internal/providers/bcb"
 	"github.com/luisdourado/invs/internal/providers/cvm"
 	"github.com/luisdourado/invs/internal/providers/fred"
+	"github.com/luisdourado/invs/internal/providers/nyse"
 	"github.com/luisdourado/invs/internal/providers/sec"
 	"github.com/luisdourado/invs/internal/providers/yahoo"
 	"github.com/luisdourado/invs/internal/storage"
@@ -92,6 +95,29 @@ type metrics struct {
 	RunKey                         string
 }
 
+type calendarEvidenceManifest struct {
+	SchemaVersion string                     `json:"schema_version"`
+	Source        string                     `json:"source"`
+	MIC           string                     `json:"mic"`
+	Year          int                        `json:"year"`
+	CoverageStart string                     `json:"coverage_start"`
+	CoverageEnd   string                     `json:"coverage_end"`
+	Availability  string                     `json:"availability_policy"`
+	Revision      string                     `json:"revision_policy"`
+	Weekend       string                     `json:"weekend_policy"`
+	Resources     []calendarEvidenceResource `json:"resources"`
+}
+
+type calendarEvidenceResource struct {
+	Kind          string            `json:"kind"`
+	Key           string            `json:"key"`
+	URL           string            `json:"url"`
+	SHA256        string            `json:"sha256"`
+	FetchedAt     time.Time         `json:"fetched_at"`
+	ParserVersion string            `json:"parser_version"`
+	Metadata      map[string]string `json:"metadata"`
+}
+
 func canonicalTime(t time.Time) time.Time {
 	return t.UTC().Truncate(time.Microsecond)
 }
@@ -105,7 +131,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, b3-calendar, nyse, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -233,7 +259,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-calendar": true, "nyse": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -254,6 +280,12 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "b3" && !a.cfg.Providers.B3.Enabled {
 		return errors.New("B3 provider is disabled")
+	}
+	if source == "b3-calendar" && (!a.cfg.Providers.B3.Enabled || !a.cfg.Providers.B3.Calendar.Enabled) {
+		return errors.New("B3 calendar provider is disabled")
+	}
+	if source == "nyse" && !a.cfg.Providers.NYSE.Enabled {
+		return errors.New("NYSE calendar provider is disabled")
 	}
 	if source == "cvm" && !a.cfg.Providers.CVM.Enabled {
 		return errors.New("CVM provider is disabled")
@@ -286,6 +318,16 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "b3") && a.cfg.Providers.B3.Enabled {
 		if err := a.collectB3(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "b3" || source == "b3-calendar") && a.cfg.Providers.B3.Enabled && a.cfg.Providers.B3.Calendar.Enabled {
+		if err := a.collectB3Calendar(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "nyse") && a.cfg.Providers.NYSE.Enabled {
+		if err := a.collectNYSECalendar(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -901,6 +943,252 @@ func b3HistoricalTruthBatch(run metadata.Run, instruments []b3.Instrument, secur
 	return batch, nil
 }
 
+func (a *app) collectB3Calendar(ctx context.Context) error {
+	provider := a.cfg.Providers.B3.Calendar
+	m := metrics{
+		Source: "b3", RunKey: "b3-calendar", StartedAt: a.nowUTC(),
+		Cursor: map[string]any{"provider": "b3", "kind": "market_calendar", "year": provider.Year, "historical_fitness": "current_reference_receipt_time"},
+	}
+	run, skip, err := a.start(ctx, &m, calendarRunInputs("b3", "BVMF", provider))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+	client := b3.NewClient(a.http)
+	calendarResult, calendarErr := client.CollectMarketCalendar(ctx, b3.MarketCalendarRequest{Year: provider.Year})
+	hoursResult, hoursErr := client.CollectTradingHours(ctx)
+	resources := append([]providers.RawResource(nil), calendarResult.Resources...)
+	resources = append(resources, hoursResult.Resources...)
+	if storeErr := a.storeCalendarResources(ctx, &m, "b3", provider.Year, resources); storeErr != nil {
+		collectErr := fmt.Errorf("B3 calendar raw evidence: %w", storeErr)
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	if collectErr := errors.Join(calendarErr, hoursErr); collectErr != nil {
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	m.Received = len(calendarResult.Events) + 1
+	coverageStart, coverageEnd, err := calendarCoverage(provider, "America/Sao_Paulo")
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	evidenceHash, evidenceReference, availableAt, err := a.storeCalendarEvidence(ctx, &m, "b3", "BVMF", provider, resources)
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	events := make([]marketcalendar.Event, 0, len(calendarResult.Events))
+	for _, event := range calendarResult.Events {
+		compiled := marketcalendar.Event{Date: event.Date, Status: "notice", SourceReference: event.RawRecordLocator}
+		if event.IsClosed {
+			compiled.Status = "closed"
+		}
+		if event.IsSpecialHours {
+			if event.SpecialOpenLocal == "" {
+				compileErr := fmt.Errorf("B3 special-hours event %s has no parsed opening time", event.Date.Format(time.DateOnly))
+				return errors.Join(compileErr, a.finish(ctx, run, m, compileErr, nil, nil))
+			}
+			compiled.Status = "open"
+			compiled.OpenLocal = event.SpecialOpenLocal
+		}
+		events = append(events, compiled)
+	}
+	version := calendarVersion("bvmf", provider.Year, evidenceHash)
+	batch, err := marketcalendar.Compile(marketcalendar.Definition{
+		DataSourceID: run.DataSourceID, MIC: "BVMF", ExchangeTimezone: "America/Sao_Paulo",
+		CalendarVersion: version, CoverageStart: coverageStart, CoverageEnd: coverageEnd,
+		RegularOpenLocal: hoursResult.CashEquity.OpenLocal, RegularCloseLocal: hoursResult.CashEquity.CloseLocal,
+		AvailableAt: availableAt, RecordedAt: availableAt, SourceReference: evidenceReference,
+		RawPayloadHash: evidenceHash, Revision: calendarRevision(availableAt), Events: events,
+	})
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	if err := a.publishCalendar(ctx, batch); err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	m.OutputRows = len(batch.Calendars) + len(batch.Sessions)
+	m.Cursor["status"] = "canonical_published"
+	m.Cursor["calendar_version"] = version
+	m.Cursor["session_fingerprint"] = batch.Calendars[0].SessionFingerprint
+	m.Cursor["session_rows"] = len(batch.Sessions)
+	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+func (a *app) collectNYSECalendar(ctx context.Context) error {
+	provider := a.cfg.Providers.NYSE
+	m := metrics{
+		Source: "nyse", StartedAt: a.nowUTC(),
+		Cursor: map[string]any{"provider": "nyse", "kind": "market_calendar", "year": provider.Year, "historical_fitness": "current_reference_receipt_time"},
+	}
+	run, skip, err := a.start(ctx, &m, calendarRunInputs("nyse", "XNYS", provider))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+	result, collectErr := nyse.NewClient(a.http).CollectCalendar(ctx, nyse.CalendarRequest{Year: provider.Year})
+	if storeErr := a.storeCalendarResources(ctx, &m, "nyse", provider.Year, result.Resources); storeErr != nil {
+		collectErr = errors.Join(collectErr, fmt.Errorf("NYSE calendar raw evidence: %w", storeErr))
+	}
+	if collectErr != nil {
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	m.Received = len(result.Events)
+	coverageStart, coverageEnd, err := calendarCoverage(provider, "America/New_York")
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	evidenceHash, evidenceReference, availableAt, err := a.storeCalendarEvidence(ctx, &m, "nyse", "XNYS", provider, result.Resources)
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	events := make([]marketcalendar.Event, 0, len(result.Events))
+	for _, event := range result.Events {
+		compiled := marketcalendar.Event{Date: event.Date, SourceReference: event.RawRecordLocator}
+		switch event.Status {
+		case "closed":
+			compiled.Status = "closed"
+		case "early_close":
+			compiled.Status = "open"
+			compiled.CloseLocal = event.SpecialCloseLocal
+		default:
+			compileErr := fmt.Errorf("NYSE calendar event %s has unsupported status %q", event.Date.Format(time.DateOnly), event.Status)
+			return errors.Join(compileErr, a.finish(ctx, run, m, compileErr, nil, nil))
+		}
+		events = append(events, compiled)
+	}
+	version := calendarVersion("xnys", provider.Year, evidenceHash)
+	batch, err := marketcalendar.Compile(marketcalendar.Definition{
+		DataSourceID: run.DataSourceID, MIC: "XNYS", ExchangeTimezone: "America/New_York",
+		CalendarVersion: version, CoverageStart: coverageStart, CoverageEnd: coverageEnd,
+		RegularOpenLocal: result.CoreHours.OpenLocal, RegularCloseLocal: result.CoreHours.CloseLocal,
+		AvailableAt: availableAt, RecordedAt: availableAt, SourceReference: evidenceReference,
+		RawPayloadHash: evidenceHash, Revision: calendarRevision(availableAt), Events: events,
+	})
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	if err := a.publishCalendar(ctx, batch); err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	m.OutputRows = len(batch.Calendars) + len(batch.Sessions)
+	m.Cursor["status"] = "canonical_published"
+	m.Cursor["calendar_version"] = version
+	m.Cursor["session_fingerprint"] = batch.Calendars[0].SessionFingerprint
+	m.Cursor["session_rows"] = len(batch.Sessions)
+	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+func (a *app) publishCalendar(ctx context.Context, batch metadata.HistoricalTruthBatch) error {
+	publisher, ok := a.metadata.(historicalTruthPublisher)
+	if !ok {
+		return errors.New("canonical calendar publication requires a historical-truth metadata repository")
+	}
+	if err := publisher.PublishHistoricalTruth(ctx, batch); err != nil {
+		return fmt.Errorf("calendar historical truth publication: %w", err)
+	}
+	return nil
+}
+
+func (a *app) storeCalendarResources(ctx context.Context, m *metrics, source string, year int, resources []providers.RawResource) error {
+	for _, resource := range resources {
+		attributes := make(map[string]string, len(resource.ParserMetadata)+3)
+		for key, value := range resource.ParserMetadata {
+			attributes[key] = value
+		}
+		attributes["source_url"] = resource.URL
+		attributes["parser_version"] = resource.ParserVersion
+		attributes["adapter_sha256"] = resource.SHA256
+		extension := strings.TrimPrefix(filepath.Ext(resource.Key), ".")
+		if extension == "" {
+			extension = "html"
+		}
+		fetchedAt := resourceFetchedAt(resource, m.StartedAt)
+		key := rawKey(source, "calendar", fmt.Sprintf("year-%d-%s", year, resource.Kind), resource.Bytes, fetchedAt, extension)
+		logicalKey := fmt.Sprintf("%s/calendar/year=%d/resource=%s", source, year, resource.Kind)
+		if _, err := a.storeRaw(ctx, m, key, resource.Bytes, storage.RawMetadata{Source: source, ContentType: resource.ContentType, FetchedAt: fetchedAt, Attributes: attributes}, logicalKey, source+"/calendar/"+resource.Kind, resource.SHA256); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *app) storeCalendarEvidence(ctx context.Context, m *metrics, source, mic string, provider config.CalendarProvider, resources []providers.RawResource) (string, string, time.Time, error) {
+	availableAt := m.StartedAt
+	manifest := calendarEvidenceManifest{
+		SchemaVersion: "1", Source: source, MIC: mic, Year: provider.Year,
+		CoverageStart: provider.CoverageStart, CoverageEnd: provider.CoverageEnd,
+		Availability: "receipt_time; source page exposes no historical publication timestamp",
+		Revision:     "new retained source-evidence hash creates a new immutable calendar version",
+		Weekend:      "Saturday and Sunday are materialized as explicit closed rows",
+		Resources:    make([]calendarEvidenceResource, 0, len(resources)),
+	}
+	for _, resource := range resources {
+		fetchedAt := resourceFetchedAt(resource, m.StartedAt)
+		if fetchedAt.After(availableAt) {
+			availableAt = fetchedAt
+		}
+		manifest.Resources = append(manifest.Resources, calendarEvidenceResource{
+			Kind: resource.Kind, Key: resource.Key, URL: resource.URL, SHA256: resource.SHA256,
+			FetchedAt: fetchedAt, ParserVersion: resource.ParserVersion, Metadata: resource.ParserMetadata,
+		})
+	}
+	sort.Slice(manifest.Resources, func(i, j int) bool {
+		if manifest.Resources[i].Kind != manifest.Resources[j].Kind {
+			return manifest.Resources[i].Kind < manifest.Resources[j].Kind
+		}
+		return manifest.Resources[i].Key < manifest.Resources[j].Key
+	})
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		return "", "", time.Time{}, fmt.Errorf("encode calendar evidence manifest: %w", err)
+	}
+	hash := providers.SHA256(encoded)
+	logicalKey := fmt.Sprintf("%s/calendar-evidence/year=%d/mic=%s", source, provider.Year, mic)
+	key := rawKey(source, "calendar-evidence", fmt.Sprintf("year-%d-%s", provider.Year, strings.ToLower(mic)), encoded, availableAt, "json")
+	storedHash, err := a.storeRaw(ctx, m, key, encoded, storage.RawMetadata{
+		Source: source, ContentType: "application/json", FetchedAt: availableAt,
+		Attributes: map[string]string{"mic": mic, "year": strconv.Itoa(provider.Year), "coverage_start": provider.CoverageStart, "coverage_end": provider.CoverageEnd, "historical_fitness": "current_reference_receipt_time"},
+	}, logicalKey, source+"/calendar-evidence", hash)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+	return storedHash, logicalKey + "/sha256=" + storedHash, availableAt, nil
+}
+
+func calendarCoverage(provider config.CalendarProvider, timezone string) (time.Time, time.Time, error) {
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	parse := func(value string) (time.Time, error) {
+		date, err := time.Parse(time.DateOnly, strings.TrimSpace(value))
+		if err != nil {
+			return time.Time{}, err
+		}
+		return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, location), nil
+	}
+	start, err := parse(provider.CoverageStart)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("calendar coverage start: %w", err)
+	}
+	end, err := parse(provider.CoverageEnd)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("calendar coverage end: %w", err)
+	}
+	return start, end, nil
+}
+
+func calendarVersion(prefix string, year int, evidenceHash string) string {
+	return fmt.Sprintf("%s_%d_%s", prefix, year, evidenceHash[:12])
+}
+
+func calendarRevision(availableAt time.Time) int {
+	return int(availableAt.UTC().Unix() / int64(24*time.Hour/time.Second))
+}
+
 func b3ReportRevision(reportDate time.Time) (int, error) {
 	epoch := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
 	date := time.Date(reportDate.UTC().Year(), reportDate.UTC().Month(), reportDate.UTC().Day(), 0, 0, 0, 0, time.UTC)
@@ -1426,12 +1714,29 @@ func b3RunInputs(provider config.B3Provider, universe []config.Security) metadat
 	}
 }
 
+func calendarRunInputs(source, mic string, provider config.CalendarProvider) metadata.RunInputs {
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        source,
+		Provider: metadata.ProviderInputs{
+			Name: source, Kind: "market_calendar", CalendarYear: provider.Year,
+			CalendarMIC: mic, CalendarCoverageStart: strings.TrimSpace(provider.CoverageStart),
+			CalendarCoverageEnd: strings.TrimSpace(provider.CoverageEnd), Format: "html",
+			Vintage: "current_reference_receipt_time",
+		},
+	}
+}
+
 func (a *app) start(ctx context.Context, m *metrics, inputs metadata.RunInputs) (metadata.Run, bool, error) {
 	if a.metadata == nil {
 		return metadata.Run{}, false, errors.New("PostgreSQL metadata repository is required for canonical collection")
 	}
 	m.StartedAt = canonicalTime(m.StartedAt)
-	run, err := a.metadata.StartRun(ctx, m.Source, a.batchKey+"/"+m.Source, m.StartedAt, inputs)
+	runKeyPart := m.Source
+	if strings.TrimSpace(m.RunKey) != "" {
+		runKeyPart = strings.TrimSpace(m.RunKey)
+	}
+	run, err := a.metadata.StartRun(ctx, m.Source, a.batchKey+"/"+runKeyPart, m.StartedAt, inputs)
 	if err != nil {
 		return metadata.Run{}, false, err
 	}
