@@ -7,7 +7,10 @@ import json
 import sys
 from pathlib import Path
 
-from .bias_audit import BiasAuditError, publish_bias_audit, validate_bias_audit
+if __package__:
+    from .bias_audit import BiasAuditError, publish_bias_audit, validate_bias_audit
+else:  # pragma: no cover - exercised by the dependency-free host Make target
+    from bias_audit import BiasAuditError, publish_bias_audit, validate_bias_audit
 
 
 def _parser() -> argparse.ArgumentParser:

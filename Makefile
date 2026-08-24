@@ -146,13 +146,13 @@ adjust-validate: config
 
 bias-audit:
 	@test -n "$(AUDIT_SPEC)" || (echo "AUDIT_SPEC is required" >&2; exit 2)
-	@PYTHONPATH=python python3 -m research.bias_audit_cli publish \
+	@PYTHONPATH=python/research python3 python/research/bias_audit_cli.py publish \
 		--spec "$(AUDIT_SPEC)" \
 		--audits-root "$(or $(AUDITS_ROOT),data/audits/point-in-time)"
 
 bias-audit-validate:
 	@test -n "$(AUDIT_MANIFEST)" || (echo "AUDIT_MANIFEST is required" >&2; exit 2)
-	@PYTHONPATH=python python3 -m research.bias_audit_cli validate \
+	@PYTHONPATH=python/research python3 python/research/bias_audit_cli.py validate \
 		--manifest "$(AUDIT_MANIFEST)"
 
 test: config
