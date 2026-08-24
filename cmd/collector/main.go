@@ -1234,7 +1234,15 @@ func (a *app) collectCorporateActionArtifacts(ctx context.Context, sourceCode, s
 		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
 	}
 	m.Received = len(result.Resources) + len(provider.Actions)
-	batch, compileErr := corporateActionHistoricalTruthBatch(run, provider, result.Resources)
+	evidenceHash, evidenceReference, evidenceReceipt, evidenceErr := a.storeCorporateActionEvidence(
+		ctx, &m, sourceCode, provider, result.Resources,
+	)
+	if evidenceErr != nil {
+		return errors.Join(evidenceErr, a.finish(ctx, run, m, evidenceErr, nil, nil))
+	}
+	batch, compileErr := corporateActionHistoricalTruthBatch(
+		run, provider, result.Resources, evidenceHash, evidenceReference, evidenceReceipt,
+	)
 	if compileErr != nil {
 		return errors.Join(compileErr, a.finish(ctx, run, m, compileErr, nil, nil))
 	}
@@ -1250,6 +1258,25 @@ func (a *app) collectCorporateActionArtifacts(ctx context.Context, sourceCode, s
 	m.Cursor["status"] = "canonical_published"
 	m.Cursor["action_versions"] = len(batch.Actions)
 	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+type corporateActionEvidenceResource struct {
+	Kind          string            `json:"kind"`
+	Key           string            `json:"key"`
+	URL           string            `json:"url"`
+	SHA256        string            `json:"sha256"`
+	ContentType   string            `json:"content_type"`
+	FetchedAt     time.Time         `json:"fetched_at"`
+	ParserVersion string            `json:"parser_version"`
+	Metadata      map[string]string `json:"metadata"`
+}
+
+type corporateActionEvidenceManifest struct {
+	SchemaVersion      string                                 `json:"schema_version"`
+	Source             string                                 `json:"source"`
+	AvailabilityPolicy string                                 `json:"availability_policy"`
+	Resources          []corporateActionEvidenceResource      `json:"resources"`
+	Actions            []metadata.CorporateActionVersionInput `json:"actions"`
 }
 
 func (a *app) storeCorporateActionResources(ctx context.Context, m *metrics, source string, resources []providers.RawResource) error {
@@ -1277,14 +1304,63 @@ func (a *app) storeCorporateActionResources(ctx context.Context, m *metrics, sou
 	return nil
 }
 
-func corporateActionHistoricalTruthBatch(run metadata.Run, provider config.CorporateActionProvider, resources []providers.RawResource) (metadata.HistoricalTruthBatch, error) {
+func (a *app) storeCorporateActionEvidence(ctx context.Context, m *metrics, source string, provider config.CorporateActionProvider, resources []providers.RawResource) (string, string, time.Time, error) {
+	inputs := corporateActionRunInputs(source, provider)
+	manifest := corporateActionEvidenceManifest{
+		SchemaVersion: "1", Source: source,
+		AvailabilityPolicy: provider.AvailabilityPolicy,
+		Resources:          make([]corporateActionEvidenceResource, 0, len(resources)),
+		Actions:            inputs.Provider.CorporateActionVersions,
+	}
+	receipt := m.StartedAt
+	for _, resource := range resources {
+		fetchedAt := resourceFetchedAt(resource, m.StartedAt)
+		if fetchedAt.After(receipt) {
+			receipt = fetchedAt
+		}
+		manifest.Resources = append(manifest.Resources, corporateActionEvidenceResource{
+			Kind: resource.Kind, Key: resource.Key, URL: resource.URL,
+			SHA256: resource.SHA256, ContentType: resource.ContentType,
+			FetchedAt: fetchedAt, ParserVersion: resource.ParserVersion,
+			Metadata: resource.ParserMetadata,
+		})
+	}
+	sort.Slice(manifest.Resources, func(i, j int) bool {
+		return manifest.Resources[i].Kind < manifest.Resources[j].Kind
+	})
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		return "", "", time.Time{}, fmt.Errorf("encode corporate-action evidence: %w", err)
+	}
+	hash := providers.SHA256(encoded)
+	logicalKey := fmt.Sprintf("%s/corporate-action-evidence/policy=%s", source, provider.AvailabilityPolicy)
+	key := rawKey(source, "corporate-action-evidence", provider.AvailabilityPolicy, encoded, receipt, "json")
+	storedHash, err := a.storeRaw(ctx, m, key, encoded, storage.RawMetadata{
+		Source: source, ContentType: "application/json", FetchedAt: receipt,
+		Attributes: map[string]string{
+			"availability_policy":  provider.AvailabilityPolicy,
+			"resource_count":       strconv.Itoa(len(resources)),
+			"action_version_count": strconv.Itoa(len(provider.Actions)),
+		},
+	}, logicalKey, source+"/corporate-action-evidence", hash)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+	return storedHash, logicalKey + "/sha256=" + storedHash, receipt, nil
+}
+
+func corporateActionHistoricalTruthBatch(run metadata.Run, provider config.CorporateActionProvider, resources []providers.RawResource, evidenceHash, evidenceReference string, evidenceReceipt time.Time) (metadata.HistoricalTruthBatch, error) {
+	decodedHash, hashErr := hex.DecodeString(evidenceHash)
+	if hashErr != nil || len(decodedHash) != sha256.Size || strings.TrimSpace(evidenceReference) == "" || evidenceReceipt.IsZero() {
+		return metadata.HistoricalTruthBatch{}, errors.New("corporate-action evidence manifest is incomplete")
+	}
 	byKind := make(map[string]providers.RawResource, len(resources))
 	for _, resource := range resources {
 		byKind[resource.Kind] = resource
 	}
 	batch := metadata.HistoricalTruthBatch{Actions: make([]metadata.CorporateActionVersion, 0, len(provider.Actions))}
 	for index, configured := range provider.Actions {
-		resource, exists := byKind[configured.ResourceKind]
+		_, exists := byKind[configured.ResourceKind]
 		if !exists {
 			return metadata.HistoricalTruthBatch{}, fmt.Errorf("corporate action %d references missing resource %q", index, configured.ResourceKind)
 		}
@@ -1300,8 +1376,7 @@ func corporateActionHistoricalTruthBatch(run metadata.Run, provider config.Corpo
 		if err != nil {
 			return metadata.HistoricalTruthBatch{}, fmt.Errorf("corporate action %d effective_at: %w", index, err)
 		}
-		fetchedAt := resourceFetchedAt(resource, run.StartedAt)
-		availableAt := fetchedAt
+		availableAt := evidenceReceipt
 		if provider.AvailabilityPolicy == "source_publication" {
 			availableAt, err = time.Parse(time.RFC3339, configured.AvailableAt)
 			if err != nil {
@@ -1309,7 +1384,10 @@ func corporateActionHistoricalTruthBatch(run metadata.Run, provider config.Corpo
 			}
 		}
 		normalizer := actionartifact.ParserVersion
-		locator := configured.SourceLocator
+		locator := fmt.Sprintf(
+			"actions/%d/resource=%s/source_locator=%s",
+			index, configured.ResourceKind, configured.SourceLocator,
+		)
 		batch.Actions = append(batch.Actions, metadata.CorporateActionVersion{
 			SchemaVersion: metadata.CorporateActionSchemaVersion,
 			ID: uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
@@ -1329,12 +1407,12 @@ func corporateActionHistoricalTruthBatch(run metadata.Run, provider config.Corpo
 			CashAmount:       optionalStringPointer(configured.CashAmount),
 			Currency:         optionalStringPointer(configured.Currency),
 			TargetSecurityID: optionalStringPointer(configured.TargetSecurityID),
-			SourceReference:  resource.URL + "#" + configured.SourceLocator,
-			RecordedAt:       fetchedAt,
+			SourceReference:  evidenceReference,
+			RecordedAt:       evidenceReceipt,
 			Provenance: metadata.CorporateActionProvenance{
 				DataSourceID: run.DataSourceID, IngestionRunID: run.ID,
-				RawPayloadHash: resource.SHA256, RawRecordLocator: &locator,
-				IngestedAt: fetchedAt, NormalizerVersion: &normalizer,
+				RawPayloadHash: evidenceHash, RawRecordLocator: &locator,
+				IngestedAt: evidenceReceipt, NormalizerVersion: &normalizer,
 			},
 		})
 	}

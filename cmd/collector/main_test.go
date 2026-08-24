@@ -542,7 +542,12 @@ func TestCorporateActionHistoricalTruthBatchAppliesAvailabilityPolicy(t *testing
 			ResourceKind: "filing", SourceLocator: "exhibit/split",
 		}},
 	}
-	batch, err := corporateActionHistoricalTruthBatch(testRun(), provider, []providers.RawResource{resource})
+	evidenceHash := strings.Repeat("e", 64)
+	evidenceReference := "sec/corporate-action-evidence/policy=source_publication/sha256=" + evidenceHash
+	batch, err := corporateActionHistoricalTruthBatch(
+		testRun(), provider, []providers.RawResource{resource},
+		evidenceHash, evidenceReference, fetchedAt,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -550,13 +555,16 @@ func TestCorporateActionHistoricalTruthBatchAppliesAvailabilityPolicy(t *testing
 		t.Fatalf("actions = %+v", batch.Actions)
 	}
 	action := batch.Actions[0]
-	if action.AvailableAt.Format(time.RFC3339) != "2020-07-30T22:55:04Z" || !action.Provenance.IngestedAt.Equal(fetchedAt) || action.Provenance.RawPayloadHash != providers.SHA256(body) {
+	if action.AvailableAt.Format(time.RFC3339) != "2020-07-30T22:55:04Z" || !action.Provenance.IngestedAt.Equal(fetchedAt) || action.Provenance.RawPayloadHash != evidenceHash || action.SourceReference != evidenceReference {
 		t.Fatalf("SEC action availability/provenance = %+v", action)
 	}
 
 	provider.AvailabilityPolicy = "installation_receipt"
 	provider.Actions[0].AvailableAt = ""
-	batch, err = corporateActionHistoricalTruthBatch(testRun(), provider, []providers.RawResource{resource})
+	batch, err = corporateActionHistoricalTruthBatch(
+		testRun(), provider, []providers.RawResource{resource},
+		evidenceHash, evidenceReference, fetchedAt,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
