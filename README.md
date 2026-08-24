@@ -71,6 +71,8 @@ make ingest SOURCE=fred
 # after enabling providers.alfred and setting FRED_API_KEY
 make ingest SOURCE=alfred
 make ingest SOURCE=bcb
+# after enabling providers.ptax with an explicit bounded date range
+make ingest SOURCE=ptax
 # after enabling providers.cvm and configuring exact universe CVM codes
 make ingest SOURCE=cvm
 ```

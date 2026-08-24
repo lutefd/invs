@@ -192,6 +192,7 @@ type orderingNormalizedStore struct {
 	fundamentals   []model.FundamentalObservation
 	economics      []model.EconomicObservation
 	filings        []model.Filing
+	fx             []model.FXObservation
 }
 
 func (s *orderingNormalizedStore) beforeWrite(kind string) error {
@@ -281,6 +282,32 @@ func (s *orderingNormalizedStore) WriteFilings(_ string, observations []model.Fi
 		}
 	}
 	s.filings = append(s.filings, observations...)
+	rows := len(observations)
+	if s.zeroRows {
+		rows = 0
+	}
+	return "test/data.parquet", rows, nil
+}
+
+func (s *orderingNormalizedStore) WriteFX(base, quote string, observations []model.FXObservation) (string, int, error) {
+	if err := s.beforeWrite("fx"); err != nil {
+		return "", 0, err
+	}
+	if base != "USD" || quote != "BRL" {
+		return "", 0, fmt.Errorf("FX pair = %s-%s", base, quote)
+	}
+	for _, observation := range observations {
+		if observation.Source != s.expectedSource || observation.RawPayloadHash != s.expectedHash || observation.Provenance.RawPayloadHash != s.expectedHash {
+			return "", 0, fmt.Errorf("FX source or raw hash mismatch: %+v", observation)
+		}
+		if observation.Provenance.DataSourceID != s.expectedRun.DataSourceID || observation.Provenance.IngestionRunID != s.expectedRun.ID {
+			return "", 0, fmt.Errorf("FX run provenance mismatch: %+v", observation.Provenance)
+		}
+		if !strings.HasPrefix(observation.Provenance.RawRecordLocator, s.locatorPrefix) || !observation.Provenance.IngestedAt.Equal(observation.RecordedAt) {
+			return "", 0, fmt.Errorf("FX locator or receipt mismatch: %+v", observation)
+		}
+	}
+	s.fx = append(s.fx, observations...)
 	rows := len(observations)
 	if s.zeroRows {
 		rows = 0
@@ -440,6 +467,13 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	if got := bcbInputs.Provider.Series[0]; got.Code != "432" || got.Geography != "BR" || got.Unit != "percent" || got.Frequency != "daily" || got.SeasonalAdjustment != "not_adjusted" || got.Start != "2024-01-01" || got.End != "2024-12-31" {
 		t.Fatalf("BCB series input = %+v", got)
 	}
+	ptaxInputs := ptaxRunInputs(config.PTAXProvider{Enabled: true, Start: " 2026-08-10 ", End: " 2026-08-14 "})
+	if ptaxInputs.Source != "bcb_ptax" || ptaxInputs.Provider.Kind != "fx" || ptaxInputs.Provider.FXRequest == nil {
+		t.Fatalf("PTAX run inputs = %+v", ptaxInputs)
+	}
+	if got := ptaxInputs.Provider.FXRequest; got.BaseCurrency != "USD" || got.QuoteCurrency != "BRL" || got.RateKind != "ptax_closing" || got.FixingTimezone != "America/Sao_Paulo" || got.Start != "2026-08-10" || got.End != "2026-08-14" {
+		t.Fatalf("PTAX request input = %+v", got)
+	}
 
 	b3Inputs := b3RunInputs(config.B3Provider{ReportDate: "2026-08-21", Tickers: []string{"VALE3", "PETR4"}}, []config.Security{
 		{SecurityID: "security-vale", Ticker: "VALE3", ISIN: "BRVALEACNOR0"},
@@ -514,7 +548,7 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		t.Fatalf("corporate-action run inputs = %+v", actionInputs)
 	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs, historicalCalendarInputs, membershipInputs, listingHistoryInputs, actionInputs} {
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, ptaxInputs, b3Inputs, calendarInputs, historicalCalendarInputs, membershipInputs, listingHistoryInputs, actionInputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -1494,6 +1528,86 @@ func TestCollectorValidatesBCBSourceSelection(t *testing.T) {
 	}
 	if err := app.run(context.Background(), "bcb"); err == nil || !strings.Contains(err.Error(), "BCB provider is disabled") {
 		t.Fatalf("disabled BCB error = %v", err)
+	}
+	if err := app.run(context.Background(), "ptax"); err == nil || !strings.Contains(err.Error(), "PTAX provider is disabled") {
+		t.Fatalf("disabled PTAX error = %v", err)
+	}
+}
+
+func TestCollectorPTAXStoresRawBeforeCanonicalWrite(t *testing.T) {
+	payload := []byte(`{"@odata.context":"official","value":[{"cotacaoCompra":5.22300,"cotacaoVenda":5.22360,"dataHoraCotacao":"2026-08-14 13:10:22.94166"}]}`)
+	raw := &orderingRawStore{}
+	run := testRun()
+	normalized := &orderingNormalizedStore{raw: raw, expectedRun: run, expectedHash: hashPayload(payload), expectedSource: "bcb_ptax", locatorPrefix: "value/"}
+	var finalized metadata.Metrics
+	app := &app{
+		cfg: config.Config{Providers: config.Providers{PTAX: config.PTAXProvider{Enabled: true, Start: "2026-08-10", End: "2026-08-14"}}},
+		raw: raw, normalized: normalized, http: collectorHTTPFake{payload: payload},
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onStartInputs: func(inputs metadata.RunInputs) {
+			if inputs.Source != "bcb_ptax" || inputs.Provider.FXRequest == nil {
+				t.Errorf("PTAX run inputs = %+v", inputs)
+			}
+		}, onFinalize: func(m metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) {
+			finalized = m
+			if len(prices) != 0 || len(macros) != 0 {
+				t.Errorf("PTAX finalized latest snapshots: prices=%d macros=%d", len(prices), len(macros))
+			}
+			raw.events = append(raw.events, "metadata:finalize")
+		}},
+		batchKey: "ptax-ordering-test",
+		now:      func() time.Time { return time.Date(2026, 8, 14, 17, 0, 0, 0, time.UTC) },
+	}
+
+	if err := app.run(context.Background(), "ptax"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "canonical:fx:write", "metadata:finalize"}) {
+		t.Fatalf("PTAX publication order = %v", raw.events)
+	}
+	if len(normalized.fx) != 1 || normalized.fx[0].SellRate != "5.2236" || normalized.fx[0].AvailableAt != normalized.fx[0].FixingAt {
+		t.Fatalf("PTAX canonical rows = %+v", normalized.fx)
+	}
+	if len(raw.rawKeys) != 1 || !strings.HasPrefix(raw.rawKeys[0], "bcb_ptax/closing/") || !strings.Contains(raw.rawKeys[0], "/USD-BRL/") {
+		t.Fatalf("PTAX raw keys = %v", raw.rawKeys)
+	}
+	if got := raw.rawMetadata[0].Attributes; got["provider_format"] != "odata-json" || got["rate_kind"] != "ptax_closing" || got["start"] != "2026-08-10" || got["end"] != "2026-08-14" {
+		t.Fatalf("PTAX raw attributes = %+v", got)
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 1 || manifest.Entries[0].LogicalKey != "bcb_ptax/closing/USD-BRL/start/2026-08-10/end/2026-08-14" {
+		t.Fatalf("PTAX raw manifest = %+v", manifest.Entries)
+	}
+	if finalized.Written != 1 || finalized.RawPayloads != 1 || finalized.Cursor["pair"] != "USD-BRL" || finalized.Cursor["canonical_path"] != "test/data.parquet" {
+		t.Fatalf("PTAX final metrics = %+v", finalized)
+	}
+}
+
+func TestCollectorPTAXRetainsRawOnParseFailure(t *testing.T) {
+	payload := []byte(`{"@odata.context":"official","value":[],"unexpected":true}`)
+	raw := &orderingRawStore{}
+	run := testRun()
+	var finalized metadata.Metrics
+	app := &app{
+		cfg: config.Config{Providers: config.Providers{PTAX: config.PTAXProvider{Enabled: true, Start: "2026-08-10", End: "2026-08-14"}}},
+		raw: raw, normalized: &orderingNormalizedStore{raw: raw}, http: collectorHTTPFake{payload: payload},
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, _ []model.PriceBar, _ []model.EconomicObservation) {
+			finalized = m
+			raw.events = append(raw.events, "metadata:finalize")
+		}},
+		batchKey: "ptax-parse-error-test",
+		now:      func() time.Time { return time.Date(2026, 8, 14, 17, 0, 0, 0, time.UTC) },
+	}
+
+	if err := app.run(context.Background(), "ptax"); err == nil {
+		t.Fatal("expected PTAX parse error")
+	}
+	if len(raw.payloads) != 1 || !bytes.Equal(raw.payloads[0], payload) || !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "metadata:finalize"}) {
+		t.Fatalf("PTAX retained state payloads=%q events=%v", raw.payloads, raw.events)
+	}
+	if finalized.RawPayloads != 1 || finalized.Written != 0 || finalized.Err == nil {
+		t.Fatalf("PTAX parse failure metrics = %+v", finalized)
 	}
 }
 

@@ -159,6 +159,22 @@ func TestCatalogIncludesBCBMacroSource(t *testing.T) {
 	t.Fatal("BCB source is missing from catalog")
 }
 
+func TestCatalogIncludesDedicatedPTAXFXSource(t *testing.T) {
+	for _, candidate := range sources {
+		if candidate.code != "bcb_ptax" {
+			continue
+		}
+		if candidate.kind != "fx" {
+			t.Fatalf("PTAX source kind = %q, want fx", candidate.kind)
+		}
+		if candidate.baseURL != "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/" {
+			t.Fatalf("PTAX base URL = %q", candidate.baseURL)
+		}
+		return
+	}
+	t.Fatal("PTAX source is missing from catalog")
+}
+
 func TestCatalogIncludesALFREDMacroSource(t *testing.T) {
 	for _, candidate := range sources {
 		if candidate.code != "alfred" {

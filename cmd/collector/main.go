@@ -36,6 +36,7 @@ import (
 	"github.com/luisdourado/invs/internal/providers/fred"
 	"github.com/luisdourado/invs/internal/providers/nasdaq"
 	"github.com/luisdourado/invs/internal/providers/nyse"
+	"github.com/luisdourado/invs/internal/providers/ptax"
 	"github.com/luisdourado/invs/internal/providers/sec"
 	"github.com/luisdourado/invs/internal/providers/yahoo"
 	"github.com/luisdourado/invs/internal/storage"
@@ -75,6 +76,7 @@ type normalizedStore interface {
 	WriteFundamentals(string, []model.FundamentalObservation) (string, int, error)
 	WriteEconomics(string, []model.EconomicObservation) (string, int, error)
 	WriteFilings(string, []model.Filing) (string, int, error)
+	WriteFX(string, string, []model.FXObservation) (string, int, error)
 }
 
 type operatorMetadataStore interface {
@@ -199,7 +201,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, sec-actions, prices, fred, alfred, bcb, b3, b3-action-replay, b3-calendar, b3-calendar-history, b3-membership, b3-listing-history, nasdaq-calendar-history, nasdaq-membership, nyse, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, sec-actions, prices, fred, alfred, bcb, ptax, b3, b3-action-replay, b3-calendar, b3-calendar-history, b3-membership, b3-listing-history, nasdaq-calendar-history, nasdaq-membership, nyse, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -327,7 +329,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "sec-actions": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-action-replay": true, "b3-calendar": true, "b3-calendar-history": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-calendar-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "sec-actions": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "ptax": true, "b3": true, "b3-action-replay": true, "b3-calendar": true, "b3-calendar-history": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-calendar-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -345,6 +347,9 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "bcb" && !a.cfg.Providers.BCB.Enabled {
 		return errors.New("BCB provider is disabled")
+	}
+	if source == "ptax" && !a.cfg.Providers.PTAX.Enabled {
+		return errors.New("PTAX provider is disabled")
 	}
 	if source == "b3" && !a.cfg.Providers.B3.Enabled {
 		return errors.New("B3 provider is disabled")
@@ -402,6 +407,11 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "bcb") && a.cfg.Providers.BCB.Enabled {
 		if err := a.collectBCB(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "ptax") && a.cfg.Providers.PTAX.Enabled {
+		if err := a.collectPTAX(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -894,6 +904,67 @@ func (a *app) collectBCB(ctx context.Context) error {
 	}
 	collectErr := errors.Join(errs...)
 	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, snapshots))
+}
+
+func (a *app) collectPTAX(ctx context.Context) error {
+	provider := a.cfg.Providers.PTAX
+	start, err := time.Parse(time.DateOnly, strings.TrimSpace(provider.Start))
+	if err != nil {
+		return fmt.Errorf("PTAX start: %w", err)
+	}
+	end, err := time.Parse(time.DateOnly, strings.TrimSpace(provider.End))
+	if err != nil {
+		return fmt.Errorf("PTAX end: %w", err)
+	}
+	m := metrics{
+		Source: "bcb_ptax", RunKey: "ptax", StartedAt: a.nowUTC(),
+		Cursor: map[string]any{
+			"provider": "bcb_ptax", "pair": "USD-BRL", "rate_kind": "ptax_closing",
+			"start": start.Format(time.DateOnly), "end": end.Format(time.DateOnly),
+		},
+	}
+	run, skip, err := a.start(ctx, &m, ptaxRunInputs(provider))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+
+	result, collectErr := ptax.NewClient(a.http).Collect(ctx, ptax.Request{Start: start, End: end})
+	m.Received = result.RecordsReceived
+	m.Cursor["records_received"] = result.RecordsReceived
+	m.Cursor["rows"] = len(result.Observations)
+	var rawHash, rawPath string
+	var rawErr error
+	if len(result.Resources) != 1 {
+		rawErr = fmt.Errorf("PTAX returned %d downloaded resources, want 1", len(result.Resources))
+	} else {
+		resource := result.Resources[0]
+		rawPath = rawKey("bcb_ptax", "closing", "USD-BRL", resource.Bytes, resourceFetchedAt(resource, m.StartedAt), "json")
+		rawHash, rawErr = a.storeRaw(ctx, &m, rawPath, resource.Bytes, storage.RawMetadata{
+			Source: "bcb_ptax", ContentType: resource.ContentType,
+			FetchedAt: resourceFetchedAt(resource, m.StartedAt), Attributes: ptaxRawAttributes(provider),
+		}, ptaxLogicalKey(provider), "bcb_ptax", resource.SHA256)
+		if rawErr == nil {
+			m.Cursor["raw_payload_hash"] = rawHash
+			m.Cursor["raw_object_key"] = rawPath
+		}
+	}
+	if collectErr != nil || rawErr != nil {
+		err = errors.Join(collectErr, rawErr)
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	if err := stampFX(run, rawHash, result.Observations); err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	path, n, writeErr := a.normalized.WriteFX("USD", "BRL", result.Observations)
+	if writeErr == nil {
+		m.OutputRows += n
+		m.Cursor["canonical_path"] = path
+		a.log.Info("normalized dataset", "source", "bcb_ptax", "pair", "USD-BRL", "path", path, "rows", len(result.Observations))
+	}
+	return errors.Join(writeErr, a.finish(ctx, run, m, writeErr, nil, nil))
 }
 
 func (a *app) collectB3(ctx context.Context) error {
@@ -2410,6 +2481,14 @@ func bcbRawAttributes(series config.BCBSeries) map[string]string {
 	}
 }
 
+func ptaxRawAttributes(provider config.PTAXProvider) map[string]string {
+	return map[string]string{
+		"provider_format": "odata-json", "base_currency": "USD", "quote_currency": "BRL",
+		"rate_kind": "ptax_closing", "fixing_timezone": "America/Sao_Paulo",
+		"start": strings.TrimSpace(provider.Start), "end": strings.TrimSpace(provider.End),
+	}
+}
+
 func alfredRawAttributes(series config.ALFREDSeries, page alfred.RawPage) map[string]string {
 	return map[string]string{
 		"provider_format":     "fred-json",
@@ -2456,6 +2535,10 @@ func bcbLogicalKey(series config.BCBSeries) string {
 		end = "current"
 	}
 	return "bcb/series/" + strings.TrimSpace(series.Code) + "/start/" + start + "/end/" + end
+}
+
+func ptaxLogicalKey(provider config.PTAXProvider) string {
+	return "bcb_ptax/closing/USD-BRL/start/" + strings.TrimSpace(provider.Start) + "/end/" + strings.TrimSpace(provider.End)
 }
 
 func secRunInputs(universe []config.Security) metadata.RunInputs {
@@ -2580,6 +2663,20 @@ func bcbRunInputs(series []config.BCBSeries) metadata.RunInputs {
 			Series:                configured,
 			Format:                "csv",
 			Vintage:               "current",
+		},
+	}
+}
+
+func ptaxRunInputs(provider config.PTAXProvider) metadata.RunInputs {
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "bcb_ptax",
+		Provider: metadata.ProviderInputs{
+			Name: "bcb_ptax", Kind: "fx", Format: "odata-json", Vintage: "source_bulletin_timestamp",
+			FXRequest: &metadata.FXRequestInput{
+				BaseCurrency: "USD", QuoteCurrency: "BRL", RateKind: "ptax_closing",
+				FixingTimezone: "America/Sao_Paulo", Start: strings.TrimSpace(provider.Start), End: strings.TrimSpace(provider.End),
+			},
 		},
 	}
 }
@@ -2876,6 +2973,16 @@ func stampEconomicsFromRawHashes(run metadata.Run, storedByAdapterHash map[strin
 		}
 		if err := stampProvenance(run, storedHash, &observations[i].RawPayloadHash, &observations[i].Provenance, observations[i].Temporal); err != nil {
 			return fmt.Errorf("economic observation %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func stampFX(run metadata.Run, rawHash string, observations []model.FXObservation) error {
+	for i := range observations {
+		temporal := model.Temporal{IngestedAt: observations[i].RecordedAt}
+		if err := stampProvenance(run, rawHash, &observations[i].RawPayloadHash, &observations[i].Provenance, temporal); err != nil {
+			return fmt.Errorf("FX observation %d: %w", i, err)
 		}
 	}
 	return nil

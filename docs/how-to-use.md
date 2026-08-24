@@ -268,6 +268,30 @@ BCB is represented as canonical macro observations with revision-aware keys.
 The source's explicit values and timestamps are retained; the collector does
 not collapse a revision sequence such as A -> B -> A.
 
+### BCB PTAX USD/BRL FX
+
+PTAX is a separate provider from BCB SGS. Enable it with an explicit inclusive
+range of no more than 366 days:
+
+```yaml
+providers:
+  ptax:
+    enabled: true
+    start: 2026-08-10
+    end: 2026-08-14
+```
+
+```sh
+make ingest SOURCE=ptax RUN_KEY=ptax-usd-brl-2026-08-10-14
+```
+
+The collector retains the official OData response before parsing and publishes
+manifest-backed Parquet under
+`data/normalized/fx/source=bcb_ptax/pair=USD-BRL/`. Each row preserves both PTAX
+buy and sell rates, the exact source bulletin timestamp, and the later local receipt.
+A changed rate at the same source key blocks publication because the source does not
+expose enough correction chronology to infer a revision safely.
+
 ### B3 public instrument identity/listing snapshot
 
 B3 collection is deliberately exact and bounded. Add the security to the universe
