@@ -374,7 +374,7 @@ printf '%s\n' 'checking fresh-image migration wiring'
 docker compose build postgres >/dev/null
 fresh_image=$(docker image inspect --format '{{.Id}}' invs-postgres:latest)
 docker run --rm --entrypoint sh "$fresh_image" \
-	-c 'test -r /docker-entrypoint-initdb.d/000006_historical_truth.sql && test -r /docker-entrypoint-initdb.d/000007_corporate_actions.sql'
+	-c 'test -r /docker-entrypoint-initdb.d/000006_historical_truth.sql && test -r /docker-entrypoint-initdb.d/000007_corporate_actions.sql && test -r /docker-entrypoint-initdb.d/000008_price_basis.sql'
 
 fresh_volume="invs-historical-truth-test-$PPID-$$"
 fresh_container="invs-historical-truth-test-$PPID-$$"
@@ -412,7 +412,17 @@ if [[ "$fresh_table_count" != "6" ]]; then
 	printf 'fresh initialization created %s historical tables, want 6\n' "$fresh_table_count" >&2
 	exit 1
 fi
+fresh_price_basis=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test -Atc \
+	"SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'public.market_price_snapshots'::regclass AND conname = 'market_price_snapshots_price_basis_check';")
+if [[ "$fresh_price_basis" != *"split_adjusted"* || "$fresh_price_basis" != *"total_return_adjusted"* ]]; then
+	printf 'fresh initialization retained the raw-only price basis constraint: %s\n' "$fresh_price_basis" >&2
+	exit 1
+fi
 
+docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test \
+	< migrations/000008_price_basis.down.sql >/dev/null
 docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test \
 	< migrations/000007_corporate_actions.down.sql >/dev/null
@@ -433,11 +443,21 @@ docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test \
 	< migrations/000007_corporate_actions.up.sql >/dev/null
+docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test \
+	< migrations/000008_price_basis.up.sql >/dev/null
 after_up_count=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test -Atc \
 	"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'), to_regclass('public.corporate_action_versions'));" | tr -d '[:space:]')
 if [[ "$after_up_count" != "6" ]]; then
 	printf 'migration re-apply created %s historical tables, want 6\n' "$after_up_count" >&2
+	exit 1
+fi
+reapplied_price_basis=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test -Atc \
+	"SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'public.market_price_snapshots'::regclass AND conname = 'market_price_snapshots_price_basis_check';")
+if [[ "$reapplied_price_basis" != *"split_adjusted"* || "$reapplied_price_basis" != *"total_return_adjusted"* ]]; then
+	printf 'migration re-apply retained the raw-only price basis constraint: %s\n' "$reapplied_price_basis" >&2
 	exit 1
 fi
 

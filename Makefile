@@ -49,6 +49,10 @@ migrate: setup config
 		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT to_regclass('"'"'public.corporate_action_versions'"'"')"' | \
 		grep -qx 'corporate_action_versions' || \
 		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000007_corporate_actions.up.sql
+	@$(COMPOSE) exec -T postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='"'"'public.market_price_snapshots'"'"'::regclass AND conname='"'"'market_price_snapshots_price_basis_check'"'"'"' | \
+		grep -q 'split_adjusted' || \
+		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000008_price_basis.up.sql
 
 historical-truth-db-test: config
 	@scripts/test-historical-truth-db.sh

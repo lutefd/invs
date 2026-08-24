@@ -491,8 +491,8 @@ func priceRow(o model.PriceBar) (PriceRow, error) {
 	if o.Source == "" {
 		return PriceRow{}, errors.New("price source required")
 	}
-	if o.Interval != "1d" || o.PriceBasis != "raw" {
-		return PriceRow{}, errors.New("price interval/basis must be 1d/raw")
+	if o.Interval != "1d" || !isPriceBasis(o.PriceBasis) {
+		return PriceRow{}, errors.New("price interval/basis must be 1d and supported")
 	}
 	if _, err := uuid.Parse(o.SecurityID); err != nil {
 		return PriceRow{}, errors.New("security_id must be UUID")
@@ -1312,7 +1312,7 @@ func validateStoredPrice(r PriceRow) error {
 	if _, err := uuid.Parse(r.SecurityID); err != nil {
 		return errors.New("security_id must be UUID")
 	}
-	if r.Interval != "1d" || r.PriceBasis != "raw" || !isCurrency(r.Currency) {
+	if r.Interval != "1d" || !isPriceBasis(r.PriceBasis) || !isCurrency(r.Currency) {
 		return errors.New("invalid price domain fields")
 	}
 	if r.HasPublishedAt != (r.PublishedAt != 0) {
@@ -1339,6 +1339,15 @@ func validateStoredPrice(r PriceRow) error {
 		return errors.New("invalid OHLC invariant")
 	}
 	return nil
+}
+
+func isPriceBasis(value string) bool {
+	switch value {
+	case "raw", "split_adjusted", "total_return_adjusted":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateStoredFundamental(r FundamentalRow) error {

@@ -286,6 +286,20 @@ func TestPriceV1LosslessIdempotentAndQueryable(t *testing.T) {
 	}
 }
 
+func TestPriceV1PreservesAdjustedBasis(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	bar := price(time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC))
+	bar.PriceBasis = "split_adjusted"
+	path, n, err := w.WritePrices(securityID, []model.PriceBar{bar})
+	if err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	rows := rowsFromManifest[PriceRow](t, path)
+	if len(rows) != 1 || rows[0].PriceBasis != "split_adjusted" {
+		t.Fatalf("rows=%+v", rows)
+	}
+}
+
 func TestPriceCorrectionAtSameNaturalKeyConflicts(t *testing.T) {
 	w, _ := NewWriter(t.TempDir())
 	at := time.Now().UTC().Add(-3 * time.Hour)
