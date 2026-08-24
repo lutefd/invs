@@ -141,6 +141,50 @@ func TestWriteFilingsChangedRawHashConflicts(t *testing.T) {
 	}
 }
 
+func TestWriteSECFilingsIgnoresChangedContainerHashForUnchangedAccession(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	acceptedAt := time.Date(2026, 1, 7, 21, 31, 36, 0, time.UTC)
+	first := filingForTest("0001308179-26-000008", rawHash, runID, acceptedAt.Add(time.Hour))
+	first.Source = "sec"
+	first.DocumentURL = "https://www.sec.gov/Archives/edgar/data/1/000130817926000008/proxy.htm"
+	first.AccessionNumber = first.SourceDocumentID
+	first.FormType = "DEF 14A"
+	first.PrimaryDocument = "proxy.htm"
+	first.Category = ""
+	first.DocumentType = ""
+	first.Species = ""
+	first.Subject = ""
+	first.PresentationType = ""
+	first.Temporal.ObservedAt = time.Time{}
+	first.Temporal.ObservedPrecision = model.PrecisionUnknown
+	first.Temporal.PublishedAt = acceptedAt
+	first.Temporal.PublishedPrecision = model.PrecisionSecond
+	first.Temporal.AvailableAt = acceptedAt
+	if _, n, err := w.WriteFilings(issuerID, []model.Filing{first}); err != nil || n != 1 {
+		t.Fatalf("initial n=%d err=%v", n, err)
+	}
+
+	retry := first
+	retry.RawPayloadHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	retry.Provenance.RawPayloadHash = retry.RawPayloadHash
+	retry.Provenance.IngestionRunID = "b2468ace-1357-4bdf-9024-6e2f59b9527a"
+	retry.Provenance.IngestedAt = first.Provenance.IngestedAt.Add(time.Hour)
+	retry.Temporal.IngestedAt = retry.Provenance.IngestedAt
+	path, n, err := w.WriteFilings(issuerID, []model.Filing{retry})
+	if err != nil || n != 0 {
+		t.Fatalf("retry path=%q n=%d err=%v", path, n, err)
+	}
+	rows := rowsFromManifest[FilingRow](t, path)
+	if len(rows) != 1 || rows[0].RawPayloadHash != rawHash || rows[0].IngestionRunID != runID {
+		t.Fatalf("retry replaced first raw lineage: %+v", rows)
+	}
+
+	retry.FormType = "10-K"
+	if _, _, err := w.WriteFilings(issuerID, []model.Filing{retry}); !errors.Is(err, ErrNaturalKeyConflict) {
+		t.Fatalf("changed canonical SEC row err=%v want natural-key conflict", err)
+	}
+}
+
 func TestFilingRequiresExplicitAvailability(t *testing.T) {
 	at := time.Date(2026, 8, 12, 15, 4, 5, 123456000, time.UTC)
 	filing := filingForTest("cvm-ipe:1023:12345:v1", rawHash, runID, at)

@@ -375,8 +375,8 @@ func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObser
 // WriteFilings publishes one issuer/source partition of canonical filing
 // metadata. SourceDocumentID is the natural identity; a source that exposes
 // versions must include that version in the ID (for example, CVM IPE's
-// protocol/version identity). An identical raw hash is a no-op, while a
-// changed raw payload under the same identity is a conflict.
+// protocol/version identity). Source-specific replay rules preserve the first
+// raw lineage only when the canonical document metadata is unchanged.
 func (w *Writer) WriteFilings(issuerID string, obs []model.Filing) (string, int, error) {
 	if len(obs) == 0 {
 		return "", 0, nil
@@ -1169,8 +1169,14 @@ func sameEconomic(a, b EconomicRow) bool {
 	return a == b
 }
 func sameFiling(a, b FilingRow) bool {
-	if a.RawPayloadHash != b.RawPayloadHash {
+	if a.Source != "sec" && a.RawPayloadHash != b.RawPayloadHash {
 		return false
+	}
+	// SEC submissions are a growing container: an unchanged accession can be
+	// present in responses with different payload hashes as newer filings are
+	// appended. Preserve the first raw lineage for an unchanged canonical row.
+	if a.Source == "sec" {
+		a.RawPayloadHash = b.RawPayloadHash
 	}
 	// CVM's conservative availability for date-only delivery metadata is the
 	// local receipt time, so retries may legitimately have a new availability
