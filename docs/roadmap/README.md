@@ -63,8 +63,12 @@ harness landed in `d963180`; this establishes a tested storage/API boundary but
 is not the complete v0.2 exit gate. The bounded B3 public
 `InstrumentsConsolidatedFile` slice landed in `c43204f` with exact ticker/ISIN
 mapping, raw-first retention, historical identifier/listing publication, and a
-live acceptance; it is current/reference evidence only and does not provide
-historical lifecycle or universe membership. The B3 listed-company corporate-action
+live acceptance; it is current/reference evidence only. Follow-up commits
+`6331d64`, `030b506`, `54c0369`, and `19d8115` now publish bounded source-backed
+INSM/PETZ3 identity and membership history plus a PETZ3 trading-cessation correction.
+A clean live database proved exact correction visibility and delisting boundaries;
+see the [identity/listing publication report](../acceptance/2026-08-23-historical-identity-listing-publication.md).
+The B3 listed-company corporate-action
 evidence adapter landed in `0ad46c8`; it is source-native and live-accepted, but
 canonical action publication remains blocked because the endpoint exposes neither
 an event ID nor public-availability/correction-revision semantics. See the
@@ -84,14 +88,13 @@ eligible only from receipt time, not historically admitted calendars. See the
 [exchange-calendar publication report](../acceptance/2026-08-23-exchange-calendar-publication.md).
 The next unaccepted cohesive units are:
 
-1. extend the B3 snapshot path and add a bounded US source with historical
-   lifecycle, revision, universe-membership, and admissible corporate-action
-   evidence; for B3 specifically, resolve authorized UP2DATA access or a public
-   versioned alternative before adding a production corporate-action transport;
-2. obtain official archived/versioned US and Brazil calendar evidence (or another
+1. obtain official archived/versioned US and Brazil calendar evidence (or another
    admitted source) with publication, effective, and correction chronology; broaden
    BVMF hours coverage only on that evidence, then pass historical availability
    audits and pin the calendar/decision-clock policy into research artifacts;
+2. publish corporate actions and reproducible adjustments; for B3 specifically,
+   resolve authorized UP2DATA access or a public versioned alternative before adding
+   a production corporate-action transport;
 3. revisit Yahoo `.SA` only as a price bridge after its source, terms, fixture,
    coverage, and availability checks pass.
 
@@ -107,9 +110,10 @@ Yahoo is a candidate price bridge, but it is **not admitted as security-master
 evidence**: the checked responses lack stable identity, MIC/primary-listing facts,
 historical intervals, membership events, revisions, and historical availability
 semantics, and its terms require a separate unattended-access/retention review.
-Selective official B3 data now owns the bounded Brazil identity/listing path.
-Long-history coverage, lifecycle/membership evidence, and the Brazil bias audit
-remain pending. Yahoo remains a separate price-bridge candidate.
+Selective official B3 data now owns the bounded Brazil identity/listing path, and
+the PETZ3 lifecycle/membership proof is accepted. Broad long-history coverage and
+the combined Brazil bias audit remain pending. Yahoo remains a separate price-bridge
+candidate.
 
 No general strategy/backtest implementation should start before the historical-truth
 gate in v0.2 passes.

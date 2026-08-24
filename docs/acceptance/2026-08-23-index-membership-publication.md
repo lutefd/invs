@@ -5,7 +5,8 @@
 - Publication implementation: `376d0e0` (`feat(data): publish historical universe memberships`)
 - Mixed-universe identity fix: `9f488a9` (`fix(metadata): support issuers without SEC identifiers`)
 - Scope: one added-then-removed security in the Nasdaq-100 and Ibovespa
-- Status: **bounded US/Brazil historical membership accepted; historical identifier/listing coverage remains open**
+- Status: **bounded US/Brazil historical membership accepted; the later combined
+  identity/listing report closes the publication item**
 
 ## Decision
 
@@ -132,16 +133,13 @@ Focused live provider tests and both real collectors also passed. PostgreSQL sto
 four immutable membership revisions with exact raw hashes, and the catalog stored a
 NULL CIK for the Brazilian issuer rather than inventing an SEC identifier.
 
-## Remaining historical gate
+## Historical identity follow-up
 
-This acceptance completes the bounded historical-membership portion only. Before
-checking the combined roadmap item, the project must still:
+This report accepted the bounded historical-membership portion only. Follow-up
+commits `6331d64`, `030b506`, `54c0369`, and `19d8115` subsequently published the
+source-backed INSM/PETZ3 identifier and listing intervals, added PETZ3 lifecycle
+corrections, and proved exact identifier/listing resolution boundaries. See the
+[combined identity/listing/membership acceptance report](2026-08-23-historical-identity-listing-publication.md).
 
-1. publish source-backed historical ticker/identifier intervals for the selected US
-   and Brazil slices;
-2. publish source-backed listing, primary-listing, and lifecycle intervals for those
-   securities, including delisting or successor evidence where applicable;
-3. prove identifier and listing resolution at their own before/at correction
-   boundaries; and
-4. include the admitted membership rows in the final US/Brazil v0.2 bias audit and
-   research artifact fingerprints.
+The remaining requirement is to include these admitted rows in the final US/Brazil
+v0.2 bias audit and research artifact fingerprints.

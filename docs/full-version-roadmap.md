@@ -71,19 +71,20 @@ The following baseline limitations drive the version order:
   availability.
 - The bounded ALFRED CPIAUCSL ingestion work package and exact-boundary selection are
   live-accepted. ADRs, synthetic fixtures, and the durable metadata publication/
-  resolution boundary now exist; corporate actions, historically admitted exchange
-  calendars, and full historical source-backed identifier evidence remain
-  outstanding. Bounded official Nasdaq-100 and Ibovespa add/remove membership chains
-  are live-accepted without backward leakage. A bounded canonical
+  resolution boundary now exist. Bounded source-backed INSM/PETZ3 identifier,
+  listing, membership, and PETZ3 delisting revisions are live-accepted without
+  backward leakage. Corporate actions and historically admitted exchange calendars
+  remain outstanding. A bounded canonical
   BVMF/XNYS calendar publisher is live-accepted for current/reference evidence only;
   its historical publication/correction chronology remains unproven.
 - A bounded official B3 InstrumentsConsolidated path is implemented and live-accepted
   for exact current/reference Brazil identity/listing snapshots. It retains ISIN and
-  source trading intervals but does not provide long historical lifecycle coverage.
-  A separate B3 notice adapter supplies the accepted bounded Ibovespa membership
-  chain. A separate B3 listed-company corporate-action adapter now
-  retains source-native evidence, but the endpoint does not expose public publication
-  or correction-revision semantics, so canonical adjustments remain unadmitted. The
+  source trading intervals but does not provide broad historical lifecycle coverage.
+  Separate B3 notice adapters supply the accepted bounded Ibovespa membership chain
+  and PETZ3 trading-cessation correction. A separate B3 listed-company
+  corporate-action adapter now retains source-native evidence, but the endpoint does
+  not expose public publication or correction-revision semantics, so canonical
+  adjustments remain unadmitted. The
   bounded Yahoo `.SA` check supports a candidate price bridge but failed the
   security-master evidence gate; its separate terms/price-bridge review remains
   outstanding.
@@ -105,9 +106,9 @@ universe membership, revision, and historical-availability evidence.
 The product boundary remains medium- to long-term portfolio research, backtesting,
 simulation, and ML, not intraday trading. That scope does not waive source identity
 or availability requirements. Official B3 data now owns the bounded instrument
-identity/listing path; its public snapshot is not yet the lifecycle or delisting
-source required for historical-bias acceptance. Separate official B3 portfolio
-notices now supply one accepted Ibovespa membership add/remove chain. The
+identity/listing path. Separate official B3 portfolio and Plantao notices supply one
+accepted Ibovespa membership add/remove chain plus a PETZ3 trading-cessation
+correction with exact publication time. The
 listed-company endpoint supplies raw-first corporate-action evidence, but not enough
 publication/revision metadata for canonical adjustment publication. Yahoo remains
 separate price-bridge discovery.
@@ -122,9 +123,12 @@ availability boundary.
 The [historical index-membership report](acceptance/2026-08-23-index-membership-publication.md)
 records the bounded Nasdaq-100 and Ibovespa publication and exact decision-time
 boundaries.
-This is not full historical-fitness acceptance: the v0.2 work must still capture
-lifecycle evidence, integrate the accepted membership chain, and prove that the
-resulting Brazil slice is fit for its intended research use. A paid B3 or replacement
+The [historical identity/listing report](acceptance/2026-08-23-historical-identity-listing-publication.md)
+records clean source-backed INSM/PETZ3 publication, the PETZ3 lifecycle correction,
+and exact resolver boundaries. This is not full historical-fitness acceptance: the
+v0.2 work must still integrate the accepted identity and membership chains with the
+other required datasets and prove that the resulting Brazil slice is fit for its
+intended research use. A paid B3 or replacement
 provider may be reconsidered
 only if an explicit requirement exposes a gap, such as intraday coverage.
 
@@ -1878,15 +1882,15 @@ A version is not done because its happy path runs once. It is done when:
 
 ## First execution queue
 
-v0.1 is accepted. The next narrow queue is the v0.2 historical-truth boundary:
+v0.1 is accepted. Bounded historical identity/listing/membership publication is now
+accepted for one US and Brazil slice. The next narrow queue is the remaining v0.2
+historical-truth boundary:
 
-1. Integrate an admitted security-master source with the durable historical metadata
-   boundary and capture raw/source-backed evidence for one bounded US and Brazil slice.
-2. Add publication/effective/correction chronology to the bounded canonical
+1. Add publication/effective/correction chronology to the bounded canonical
    US/Brazil calendars, broaden BVMF hours coverage only with defensible historical
    evidence, then pass availability audits and pin the calendar/decision-clock
    policy into research artifacts.
-3. Revisit Yahoo `.SA` only as a separate price bridge after its terms, fixture,
+2. Revisit Yahoo `.SA` only as a separate price bridge after its terms, fixture,
    coverage, and availability checks pass.
 
 Do not start the general backtester while the v0.2 historical-truth gate remains

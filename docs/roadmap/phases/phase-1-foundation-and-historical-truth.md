@@ -42,8 +42,10 @@ gates pass.
   rows.
 - [x] Backup is restored into a clean root and all durable layers verify.
 - [x] Daily collection failures, partials, stale data, and disk pressure are visible.
-- [ ] One revised ALFRED series selects the correct vintage across exact boundaries.
-- [ ] Historical identifiers and universe membership preserve removed/delisted names.
+- [x] One revised ALFRED series selects the correct vintage across exact boundaries
+  (`31378be` and the bounded ALFRED acceptance report).
+- [x] Historical identifiers and universe membership preserve removed/delisted names
+  (`6331d64`, `030b506`, `54c0369`, `19d8115`, and the bounded identity report).
 - [ ] US and Brazil session/calendar behavior is explicit.
 - [ ] Split/dividend adjustment and FX calculations reproduce from pinned inputs.
 - [ ] Every dataset reachable by later backtests has a historical-fitness label.

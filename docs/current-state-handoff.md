@@ -68,9 +68,10 @@ publication/resolution boundary, five append-only PostgreSQL tables with
 revision-aware exclusion constraints and immutable record hashes, Docker/init and
 idempotent migration wiring, focused Go tests, and a real PostgreSQL harness. This
 is an accepted implementation boundary, not source admission or the v0.2 exit gate.
-Later slices admitted bounded membership and current/reference calendars, but no
-complete live historical identifier/listing source or historical calendar chronology
-has been admitted.
+Later slices admitted bounded membership and current/reference calendars. The
+follow-up historical identity slice now publishes source-backed INSM/PETZ3
+identifier/listing intervals and a PETZ3 trading-cessation correction with exact
+knowledge-time resolution. Historical calendar chronology remains unaccepted.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -87,11 +88,12 @@ and restrict redistribution.
 Yahoo `.SA` remains a candidate **price bridge only**, subject to that terms review.
 The bounded official B3 path now owns current/reference Brazil identity and listing
 evidence, including exact ISINs, through the raw-first collector and historical
-metadata boundary. It does not yet provide historical lifecycle, universe
-membership, or broad instrument-discovery coverage by itself. Separate official B3
-portfolio notices now provide one accepted Ibovespa add/remove chain. See the
+metadata boundary. Separate official B3 portfolio and Plantao notices now provide
+one accepted Ibovespa add/remove chain plus PETZ3 identifier/listing history through
+trading cessation. This is a bounded lifecycle proof, not broad instrument-discovery
+or complete market-history coverage. See the
 [B3 acceptance report](acceptance/2026-08-22-b3-instruments-security-master.md) and
-[membership publication report](acceptance/2026-08-23-index-membership-publication.md).
+[historical identity/listing publication report](acceptance/2026-08-23-historical-identity-listing-publication.md).
 The separate B3 listed-company endpoint now has a source-native corporate-action
 evidence adapter and live acceptance, but no canonical action publication: the
 endpoint does not expose a provider event ID, earliest public publication time,
@@ -134,7 +136,13 @@ to close the v0.2 calendar gate. See the
 - Latest index-membership provider boundary: `629e82b` (`feat(provider): parse official index membership notices`)
 - Latest index-membership publication boundary: `376d0e0` (`feat(data): publish historical universe memberships`)
 - Latest mixed-universe identity boundary: `9f488a9` (`fix(metadata): support issuers without SEC identifiers`)
-- Index-membership acceptance: [bounded Nasdaq-100/Ibovespa historical publication](acceptance/2026-08-23-index-membership-publication.md); historical identifier/listing lifecycle remains open
+- Latest correction-resolution boundary: `6331d64` (`fix(data): apply corrections before validity filters`)
+- Latest B3 lifecycle provider boundary: `030b506` (`feat(provider): parse B3 listing lifecycle notices`)
+- Latest index-backed identity boundary: `54c0369` (`feat(data): publish index-backed historical listings`)
+- Latest B3 lifecycle publication boundary: `19d8115` (`feat(data): publish B3 listing lifecycle corrections`)
+- Historical identity/listing/membership acceptance:
+  [bounded INSM/PETZ3 source-backed publication](acceptance/2026-08-23-historical-identity-listing-publication.md);
+  final combined bias audit remains open
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
@@ -878,15 +886,16 @@ The following are not accidental omissions:
 - Historical identity/listing/membership and calendar contracts now have a durable
   PostgreSQL publication/resolution boundary plus synthetic resolver fixtures. The
   bounded B3 public instrument source populates only exact current/reference
-  identifier/listing rows. A later bounded live slice publishes official Nasdaq-100
-  and Ibovespa add/remove membership revisions and passes exact before/at knowledge
-  boundaries, but historical identifier/listing lifecycle evidence is still open.
-  Neither slice is a full historical security-master or complete exchange-calendar
-  source.
+  identifier/listing rows. Later bounded live slices publish official Nasdaq-100 and
+  Ibovespa add/remove membership revisions, source-backed INSM/PETZ3 initial
+  identity/listing intervals, and a PETZ3 trading-cessation correction. Exact
+  before/at knowledge and delisting boundaries pass. This is not a full historical
+  security-master or complete exchange-calendar source.
 - No broad B3/CVM market instrument discovery or complete Brazilian market-data
   path. Yahoo `.SA` passed a bounded quote/price verification but failed the
-  security-master evidence gate; B3 lifecycle and long-history coverage remain
-  pending, while one bounded official Ibovespa membership chain is accepted. B3
+  security-master evidence gate; broad B3 lifecycle and long-history coverage remain
+  pending, while one bounded official PETZ3 identity/listing/membership chain is
+  accepted. B3
   listed-company corporate-action evidence is now
   retained source-natively, but its missing publication/revision semantics keep
   canonical adjustment publication blocked.
@@ -913,20 +922,17 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Extend the admitted B3 snapshot path and add the bounded US identity source with
-   historical identifier/listing lifecycle evidence. Historical membership is now
-   accepted for one Nasdaq-100 and one Ibovespa add/remove chain. For corporate
-   actions, obtain
-   authorized UP2DATA Corporate Action access (or a public versioned alternative),
-   then define delivery availability, revision semantics, and the corresponding
-   point-in-time bias audit.
-2. Obtain official archived/versioned US and Brazil calendar artifacts (or another
+1. Obtain official archived/versioned US and Brazil calendar artifacts (or another
    admitted source) that establish publication, effective, and correction chronology.
    Broaden BVMF coverage only with defensible historical hours intervals, then pass
    bounded availability audits and pin the accepted calendar/decision-clock policy
    into research artifact manifests.
-3. Complete the admitted B3-backed Brazil path with lifecycle and corporate-action
-   evidence, then integrate the accepted membership chain into the bias audit;
+2. Publish canonical corporate actions and reproducible adjustment artifacts. For
+   B3, obtain authorized UP2DATA Corporate Action access (or a public versioned
+   alternative), then define delivery availability, revision semantics, and the
+   corresponding point-in-time bias audit.
+3. Complete the remaining admitted B3-backed Brazil path and integrate the accepted
+   identity/listing/membership chain into the bias audit;
    revisit Yahoo `.SA` only as a price bridge after its
    terms, fixture, coverage, and availability checks pass. Do not start strategy or
    execution work by treating current-vintage backfills as historical truth.
