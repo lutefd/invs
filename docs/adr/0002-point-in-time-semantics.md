@@ -121,6 +121,12 @@ The official UP2DATA sample also supports a separate source-native lifecycle
 parser with control IDs and correction/action fields, but its product access and
 date-only publication semantics do not yet satisfy canonical availability or
 revision requirements. See the [UP2DATA sample evidence report](../acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
+A separate B3 market-calendar adapter now retains the official 2026 page's
+listed-market closure and special-hours notices with the raw response and
+receipt hash. It intentionally does not derive session instants from those
+notices: regular hours, weekend policy, availability/revision semantics, and
+canonical `TradingSession` publication remain separate acceptance gates. See the
+[B3 market-calendar evidence report](../acceptance/2026-08-23-b3-market-calendar-evidence.md).
 A bounded Yahoo `.SA` verification supports a candidate price bridge but failed the
 security-master evidence gate; Yahoo remains separate pending its own terms review.
 

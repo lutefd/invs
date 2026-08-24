@@ -68,7 +68,8 @@ publication/resolution boundary, five append-only PostgreSQL tables with
 revision-aware exclusion constraints and immutable record hashes, Docker/init and
 idempotent migration wiring, focused Go tests, and a real PostgreSQL harness. This
 is an accepted implementation boundary, not source admission or the v0.2 exit gate:
-no live identifier/listing/membership or exchange-calendar source has been admitted.
+no complete live identifier/listing/membership or canonical exchange-calendar
+source has been admitted.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -95,6 +96,11 @@ transport-agnostic lifecycle parser with event/control IDs, source dates,
 action state, and correction fields, but no product transport or production
 access dependency was added. See the [listed-company evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md)
 and [UP2DATA sample report](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
+The official B3 2026 market-calendar page now also has a raw-first,
+explicit-year evidence parser and live acceptance. It retains only listed-market
+closure and special-hours notices; regular hours, weekend policy, availability,
+revision semantics, and canonical `TradingSession` publication remain gated. See
+the [B3 market-calendar evidence report](acceptance/2026-08-23-b3-market-calendar-evidence.md).
 
 ## Current continuation boundary
 
@@ -112,6 +118,8 @@ and [UP2DATA sample report](acceptance/2026-08-23-b3-up2data-corporate-actions-e
 - Latest B3 listed-company corporate-action boundary: `0ad46c8` (`feat(provider): add bounded B3 corporate-action evidence`)
 - Latest B3 UP2DATA lifecycle parser boundary: `8b9916f` (`feat(provider): parse B3 UP2DATA corporate-action lifecycle`)
 - B3 UP2DATA sample acceptance: [source-native lifecycle evidence](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md); product access and canonical publication remain blocked
+- Latest B3 market-calendar evidence boundary: `6f61a84` (`feat(provider): parse B3 market-calendar evidence`)
+- B3 market-calendar acceptance: [source-native listed-market evidence](acceptance/2026-08-23-b3-market-calendar-evidence.md); canonical session publication remains blocked
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
@@ -855,8 +863,8 @@ The following are not accidental omissions:
 - Historical identity/listing/membership and calendar contracts now have a durable
   PostgreSQL publication/resolution boundary plus synthetic resolver fixtures. The
   bounded B3 public instrument source populates only exact current/reference
-  identifier/listing rows; it is not a full historical security-master or exchange
-  calendar source.
+  identifier/listing rows; it is not a full historical security-master or complete
+  exchange-calendar source.
 - No broad B3/CVM market instrument discovery or complete Brazilian market-data
   path. Yahoo `.SA` passed a bounded quote/price verification but failed the
   security-master evidence gate; B3 lifecycle, membership, and long-history
@@ -867,8 +875,8 @@ The following are not accidental omissions:
 - No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.
 - No canonical corporate-action collector or adjustment publication despite the
-  schema boundary existing; B3 listed-company evidence and the UP2DATA sample
-  parser remain source-native only.
+  schema boundary existing; B3 listed-company evidence, the UP2DATA sample
+  parser, and B3 market-calendar evidence remain source-native only.
 - Current security-to-issuer mappings are current YAML configuration, not historical
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
@@ -889,8 +897,10 @@ Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
    authorized UP2DATA Corporate Action access (or a public versioned alternative),
    then define delivery availability, revision semantics, and the corresponding
    point-in-time bias audit.
-2. Admit and publish bounded US/Brazil calendar inputs, then connect the pinned
-   decision-clock semantics to the research selection path.
+2. Combine B3's listed-market notices with official regular/special hours, define
+   weekend, availability, and revision semantics, then admit and publish bounded
+   US/Brazil calendar inputs and connect the pinned decision-clock semantics to
+   the research selection path.
 3. Complete the admitted B3-backed Brazil path with lifecycle/membership and
    corporate-action evidence; revisit Yahoo `.SA` only as a price bridge after its
    terms, fixture, coverage, and availability checks pass. Do not start strategy or
