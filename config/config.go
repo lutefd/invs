@@ -72,6 +72,8 @@ type Providers struct {
 	NasdaqMembership      IndexMembershipProvider    `yaml:"nasdaq_membership"`
 	NasdaqCalendarHistory HistoricalCalendarProvider `yaml:"nasdaq_calendar_history"`
 	B3CalendarHistory     HistoricalCalendarProvider `yaml:"b3_calendar_history"`
+	SECActionHistory      CorporateActionProvider    `yaml:"sec_action_history"`
+	B3ActionReplay        CorporateActionProvider    `yaml:"b3_action_replay"`
 	NYSE                  CalendarProvider           `yaml:"nyse"`
 	CVM                   CVMProvider                `yaml:"cvm"`
 }
@@ -155,6 +157,41 @@ type HistoricalCalendarEvent struct {
 	CloseLocal    string `yaml:"close_local"`
 	ResourceKind  string `yaml:"resource_kind"`
 	SourceLocator string `yaml:"source_locator"`
+}
+type CorporateActionProvider struct {
+	Enabled            bool                      `yaml:"enabled"`
+	AvailabilityPolicy string                    `yaml:"availability_policy"`
+	Resources          []CorporateActionResource `yaml:"resources"`
+	Actions            []CorporateActionVersion  `yaml:"actions"`
+}
+type CorporateActionResource struct {
+	Kind        string `yaml:"kind"`
+	URL         string `yaml:"url"`
+	SHA256      string `yaml:"sha256"`
+	ContentType string `yaml:"content_type"`
+}
+type CorporateActionVersion struct {
+	SecurityID         string `yaml:"security_id"`
+	SourceEventID      string `yaml:"source_event_id"`
+	Revision           int    `yaml:"revision"`
+	ActionStatus       string `yaml:"action_status"`
+	ActionType         string `yaml:"action_type"`
+	ObservedAt         string `yaml:"observed_at"`
+	ObservedPrecision  string `yaml:"observed_precision"`
+	PublishedAt        string `yaml:"published_at"`
+	PublishedPrecision string `yaml:"published_precision"`
+	AvailableAt        string `yaml:"available_at"`
+	EffectiveAt        string `yaml:"effective_at"`
+	EffectivePrecision string `yaml:"effective_precision"`
+	RecordDate         string `yaml:"record_date"`
+	PaymentDate        string `yaml:"payment_date"`
+	RatioNumerator     string `yaml:"ratio_numerator"`
+	RatioDenominator   string `yaml:"ratio_denominator"`
+	CashAmount         string `yaml:"cash_amount"`
+	Currency           string `yaml:"currency"`
+	TargetSecurityID   string `yaml:"target_security_id"`
+	ResourceKind       string `yaml:"resource_kind"`
+	SourceLocator      string `yaml:"source_locator"`
 }
 type IndexMembershipProvider struct {
 	Enabled    bool     `yaml:"enabled"`
@@ -456,6 +493,18 @@ func (c Config) Validate() error {
 			[]string{"www.b3.com.br", "b3.com.br"}, []string{"/data/files/"},
 		)...)
 	}
+	if c.Providers.SECActionHistory.Enabled {
+		errs = append(errs, validateCorporateActionProvider(
+			"providers.sec_action_history", c.Providers.SECActionHistory, c.Universe,
+			[]string{"www.sec.gov", "sec.gov"}, []string{"/Archives/edgar/data/"},
+		)...)
+	}
+	if c.Providers.B3ActionReplay.Enabled {
+		errs = append(errs, validateCorporateActionProvider(
+			"providers.b3_action_replay", c.Providers.B3ActionReplay, c.Universe,
+			[]string{"www.b3.com.br", "b3.com.br"}, []string{"/data/files/"},
+		)...)
+	}
 	if c.Providers.B3Membership.Enabled {
 		errs = append(errs, validateIndexMembershipProvider("providers.b3_membership", c.Providers.B3Membership, c.Universe, "BR", "B3", "BVMF", "BRL", "www.b3.com.br", "/pt_br/noticias/")...)
 	}
@@ -478,7 +527,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NasdaqCalendarHistory.Enabled && !c.Providers.B3CalendarHistory.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NasdaqCalendarHistory.Enabled && !c.Providers.B3CalendarHistory.Enabled && !c.Providers.SECActionHistory.Enabled && !c.Providers.B3ActionReplay.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -779,6 +828,154 @@ func validateHistoricalCalendarProvider(prefix string, provider HistoricalCalend
 		}
 	}
 	return errs
+}
+
+func validateCorporateActionProvider(prefix string, provider CorporateActionProvider, universe []Security, allowedHosts, pathPrefixes []string) []error {
+	var errs []error
+	if provider.AvailabilityPolicy != "source_publication" && provider.AvailabilityPolicy != "installation_receipt" {
+		errs = append(errs, fmt.Errorf("%s.availability_policy must be source_publication or installation_receipt", prefix))
+	}
+	if len(provider.Resources) == 0 || len(provider.Actions) == 0 {
+		errs = append(errs, fmt.Errorf("%s requires resources and actions", prefix))
+	}
+	securityIDs := make(map[string]struct{}, len(universe))
+	for _, security := range universe {
+		securityIDs[security.SecurityID] = struct{}{}
+	}
+	resourceKinds := make(map[string]struct{}, len(provider.Resources))
+	for index, resource := range provider.Resources {
+		resourcePrefix := fmt.Sprintf("%s.resources[%d]", prefix, index)
+		if !validSourceIdentifier(resource.Kind) {
+			errs = append(errs, fmt.Errorf("%s.kind must be a source identifier", resourcePrefix))
+		}
+		if _, duplicate := resourceKinds[resource.Kind]; duplicate {
+			errs = append(errs, fmt.Errorf("%s.kind duplicates %q", resourcePrefix, resource.Kind))
+		}
+		resourceKinds[resource.Kind] = struct{}{}
+		parsed, err := url.Parse(resource.URL)
+		if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Fragment != "" || parsed.Port() != "" || parsed.RawQuery != "" || !containsString(allowedHosts, parsed.Host) || !hasPathPrefix(parsed.EscapedPath(), pathPrefixes) {
+			errs = append(errs, fmt.Errorf("%s.url must be an admitted official HTTPS artifact", resourcePrefix))
+		}
+		if !validSHA256(resource.SHA256) {
+			errs = append(errs, fmt.Errorf("%s.sha256 must be a lowercase SHA-256", resourcePrefix))
+		}
+		if resource.ContentType != "application/zip" && resource.ContentType != "text/html; charset=utf-8" {
+			errs = append(errs, fmt.Errorf("%s.content_type must be application/zip or text/html; charset=utf-8", resourcePrefix))
+		}
+	}
+	nextRevision := make(map[string]int)
+	for index, action := range provider.Actions {
+		actionPrefix := fmt.Sprintf("%s.actions[%d]", prefix, index)
+		if _, exists := securityIDs[action.SecurityID]; !exists {
+			errs = append(errs, fmt.Errorf("%s.security_id must name a configured security", actionPrefix))
+		}
+		if strings.TrimSpace(action.SourceEventID) == "" || strings.TrimSpace(action.SourceEventID) != action.SourceEventID {
+			errs = append(errs, fmt.Errorf("%s.source_event_id is required and canonical", actionPrefix))
+		}
+		if action.Revision != nextRevision[action.SourceEventID] {
+			errs = append(errs, fmt.Errorf("%s.revision must be the next zero-based event revision", actionPrefix))
+		}
+		nextRevision[action.SourceEventID]++
+		if action.ActionStatus != "active" && action.ActionStatus != "cancelled" && action.ActionStatus != "unsupported" {
+			errs = append(errs, fmt.Errorf("%s.action_status is unsupported", actionPrefix))
+		}
+		if !containsString([]string{"split", "reverse_split", "cash_dividend", "stock_dividend", "spinoff", "merger", "acquisition", "delisting", "ticker_change", "exchange_change", "rights_issue", "other"}, action.ActionType) {
+			errs = append(errs, fmt.Errorf("%s.action_type is unsupported", actionPrefix))
+		}
+		observed, observedErr := validateConfiguredActionTime(action.ObservedAt, action.ObservedPrecision)
+		published, publishedErr := validateConfiguredActionTime(action.PublishedAt, action.PublishedPrecision)
+		effective, effectiveErr := validateConfiguredActionTime(action.EffectiveAt, action.EffectivePrecision)
+		if observedErr != nil {
+			errs = append(errs, fmt.Errorf("%s observed time: %w", actionPrefix, observedErr))
+		}
+		if publishedErr != nil {
+			errs = append(errs, fmt.Errorf("%s published time: %w", actionPrefix, publishedErr))
+		}
+		if effectiveErr != nil {
+			errs = append(errs, fmt.Errorf("%s effective time: %w", actionPrefix, effectiveErr))
+		}
+		_ = observed
+		_ = effective
+		if provider.AvailabilityPolicy == "source_publication" {
+			available, availableErr := canonicalUTCTimestamp(action.AvailableAt)
+			if availableErr != nil {
+				errs = append(errs, fmt.Errorf("%s.available_at must be canonical UTC", actionPrefix))
+			} else if publishedErr == nil && available.Before(published) {
+				errs = append(errs, fmt.Errorf("%s.available_at must not precede published_at", actionPrefix))
+			}
+		} else if action.AvailableAt != "" {
+			errs = append(errs, fmt.Errorf("%s.available_at must be empty for installation receipt", actionPrefix))
+		}
+		for field, value := range map[string]string{"record_date": action.RecordDate, "payment_date": action.PaymentDate} {
+			if value != "" {
+				if _, err := optionalISODate(value); err != nil {
+					errs = append(errs, fmt.Errorf("%s.%s must be an ISO date", actionPrefix, field))
+				}
+			}
+		}
+		for field, value := range map[string]string{"ratio_numerator": action.RatioNumerator, "ratio_denominator": action.RatioDenominator, "cash_amount": action.CashAmount} {
+			if value != "" && !validNonNegativeDecimal(value) {
+				errs = append(errs, fmt.Errorf("%s.%s must be a canonical nonnegative decimal", actionPrefix, field))
+			}
+		}
+		if action.Currency != "" && (len(action.Currency) != 3 || action.Currency != strings.ToUpper(action.Currency)) {
+			errs = append(errs, fmt.Errorf("%s.currency must be uppercase ISO-like", actionPrefix))
+		}
+		if action.TargetSecurityID != "" {
+			if _, err := uuid.Parse(action.TargetSecurityID); err != nil {
+				errs = append(errs, fmt.Errorf("%s.target_security_id must be a UUID", actionPrefix))
+			}
+		}
+		if _, exists := resourceKinds[action.ResourceKind]; !exists {
+			errs = append(errs, fmt.Errorf("%s.resource_kind must name a configured resource", actionPrefix))
+		}
+		if strings.TrimSpace(action.SourceLocator) == "" || strings.TrimSpace(action.SourceLocator) != action.SourceLocator {
+			errs = append(errs, fmt.Errorf("%s.source_locator is required and canonical", actionPrefix))
+		}
+		if action.ActionStatus == "active" && (action.ActionType == "split" || action.ActionType == "reverse_split") && (!validPositiveDecimal(action.RatioNumerator) || !validPositiveDecimal(action.RatioDenominator) || action.CashAmount != "" || action.Currency != "") {
+			errs = append(errs, fmt.Errorf("%s active split requires positive ratios and no cash fields", actionPrefix))
+		}
+		if action.ActionStatus == "active" && action.ActionType == "cash_dividend" && (action.CashAmount == "" || action.Currency == "" || action.RatioNumerator != "" || action.RatioDenominator != "") {
+			errs = append(errs, fmt.Errorf("%s active cash dividend requires cash fields and no ratio", actionPrefix))
+		}
+	}
+	return errs
+}
+
+func validateConfiguredActionTime(value, precision string) (time.Time, error) {
+	parsed, err := canonicalUTCTimestamp(value)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if precision != "date" && precision != "second" && precision != "unknown" {
+		return time.Time{}, errors.New("precision must be date, second, or unknown")
+	}
+	if precision == "date" && (parsed.Hour() != 0 || parsed.Minute() != 0 || parsed.Second() != 0) {
+		return time.Time{}, errors.New("date precision requires UTC midnight")
+	}
+	return parsed, nil
+}
+
+func validNonNegativeDecimal(value string) bool {
+	if value == "" {
+		return false
+	}
+	parts := strings.Split(value, ".")
+	if len(parts) > 2 || parts[0] == "" || (len(parts[0]) > 1 && parts[0][0] == '0') || (len(parts) == 2 && parts[1] == "") {
+		return false
+	}
+	for _, part := range parts {
+		for _, char := range part {
+			if char < '0' || char > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validPositiveDecimal(value string) bool {
+	return validNonNegativeDecimal(value) && strings.Trim(value, "0.") != ""
 }
 
 func canonicalUTCTimestamp(value string) (time.Time, error) {

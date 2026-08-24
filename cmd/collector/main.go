@@ -27,6 +27,7 @@ import (
 	"github.com/luisdourado/invs/internal/model"
 	"github.com/luisdourado/invs/internal/normalize"
 	"github.com/luisdourado/invs/internal/providers"
+	"github.com/luisdourado/invs/internal/providers/actionartifact"
 	"github.com/luisdourado/invs/internal/providers/alfred"
 	"github.com/luisdourado/invs/internal/providers/b3"
 	"github.com/luisdourado/invs/internal/providers/bcb"
@@ -198,7 +199,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, b3-calendar, b3-calendar-history, b3-membership, b3-listing-history, nasdaq-calendar-history, nasdaq-membership, nyse, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, sec-actions, prices, fred, alfred, bcb, b3, b3-action-replay, b3-calendar, b3-calendar-history, b3-membership, b3-listing-history, nasdaq-calendar-history, nasdaq-membership, nyse, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -326,7 +327,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-calendar": true, "b3-calendar-history": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-calendar-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "sec-actions": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-action-replay": true, "b3-calendar": true, "b3-calendar-history": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-calendar-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -356,6 +357,12 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "nasdaq-calendar-history" && !a.cfg.Providers.NasdaqCalendarHistory.Enabled {
 		return errors.New("Nasdaq historical calendar provider is disabled")
+	}
+	if source == "sec-actions" && !a.cfg.Providers.SECActionHistory.Enabled {
+		return errors.New("SEC action-history provider is disabled")
+	}
+	if source == "b3-action-replay" && !a.cfg.Providers.B3ActionReplay.Enabled {
+		return errors.New("B3 action-replay provider is disabled")
 	}
 	if source == "nyse" && !a.cfg.Providers.NYSE.Enabled {
 		return errors.New("NYSE calendar provider is disabled")
@@ -420,6 +427,16 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "nasdaq-calendar-history") && a.cfg.Providers.NasdaqCalendarHistory.Enabled {
 		if err := a.collectHistoricalCalendar(ctx, "nasdaq_calendar", "nasdaq-calendar-history", "XNAS", "America/New_York", a.cfg.Providers.NasdaqCalendarHistory); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "sec-actions") && a.cfg.Providers.SECActionHistory.Enabled {
+		if err := a.collectCorporateActionArtifacts(ctx, "sec", "sec-actions", a.cfg.Providers.SECActionHistory); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "b3-action-replay") && a.cfg.Providers.B3ActionReplay.Enabled {
+		if err := a.collectCorporateActionArtifacts(ctx, "b3", "b3-action-replay", a.cfg.Providers.B3ActionReplay); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -1187,6 +1204,151 @@ func (a *app) collectNYSECalendar(ctx context.Context) error {
 	m.Cursor["session_fingerprint"] = batch.Calendars[0].SessionFingerprint
 	m.Cursor["session_rows"] = len(batch.Sessions)
 	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+func (a *app) collectCorporateActionArtifacts(ctx context.Context, sourceCode, selector string, provider config.CorporateActionProvider) error {
+	m := metrics{
+		Source: sourceCode, RunKey: selector, StartedAt: a.nowUTC(),
+		Cursor: map[string]any{
+			"provider": sourceCode, "kind": "corporate_actions",
+			"availability_policy": provider.AvailabilityPolicy,
+		},
+	}
+	run, skip, err := a.start(ctx, &m, corporateActionRunInputs(sourceCode, provider))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+	requests := make([]actionartifact.ResourceRequest, 0, len(provider.Resources))
+	for _, resource := range provider.Resources {
+		requests = append(requests, actionartifact.ResourceRequest{
+			Kind: resource.Kind, URL: resource.URL,
+			ExpectedSHA256: resource.SHA256, ContentType: resource.ContentType,
+		})
+	}
+	result, collectErr := actionartifact.NewClient(a.http).Collect(ctx, sourceCode, requests)
+	storeErr := a.storeCorporateActionResources(ctx, &m, sourceCode, result.Resources)
+	if collectErr = errors.Join(collectErr, storeErr); collectErr != nil {
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	m.Received = len(result.Resources) + len(provider.Actions)
+	batch, compileErr := corporateActionHistoricalTruthBatch(run, provider, result.Resources)
+	if compileErr != nil {
+		return errors.Join(compileErr, a.finish(ctx, run, m, compileErr, nil, nil))
+	}
+	publisher, ok := a.metadata.(historicalTruthPublisher)
+	if !ok {
+		err := errors.New("canonical corporate-action publication requires a historical-truth metadata repository")
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	if err := publisher.PublishHistoricalTruth(ctx, batch); err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	m.OutputRows = len(batch.Actions)
+	m.Cursor["status"] = "canonical_published"
+	m.Cursor["action_versions"] = len(batch.Actions)
+	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+func (a *app) storeCorporateActionResources(ctx context.Context, m *metrics, source string, resources []providers.RawResource) error {
+	for _, resource := range resources {
+		fetchedAt := resourceFetchedAt(resource, m.StartedAt)
+		extension := "html"
+		if resource.ContentType == "application/zip" {
+			extension = "zip"
+		}
+		attributes := make(map[string]string, len(resource.ParserMetadata)+2)
+		for key, value := range resource.ParserMetadata {
+			attributes[key] = value
+		}
+		attributes["source_url"] = resource.URL
+		attributes["adapter_sha256"] = resource.SHA256
+		key := rawKey(source, "corporate-actions", resource.Kind, resource.Bytes, fetchedAt, extension)
+		logicalKey := fmt.Sprintf("%s/corporate-actions/resource=%s", source, resource.Kind)
+		if _, err := a.storeRaw(ctx, m, key, resource.Bytes, storage.RawMetadata{
+			Source: source, ContentType: resource.ContentType, FetchedAt: fetchedAt,
+			Attributes: attributes,
+		}, logicalKey, source+"/corporate-actions/"+resource.Kind, resource.SHA256); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func corporateActionHistoricalTruthBatch(run metadata.Run, provider config.CorporateActionProvider, resources []providers.RawResource) (metadata.HistoricalTruthBatch, error) {
+	byKind := make(map[string]providers.RawResource, len(resources))
+	for _, resource := range resources {
+		byKind[resource.Kind] = resource
+	}
+	batch := metadata.HistoricalTruthBatch{Actions: make([]metadata.CorporateActionVersion, 0, len(provider.Actions))}
+	for index, configured := range provider.Actions {
+		resource, exists := byKind[configured.ResourceKind]
+		if !exists {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("corporate action %d references missing resource %q", index, configured.ResourceKind)
+		}
+		observedAt, err := time.Parse(time.RFC3339, configured.ObservedAt)
+		if err != nil {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("corporate action %d observed_at: %w", index, err)
+		}
+		publishedAt, err := time.Parse(time.RFC3339, configured.PublishedAt)
+		if err != nil {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("corporate action %d published_at: %w", index, err)
+		}
+		effectiveAt, err := time.Parse(time.RFC3339, configured.EffectiveAt)
+		if err != nil {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("corporate action %d effective_at: %w", index, err)
+		}
+		fetchedAt := resourceFetchedAt(resource, run.StartedAt)
+		availableAt := fetchedAt
+		if provider.AvailabilityPolicy == "source_publication" {
+			availableAt, err = time.Parse(time.RFC3339, configured.AvailableAt)
+			if err != nil {
+				return metadata.HistoricalTruthBatch{}, fmt.Errorf("corporate action %d available_at: %w", index, err)
+			}
+		}
+		normalizer := actionartifact.ParserVersion
+		locator := configured.SourceLocator
+		batch.Actions = append(batch.Actions, metadata.CorporateActionVersion{
+			SchemaVersion: metadata.CorporateActionSchemaVersion,
+			ID: uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
+				"corporate-action", run.DataSourceID, configured.SourceEventID,
+				strconv.Itoa(configured.Revision),
+			}, "/"))).String(),
+			SecurityID: configured.SecurityID, SourceEventID: configured.SourceEventID,
+			Revision: configured.Revision, ActionStatus: configured.ActionStatus,
+			ActionType: configured.ActionType, ObservedAt: observedAt,
+			ObservedPrecision: configured.ObservedPrecision, PublishedAt: publishedAt,
+			PublishedPrecision: configured.PublishedPrecision, AvailableAt: availableAt,
+			EffectiveAt: effectiveAt, EffectivePrecision: configured.EffectivePrecision,
+			RecordDate:       optionalStringPointer(configured.RecordDate),
+			PaymentDate:      optionalStringPointer(configured.PaymentDate),
+			RatioNumerator:   optionalStringPointer(configured.RatioNumerator),
+			RatioDenominator: optionalStringPointer(configured.RatioDenominator),
+			CashAmount:       optionalStringPointer(configured.CashAmount),
+			Currency:         optionalStringPointer(configured.Currency),
+			TargetSecurityID: optionalStringPointer(configured.TargetSecurityID),
+			SourceReference:  resource.URL + "#" + configured.SourceLocator,
+			RecordedAt:       fetchedAt,
+			Provenance: metadata.CorporateActionProvenance{
+				DataSourceID: run.DataSourceID, IngestionRunID: run.ID,
+				RawPayloadHash: resource.SHA256, RawRecordLocator: &locator,
+				IngestedAt: fetchedAt, NormalizerVersion: &normalizer,
+			},
+		})
+	}
+	if err := metadata.ValidateHistoricalTruthBatch(batch); err != nil {
+		return metadata.HistoricalTruthBatch{}, err
+	}
+	return batch, nil
+}
+
+func optionalStringPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func (a *app) publishCalendar(ctx context.Context, batch metadata.HistoricalTruthBatch) error {
@@ -2420,6 +2582,42 @@ func historicalCalendarRunInputs(source, mic string, provider config.HistoricalC
 			CalendarRegularOpen: strings.TrimSpace(provider.RegularOpenLocal), CalendarRegularClose: strings.TrimSpace(provider.RegularCloseLocal),
 			CalendarArtifactVersions: versions, Format: "official_artifacts_with_declarative_transcription",
 			Vintage: "historical_source_publication",
+		},
+	}
+}
+
+func corporateActionRunInputs(source string, provider config.CorporateActionProvider) metadata.RunInputs {
+	resources := make([]metadata.CorporateActionResourceInput, 0, len(provider.Resources))
+	for _, resource := range provider.Resources {
+		resources = append(resources, metadata.CorporateActionResourceInput{
+			Kind: resource.Kind, URL: resource.URL, SHA256: resource.SHA256,
+			ContentType: resource.ContentType,
+		})
+	}
+	versions := make([]metadata.CorporateActionVersionInput, 0, len(provider.Actions))
+	for _, action := range provider.Actions {
+		versions = append(versions, metadata.CorporateActionVersionInput{
+			SecurityID: action.SecurityID, SourceEventID: action.SourceEventID,
+			Revision: action.Revision, ActionStatus: action.ActionStatus,
+			ActionType: action.ActionType, ObservedAt: action.ObservedAt,
+			ObservedPrecision: action.ObservedPrecision, PublishedAt: action.PublishedAt,
+			PublishedPrecision: action.PublishedPrecision, AvailableAt: action.AvailableAt,
+			EffectiveAt: action.EffectiveAt, EffectivePrecision: action.EffectivePrecision,
+			RecordDate: action.RecordDate, PaymentDate: action.PaymentDate,
+			RatioNumerator: action.RatioNumerator, RatioDenominator: action.RatioDenominator,
+			CashAmount: action.CashAmount, Currency: action.Currency,
+			TargetSecurityID: action.TargetSecurityID, ResourceKind: action.ResourceKind,
+			SourceLocator: action.SourceLocator,
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion, Source: source,
+		Provider: metadata.ProviderInputs{
+			Name: source + "-corporate-actions", Kind: "corporate_actions",
+			CorporateActionPolicy:    provider.AvailabilityPolicy,
+			CorporateActionResources: resources, CorporateActionVersions: versions,
+			Format:  "exact_artifacts_with_source_located_transcription",
+			Vintage: provider.AvailabilityPolicy,
 		},
 	}
 }

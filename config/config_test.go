@@ -352,6 +352,74 @@ func TestValidateHistoricalCalendarArtifacts(t *testing.T) {
 	}
 }
 
+func validCorporateActionProvider() CorporateActionProvider {
+	return CorporateActionProvider{
+		Enabled: true, AvailabilityPolicy: "source_publication",
+		Resources: []CorporateActionResource{{
+			Kind: "filing", URL: "https://www.sec.gov/Archives/edgar/data/320193/action.html",
+			SHA256: strings.Repeat("a", 64), ContentType: "text/html; charset=utf-8",
+		}},
+		Actions: []CorporateActionVersion{{
+			SecurityID:    "469fc20f-7d4b-45bb-b827-05f8410e71aa",
+			SourceEventID: "0000320193-20-000060/exhibit-99.1/four-for-one-split",
+			Revision:      0, ActionStatus: "active", ActionType: "split",
+			ObservedAt: "2020-08-31T00:00:00Z", ObservedPrecision: "date",
+			PublishedAt: "2020-07-30T22:55:04Z", PublishedPrecision: "second",
+			AvailableAt: "2020-07-30T22:55:04Z",
+			EffectiveAt: "2020-08-28T00:00:00Z", EffectivePrecision: "date",
+			RatioNumerator: "4", RatioDenominator: "1",
+			ResourceKind: "filing", SourceLocator: "exhibit-99.1/four-for-one-split",
+		}},
+	}
+}
+
+func TestValidateCorporateActionArtifacts(t *testing.T) {
+	c := validConfig()
+	c.Providers.SECActionHistory = validCorporateActionProvider()
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valid SEC action artifacts: %v", err)
+	}
+
+	replay := validConfig()
+	provider := validCorporateActionProvider()
+	provider.AvailabilityPolicy = "installation_receipt"
+	provider.Actions[0].AvailableAt = ""
+	provider.Resources[0].URL = "https://www.b3.com.br/data/files/AA/action.zip"
+	provider.Resources[0].ContentType = "application/zip"
+	replay.Providers.B3ActionReplay = provider
+	if err := replay.Validate(); err != nil {
+		t.Fatalf("valid B3 action replay: %v", err)
+	}
+
+	for name, mutate := range map[string]func(*CorporateActionProvider){
+		"untrusted URL": func(provider *CorporateActionProvider) {
+			provider.Resources[0].URL = "https://example.test/action.html"
+		},
+		"bad revision": func(provider *CorporateActionProvider) {
+			provider.Actions[0].Revision = 1
+		},
+		"unknown resource": func(provider *CorporateActionProvider) {
+			provider.Actions[0].ResourceKind = "other"
+		},
+		"missing ratio": func(provider *CorporateActionProvider) {
+			provider.Actions[0].RatioNumerator = ""
+		},
+		"noncanonical availability": func(provider *CorporateActionProvider) {
+			provider.Actions[0].AvailableAt = "2020-07-30T18:55:04-04:00"
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := validConfig()
+			provider := validCorporateActionProvider()
+			mutate(&provider)
+			candidate.Providers.SECActionHistory = provider
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid corporate-action artifact config accepted")
+			}
+		})
+	}
+}
+
 func TestValidateHistoricalCalendarAdmitsCanonicalNasdaqNoticeURL(t *testing.T) {
 	c := validConfig()
 	provider := validHistoricalCalendarProvider()

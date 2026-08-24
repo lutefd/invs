@@ -20,6 +20,7 @@ import (
 	"github.com/luisdourado/invs/config"
 	"github.com/luisdourado/invs/internal/metadata"
 	"github.com/luisdourado/invs/internal/model"
+	"github.com/luisdourado/invs/internal/providers"
 	"github.com/luisdourado/invs/internal/providers/b3"
 	"github.com/luisdourado/invs/internal/providers/cvm"
 	"github.com/luisdourado/invs/internal/storage"
@@ -494,8 +495,26 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	if got := listingHistoryInputs.Provider.ListingHistoryNotices[0]; got.SecurityID != "security-petz" || got.Ticker != "PETZ3" || got.TradingName != "PETZ" || got.ValidFrom != "2021-09-06T03:00:00Z" {
 		t.Fatalf("listing-history notice input = %+v", got)
 	}
+	actionInputs := corporateActionRunInputs("sec", config.CorporateActionProvider{
+		AvailabilityPolicy: "source_publication",
+		Resources: []config.CorporateActionResource{{
+			Kind: "filing", URL: "https://www.sec.gov/Archives/edgar/data/320193/action.html",
+			SHA256: testRawHash, ContentType: "text/html; charset=utf-8",
+		}},
+		Actions: []config.CorporateActionVersion{{
+			SecurityID: testSecurityID, SourceEventID: "filing/split", ActionStatus: "active",
+			ActionType: "split", ObservedAt: "2020-08-31T00:00:00Z", ObservedPrecision: "date",
+			PublishedAt: "2020-07-30T22:55:04Z", PublishedPrecision: "second",
+			AvailableAt: "2020-07-30T22:55:04Z", EffectiveAt: "2020-08-28T00:00:00Z",
+			EffectivePrecision: "date", RatioNumerator: "4", RatioDenominator: "1",
+			ResourceKind: "filing", SourceLocator: "exhibit/split",
+		}},
+	})
+	if actionInputs.Provider.CorporateActionPolicy != "source_publication" || len(actionInputs.Provider.CorporateActionResources) != 1 || len(actionInputs.Provider.CorporateActionVersions) != 1 {
+		t.Fatalf("corporate-action run inputs = %+v", actionInputs)
+	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs, historicalCalendarInputs, membershipInputs, listingHistoryInputs} {
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs, historicalCalendarInputs, membershipInputs, listingHistoryInputs, actionInputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -503,6 +522,46 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		if got.RunInputs.CanonicalJSONSHA256 == "" {
 			t.Fatalf("%s run input hash is empty", inputs.Source)
 		}
+	}
+}
+
+func TestCorporateActionHistoricalTruthBatchAppliesAvailabilityPolicy(t *testing.T) {
+	fetchedAt := time.Date(2026, 8, 24, 4, 0, 0, 0, time.UTC)
+	body := []byte("<html>exact action</html>")
+	resource := providers.NewRawResource("filing", "action", body, fetchedAt, "text/html; charset=utf-8")
+	resource.URL = "https://www.sec.gov/Archives/edgar/data/320193/action.html"
+	provider := config.CorporateActionProvider{
+		AvailabilityPolicy: "source_publication",
+		Actions: []config.CorporateActionVersion{{
+			SecurityID: testSecurityID, SourceEventID: "filing/split", Revision: 0,
+			ActionStatus: "active", ActionType: "split",
+			ObservedAt: "2020-08-31T00:00:00Z", ObservedPrecision: "date",
+			PublishedAt: "2020-07-30T22:55:04Z", PublishedPrecision: "second",
+			AvailableAt: "2020-07-30T22:55:04Z", EffectiveAt: "2020-08-28T00:00:00Z",
+			EffectivePrecision: "date", RatioNumerator: "4", RatioDenominator: "1",
+			ResourceKind: "filing", SourceLocator: "exhibit/split",
+		}},
+	}
+	batch, err := corporateActionHistoricalTruthBatch(testRun(), provider, []providers.RawResource{resource})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Actions) != 1 {
+		t.Fatalf("actions = %+v", batch.Actions)
+	}
+	action := batch.Actions[0]
+	if action.AvailableAt.Format(time.RFC3339) != "2020-07-30T22:55:04Z" || !action.Provenance.IngestedAt.Equal(fetchedAt) || action.Provenance.RawPayloadHash != providers.SHA256(body) {
+		t.Fatalf("SEC action availability/provenance = %+v", action)
+	}
+
+	provider.AvailabilityPolicy = "installation_receipt"
+	provider.Actions[0].AvailableAt = ""
+	batch, err = corporateActionHistoricalTruthBatch(testRun(), provider, []providers.RawResource{resource})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !batch.Actions[0].AvailableAt.Equal(fetchedAt) {
+		t.Fatalf("installation availability = %s, want %s", batch.Actions[0].AvailableAt, fetchedAt)
 	}
 }
 

@@ -38,32 +38,35 @@ type RunInputs struct {
 }
 
 type ProviderInputs struct {
-	Name                     string                    `json:"name"`
-	Kind                     string                    `json:"kind"`
-	ConfiguredUniverseCount  int                       `json:"configured_universe_count,omitempty"`
-	ConfiguredSeriesCount    int                       `json:"configured_series_count,omitempty"`
-	SecurityRequests         []SecurityRequest         `json:"security_requests,omitempty"`
-	IssuerRequests           []IssuerRequest           `json:"issuer_requests,omitempty"`
-	SeriesIDs                []string                  `json:"series_ids,omitempty"`
-	Series                   []BCBSeriesInput          `json:"series,omitempty"`
-	HistoricalSeries         []ALFREDSeriesInput       `json:"historical_series,omitempty"`
-	B3ReportDate             string                    `json:"b3_report_date,omitempty"`
-	B3Instruments            []B3InstrumentInput       `json:"b3_instruments,omitempty"`
-	CalendarYear             int                       `json:"calendar_year,omitempty"`
-	CalendarMIC              string                    `json:"calendar_mic,omitempty"`
-	CalendarCoverageStart    string                    `json:"calendar_coverage_start,omitempty"`
-	CalendarCoverageEnd      string                    `json:"calendar_coverage_end,omitempty"`
-	CalendarRegularOpen      string                    `json:"calendar_regular_open,omitempty"`
-	CalendarRegularClose     string                    `json:"calendar_regular_close,omitempty"`
-	CalendarArtifactVersions []CalendarArtifactInput   `json:"calendar_artifact_versions,omitempty"`
-	MembershipUniverseID     string                    `json:"membership_universe_id,omitempty"`
-	MembershipNotices        []string                  `json:"membership_notices,omitempty"`
-	MembershipSecurities     []MembershipSecurityInput `json:"membership_securities,omitempty"`
-	ListingHistoryNotices    []ListingHistoryInput     `json:"listing_history_notices,omitempty"`
-	Format                   string                    `json:"format,omitempty"`
-	Vintage                  string                    `json:"vintage,omitempty"`
-	PageSize                 int                       `json:"page_size,omitempty"`
-	OutputType               int                       `json:"output_type,omitempty"`
+	Name                     string                         `json:"name"`
+	Kind                     string                         `json:"kind"`
+	ConfiguredUniverseCount  int                            `json:"configured_universe_count,omitempty"`
+	ConfiguredSeriesCount    int                            `json:"configured_series_count,omitempty"`
+	SecurityRequests         []SecurityRequest              `json:"security_requests,omitempty"`
+	IssuerRequests           []IssuerRequest                `json:"issuer_requests,omitempty"`
+	SeriesIDs                []string                       `json:"series_ids,omitempty"`
+	Series                   []BCBSeriesInput               `json:"series,omitempty"`
+	HistoricalSeries         []ALFREDSeriesInput            `json:"historical_series,omitempty"`
+	B3ReportDate             string                         `json:"b3_report_date,omitempty"`
+	B3Instruments            []B3InstrumentInput            `json:"b3_instruments,omitempty"`
+	CalendarYear             int                            `json:"calendar_year,omitempty"`
+	CalendarMIC              string                         `json:"calendar_mic,omitempty"`
+	CalendarCoverageStart    string                         `json:"calendar_coverage_start,omitempty"`
+	CalendarCoverageEnd      string                         `json:"calendar_coverage_end,omitempty"`
+	CalendarRegularOpen      string                         `json:"calendar_regular_open,omitempty"`
+	CalendarRegularClose     string                         `json:"calendar_regular_close,omitempty"`
+	CalendarArtifactVersions []CalendarArtifactInput        `json:"calendar_artifact_versions,omitempty"`
+	CorporateActionPolicy    string                         `json:"corporate_action_availability_policy,omitempty"`
+	CorporateActionResources []CorporateActionResourceInput `json:"corporate_action_resources,omitempty"`
+	CorporateActionVersions  []CorporateActionVersionInput  `json:"corporate_action_versions,omitempty"`
+	MembershipUniverseID     string                         `json:"membership_universe_id,omitempty"`
+	MembershipNotices        []string                       `json:"membership_notices,omitempty"`
+	MembershipSecurities     []MembershipSecurityInput      `json:"membership_securities,omitempty"`
+	ListingHistoryNotices    []ListingHistoryInput          `json:"listing_history_notices,omitempty"`
+	Format                   string                         `json:"format,omitempty"`
+	Vintage                  string                         `json:"vintage,omitempty"`
+	PageSize                 int                            `json:"page_size,omitempty"`
+	OutputType               int                            `json:"output_type,omitempty"`
 }
 
 type SecurityRequest struct {
@@ -146,6 +149,37 @@ type CalendarArtifactEventInput struct {
 	CloseLocal    string `json:"close_local,omitempty"`
 	ResourceKind  string `json:"resource_kind"`
 	SourceLocator string `json:"source_locator"`
+}
+
+type CorporateActionResourceInput struct {
+	Kind        string `json:"kind"`
+	URL         string `json:"url"`
+	SHA256      string `json:"sha256"`
+	ContentType string `json:"content_type"`
+}
+
+type CorporateActionVersionInput struct {
+	SecurityID         string `json:"security_id"`
+	SourceEventID      string `json:"source_event_id"`
+	Revision           int    `json:"revision"`
+	ActionStatus       string `json:"action_status"`
+	ActionType         string `json:"action_type"`
+	ObservedAt         string `json:"observed_at"`
+	ObservedPrecision  string `json:"observed_precision"`
+	PublishedAt        string `json:"published_at"`
+	PublishedPrecision string `json:"published_precision"`
+	AvailableAt        string `json:"available_at,omitempty"`
+	EffectiveAt        string `json:"effective_at"`
+	EffectivePrecision string `json:"effective_precision"`
+	RecordDate         string `json:"record_date,omitempty"`
+	PaymentDate        string `json:"payment_date,omitempty"`
+	RatioNumerator     string `json:"ratio_numerator,omitempty"`
+	RatioDenominator   string `json:"ratio_denominator,omitempty"`
+	CashAmount         string `json:"cash_amount,omitempty"`
+	Currency           string `json:"currency,omitempty"`
+	TargetSecurityID   string `json:"target_security_id,omitempty"`
+	ResourceKind       string `json:"resource_kind"`
+	SourceLocator      string `json:"source_locator"`
 }
 
 type canonicalRunInputs struct {
@@ -402,7 +436,7 @@ func (r *Repository) SyncCatalog(ctx context.Context, cfg config.Config) error {
 	}
 	defer tx.Rollback(ctx)
 	for _, s := range sources {
-		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled, "alfred": cfg.Providers.ALFRED.Enabled, "bcb": cfg.Providers.BCB.Enabled, "b3": cfg.Providers.B3.Enabled || cfg.Providers.B3Membership.Enabled || cfg.Providers.B3ListingHistory.Enabled, "b3_calendar": cfg.Providers.B3CalendarHistory.Enabled, "nasdaq": cfg.Providers.NasdaqMembership.Enabled, "nasdaq_calendar": cfg.Providers.NasdaqCalendarHistory.Enabled, "nyse": cfg.Providers.NYSE.Enabled, "cvm": cfg.Providers.CVM.Enabled}[s.code]
+		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled || cfg.Providers.SECActionHistory.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled, "alfred": cfg.Providers.ALFRED.Enabled, "bcb": cfg.Providers.BCB.Enabled, "b3": cfg.Providers.B3.Enabled || cfg.Providers.B3Membership.Enabled || cfg.Providers.B3ListingHistory.Enabled || cfg.Providers.B3ActionReplay.Enabled, "b3_calendar": cfg.Providers.B3CalendarHistory.Enabled, "nasdaq": cfg.Providers.NasdaqMembership.Enabled, "nasdaq_calendar": cfg.Providers.NasdaqCalendarHistory.Enabled, "nyse": cfg.Providers.NYSE.Enabled, "cvm": cfg.Providers.CVM.Enabled}[s.code]
 		_, err = tx.Exec(ctx, `INSERT INTO data_sources(code,name,source_kind,base_url,enabled) VALUES($1,$2,$3,$4,$5) ON CONFLICT(code) DO UPDATE SET name=excluded.name,source_kind=excluded.source_kind,base_url=excluded.base_url,enabled=excluded.enabled,updated_at=now()`, s.code, s.name, s.kind, s.baseURL, enabled)
 		if err != nil {
 			return fmt.Errorf("upsert data source %s: %w", s.code, err)

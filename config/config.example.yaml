@@ -81,6 +81,18 @@ providers:
     regular_open_local: "10:00"
     regular_close_local: "17:00"
     versions: []
+  # Exact-hash action artifacts use declarative, source-located transcriptions.
+  # SEC uses EDGAR acceptance time; B3 replay uses local receipt time only.
+  sec_action_history:
+    enabled: false
+    availability_policy: source_publication
+    resources: []
+    actions: []
+  b3_action_replay:
+    enabled: false
+    availability_policy: installation_receipt
+    resources: []
+    actions: []
   b3_listing_history:
     enabled: false
     notices: []
