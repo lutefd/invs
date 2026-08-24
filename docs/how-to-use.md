@@ -90,6 +90,20 @@ To verify the v0.2 historical metadata boundary against PostgreSQL, run
 `make historical-truth-db-test`. It uses isolated fixtures and a disposable fresh
 database; it does not admit live security-master or calendar data.
 
+To publish or revalidate a complete bounded point-in-time bias audit, use a strict
+specification whose evidence paths and SHA-256 values are already pinned:
+
+```sh
+make bias-audit AUDIT_SPEC=/absolute/path/spec.json AUDITS_ROOT=/absolute/path/artifacts
+make bias-audit-validate AUDIT_MANIFEST=/absolute/path/artifacts/artifact_id=UUID/manifest.json
+```
+
+The audit command is dependency-free on the host. It refuses missing US/Brazil
+categories, non-exact before/at/after clocks, current-only or installation-replay
+inputs relabelled as historically safe, unsupported actions claimed eligible, and
+changed evidence bytes. The accepted v0.2 example and fitness decisions are in the
+[bias-audit report](acceptance/2026-08-24-v0.2-point-in-time-bias-audit.md).
+
 To stop containers while retaining named PostgreSQL and Grafana volumes:
 
 ```sh

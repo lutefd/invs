@@ -54,7 +54,8 @@ explicit destination backup/restore scripts, and a clean-root PostgreSQL/data
 restore drill. The v0.1 foundation and operations gate is now accepted at
 `63d479d`; the exact evidence is in the
 [v0.1 foundation acceptance report](acceptance/2026-08-13-v0.1-foundation.md).
-The next work is v0.2 historical truth, not strategy or execution logic.
+The v0.2 historical-truth phase is now accepted; strategy and execution logic remain
+later roadmap boundaries.
 
 The first v0.2 contract slice landed in `4d483ac`: ADRs 0006 and 0007 define
 source-backed historical identity/universe semantics and versioned exchange
@@ -83,8 +84,9 @@ input pins. The SEC follow-up now publishes accession-keyed filing metadata from
 submissions, uses exact EDGAR acceptance as availability, preserves source civil
 dates and nested primary documents, and exposes the rows through strict
 `filings_as_of`. The official B3 COTAHIST follow-up closes the Brazil price bridge
-with exact ticker+ISIN mapping, raw prices, and receipt-time availability; only the
-combined bias audit remains.
+with exact ticker+ISIN mapping, raw prices, and receipt-time availability. The final
+combined audit now passes 13 exact US/Brazil probes, verifies 16 retained artifacts,
+and closes v0.2 without adding a strategy or backtester.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -167,6 +169,8 @@ to close the v0.2 calendar gate. See the
 - SEC filing acceptance: [bounded accession identity and exact acceptance-time selection](acceptance/2026-08-24-sec-filing-publication.md)
 - Latest B3 COTAHIST provider/publication boundaries: `47c01de`, `317be53`, and `167ce2a`
 - B3 price-bridge acceptance: [bounded official raw PETZ3 installation replay](acceptance/2026-08-24-b3-cotahist-price-bridge.md)
+- Latest point-in-time audit boundaries: `1c833ee`, `08a05ae`, and `0bfdc27`
+- v0.2 acceptance: [bounded US/Brazil bias audit with explicit fitness labels](acceptance/2026-08-24-v0.2-point-in-time-bias-audit.md)
 - Latest index-membership provider boundary: `629e82b` (`feat(provider): parse official index membership notices`)
 - Latest index-membership publication boundary: `376d0e0` (`feat(data): publish historical universe memberships`)
 - Latest mixed-universe identity boundary: `9f488a9` (`fix(metadata): support issuers without SEC identifiers`)
@@ -176,11 +180,29 @@ to close the v0.2 calendar gate. See the
 - Latest B3 lifecycle publication boundary: `19d8115` (`feat(data): publish B3 listing lifecycle corrections`)
 - Historical identity/listing/membership acceptance:
   [bounded INSM/PETZ3 source-backed publication](acceptance/2026-08-23-historical-identity-listing-publication.md);
-  final combined bias audit remains open
+  final combined bias audit accepted
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
   handoff baseline, but it is no longer the current repository boundary.
+
+## v0.2 final validation
+
+The final exit ladder passed on 2026-08-24:
+
+- `make test`: all Go tests and vet, 19 JSON Schemas, 85 Python tests, and Ruff;
+- `make historical-truth-db-test`: apply/replay, append-only constraints,
+  transactional rollback, and fresh-image migration wiring;
+- `make notebook` and `make dashboard-smoke`;
+- `make migrate` against the normal PostgreSQL service;
+- `make reconcile`: `issues=0` after acceptance-only identity run manifests were
+  moved intact to the retained historical-identity archive; and
+- `make health`: PostgreSQL, Jupyter, and Grafana healthy.
+
+The final bias-audit artifact is
+`a992011c-80ab-56ce-b851-6f5f1ce46705`, with manifest SHA-256
+`06de346b152c60fe9590552365ff333f7599cabbb3b54a0e892a34f8453ab5e2`.
+Its exact replay and independent validation both passed.
 
 ## Historical implementation handoff point
 
@@ -927,8 +949,8 @@ The following are not accidental omissions:
 - No full historical point-in-time guarantee for current Yahoo, FRED, or BCB pulls.
   Historical vintage providers and publication-time evidence are required before a
   serious backtest claim.
-- The bounded ALFRED CPIAUCSL work package is live-accepted; broader v0.2 historical
-  truth is not accepted.
+- The bounded ALFRED CPIAUCSL work package and combined v0.2 historical-truth audit
+  are accepted. This is still bounded evidence, not broad all-market coverage.
 - Historical identity/listing/membership and calendar contracts now have a durable
   PostgreSQL publication/resolution boundary plus synthetic resolver fixtures. The
   bounded B3 public instrument source populates only exact current/reference
@@ -976,10 +998,7 @@ The following are not accidental omissions:
 ## Exact next actions
 
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
-`63d479d`; the nearest cohesive v0.2 units are:
-
-1. Integrate the accepted identity, membership, calendar, macro, action, FX, filing,
-   and B3 COTAHIST price boundaries into the bounded US/Brazil bias audit. Keep
-   COTAHIST installation-replay only and Yahoo `.SA` unadmitted. Do not start
-   strategy or execution work by treating receipt-time backfills as historical
-   truth.
+`63d479d` and v0.2 at `0bfdc27`. The next cohesive unit is the v0.3 feature-platform
+entry slice: use the accepted fitness labels and decision clocks, keep receipt-time
+prices installation-replay only, and do not pull v0.5 strategy/backtester behavior
+forward.

@@ -54,11 +54,14 @@ scale triggers, security, documentation, and universal definition of done.
 
 ## Current execution focus
 
-v0.1 is accepted at `63d479d`. The active planned version is now v0.2; its
-bounded ALFRED work package is accepted, but the historical-truth version gate is
-not. The historical-contract slice in `4d483ac` added ADRs 0006 and 0007, strict
-identity/listing/membership/calendar schemas, and executable synthetic US/Brazil
-fixtures. The durable publication/resolution boundary and PostgreSQL migration
+v0.1 is accepted at `63d479d`, and v0.2 is accepted at `0bfdc27`. The retained
+[US/Brazil point-in-time bias audit](../acceptance/2026-08-24-v0.2-point-in-time-bias-audit.md)
+passes 13 exact boundary probes and verifies 16 evidence artifacts while keeping
+receipt-time prices installation-replay only and unsupported actions blocking. The
+next planned version is v0.3; no strategy or backtester scope was pulled into the
+v0.2 exit work. The historical-contract slice in `4d483ac` added ADRs 0006 and 0007,
+strict identity/listing/membership/calendar schemas, and executable synthetic
+US/Brazil fixtures. The durable publication/resolution boundary and PostgreSQL migration
 harness landed in `d963180`; this establishes a tested storage/API boundary but
 is not the complete v0.2 exit gate. The bounded B3 public
 `InstrumentsConsolidatedFile` slice landed in `c43204f` with exact ticker/ISIN
@@ -110,10 +113,9 @@ The official B3 COTAHIST follow-up is accepted in the
 It publishes exact ticker+ISIN-allowlisted, unadjusted PETZ3 prices from a closed
 annual archive with receipt-time availability. Yahoo `.SA` is no longer required by
 the bounded path and remains unadmitted for unattended raw retention.
-The next unaccepted cohesive units are:
-
-1. complete the bounded US/Brazil point-in-time bias audits across the accepted
-   identity, membership, calendar, macro, action, FX, filing, and price boundaries.
+The next unaccepted cohesive unit belongs to v0.3: define and publish the first
+research-grade feature dataset using the accepted historical-fitness labels and
+explicit decision clocks.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook
@@ -128,9 +130,9 @@ evidence**: the checked responses lack stable identity, MIC/primary-listing fact
 historical intervals, membership events, revisions, and historical availability
 semantics, and its terms require a separate unattended-access/retention review.
 Selective official B3 data now owns the bounded Brazil identity/listing path, and
-the PETZ3 lifecycle/membership proof is accepted. Broad long-history coverage and
-the combined Brazil bias audit remain pending. Yahoo remains a separate price-bridge
-candidate.
+the PETZ3 lifecycle/membership proof plus the combined Brazil audit are accepted.
+Broad long-history coverage remains outside the admitted boundary. Yahoo remains a
+separate, unadmitted price-bridge candidate.
 
-No general strategy/backtest implementation should start before the historical-truth
-gate in v0.2 passes.
+General strategy/backtest implementation remains sequenced after the feature and
+hypothesis phases even though the v0.2 historical-truth gate now passes.

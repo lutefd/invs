@@ -468,6 +468,9 @@ recorded against an exact commit. A running local stack by itself is not enough.
 
 # v0.2 — Historical Truth and Market Mechanics
 
+**Status:** Accepted at `0bfdc27`; see the
+[bounded US/Brazil point-in-time bias audit](acceptance/2026-08-24-v0.2-point-in-time-bias-audit.md).
+
 ## Goal
 
 Create the minimum historically honest data layer required for serious daily or
@@ -1910,13 +1913,10 @@ A version is not done because its happy path runs once. It is done when:
 
 ## First execution queue
 
-v0.1 is accepted. Bounded historical identity/listing/membership, calendar,
-corporate-action, PTAX, and SEC filing publication are accepted for the v0.2 slices.
-The next narrow queue is the remaining v0.2 historical-truth boundary:
-
-1. Integrate the accepted identity, membership, calendar, action, FX, macro, SEC
-   filing chains into the bounded US/Brazil point-in-time bias audits.
-
-Do not start the general backtester while the v0.2 historical-truth gate remains
-unaccepted. The fastest path to the full platform is to keep every later result
-explainable from a trusted historical input boundary.
+v0.1 and v0.2 are accepted. The retained 13-probe US/Brazil audit integrates the
+bounded identity, membership, calendar, price, action, FX, macro, and SEC filing
+chains, verifies 16 pinned evidence artifacts, and preserves installation-replay and
+unsupported scope decisions. The next narrow queue is v0.3 feature-platform work.
+The general backtester remains a later v0.5 boundary; the fastest path to the full
+platform is still to keep every later result explainable from a trusted historical
+input boundary.

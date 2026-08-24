@@ -15,9 +15,9 @@ actions, FX, and source policies required for honest simulation.
 1. [v0.1 — Foundation Certification and Operations](../versions/v0.1-foundation-certification.md)
 2. [v0.2 — Historical Truth and Market Mechanics](../versions/v0.2-historical-truth.md)
 
-The versions are sequential. v0.1 is accepted at `63d479d`; v0.2 cannot be accepted
-until its historical identity, vintage, calendar, action, FX, and US/Brazil bias
-gates pass.
+The versions were executed sequentially. v0.1 is accepted at `63d479d`; v0.2 is
+accepted at `0bfdc27` after its historical identity, vintage, calendar, action, FX,
+and US/Brazil bias gates passed.
 
 ## Phase workstreams
 
@@ -50,8 +50,9 @@ gates pass.
   XNAS/BVMF artifact versions and decision clocks.
 - [x] Split/dividend adjustment and FX calculations reproduce from pinned inputs
   (corporate-action and PTAX acceptance reports).
-- [ ] Every dataset reachable by later backtests has a historical-fitness label.
-- [ ] Bounded US and Brazil point-in-time bias audits pass.
+- [x] Every dataset reachable by the bounded audit has a historical-fitness label.
+- [x] Bounded US and Brazil point-in-time bias audits pass (`0bfdc27` and the
+  retained v0.2 acceptance artifact).
 
 ## Stop conditions
 
