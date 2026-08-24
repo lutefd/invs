@@ -71,15 +71,17 @@ The following baseline limitations drive the version order:
   availability.
 - The bounded ALFRED CPIAUCSL ingestion work package and exact-boundary selection are
   live-accepted. ADRs, synthetic fixtures, and the durable metadata publication/
-  resolution boundary now exist; corporate actions, admitted historical universe
-  membership, historically admitted exchange calendars, and full historical
-  source-backed identifier evidence remain outstanding. A bounded canonical
+  resolution boundary now exist; corporate actions, historically admitted exchange
+  calendars, and full historical source-backed identifier evidence remain
+  outstanding. Bounded official Nasdaq-100 and Ibovespa add/remove membership chains
+  are live-accepted without backward leakage. A bounded canonical
   BVMF/XNYS calendar publisher is live-accepted for current/reference evidence only;
   its historical publication/correction chronology remains unproven.
 - A bounded official B3 InstrumentsConsolidated path is implemented and live-accepted
   for exact current/reference Brazil identity/listing snapshots. It retains ISIN and
-  source trading intervals but does not provide long historical lifecycle or
-  membership coverage. A separate B3 listed-company corporate-action adapter now
+  source trading intervals but does not provide long historical lifecycle coverage.
+  A separate B3 notice adapter supplies the accepted bounded Ibovespa membership
+  chain. A separate B3 listed-company corporate-action adapter now
   retains source-native evidence, but the endpoint does not expose public publication
   or correction-revision semantics, so canonical adjustments remain unadmitted. The
   bounded Yahoo `.SA` check supports a candidate price bridge but failed the
@@ -103,9 +105,10 @@ universe membership, revision, and historical-availability evidence.
 The product boundary remains medium- to long-term portfolio research, backtesting,
 simulation, and ML, not intraday trading. That scope does not waive source identity
 or availability requirements. Official B3 data now owns the bounded instrument
-identity/listing path; its public snapshot is not yet the lifecycle, delisting, or
-membership source required for historical-bias acceptance. The listed-company
-endpoint supplies raw-first corporate-action evidence, but not enough
+identity/listing path; its public snapshot is not yet the lifecycle or delisting
+source required for historical-bias acceptance. Separate official B3 portfolio
+notices now supply one accepted Ibovespa membership add/remove chain. The
+listed-company endpoint supplies raw-first corporate-action evidence, but not enough
 publication/revision metadata for canonical adjustment publication. Yahoo remains
 separate price-bridge discovery.
 
@@ -116,9 +119,13 @@ records the separate source-native endpoint and its canonical-publication block.
 The [exchange-calendar publication report](acceptance/2026-08-23-exchange-calendar-publication.md)
 records the bounded BVMF/XNYS canonical publication and its still-open historical
 availability boundary.
+The [historical index-membership report](acceptance/2026-08-23-index-membership-publication.md)
+records the bounded Nasdaq-100 and Ibovespa publication and exact decision-time
+boundaries.
 This is not full historical-fitness acceptance: the v0.2 work must still capture
-lifecycle/membership coverage and prove that the resulting Brazil slice is fit for
-its intended research use. A paid B3 or replacement provider may be reconsidered
+lifecycle evidence, integrate the accepted membership chain, and prove that the
+resulting Brazil slice is fit for its intended research use. A paid B3 or replacement
+provider may be reconsidered
 only if an explicit requirement exposes a gap, such as intraday coverage.
 
 ## Product boundary and non-negotiable rules
@@ -565,8 +572,9 @@ invariants.
 
 - Use official B3 instrument/listing data for the bounded first Brazil identity/listing
   slice. The implemented public snapshot path is accepted for exact ISIN and
-  source-defined trading-interval evidence; historical lifecycle/membership remains
-  a separate gate.
+  source-defined trading-interval evidence; historical lifecycle remains a separate
+  gate, while official B3 notices separately supply the accepted bounded membership
+  chain.
 - Keep Yahoo Finance `.SA` as a separate candidate price bridge. It is not a source
   for issuer/security identity or universe membership unless a future source review
   establishes those fields and the required access/retention permission.

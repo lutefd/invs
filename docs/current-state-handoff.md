@@ -67,9 +67,10 @@ The durable metadata implementation slice then landed in `d963180`
 publication/resolution boundary, five append-only PostgreSQL tables with
 revision-aware exclusion constraints and immutable record hashes, Docker/init and
 idempotent migration wiring, focused Go tests, and a real PostgreSQL harness. This
-is an accepted implementation boundary, not source admission or the v0.2 exit gate:
-no complete live identifier/listing/membership or canonical exchange-calendar
-source has been admitted.
+is an accepted implementation boundary, not source admission or the v0.2 exit gate.
+Later slices admitted bounded membership and current/reference calendars, but no
+complete live historical identifier/listing source or historical calendar chronology
+has been admitted.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -87,7 +88,10 @@ Yahoo `.SA` remains a candidate **price bridge only**, subject to that terms rev
 The bounded official B3 path now owns current/reference Brazil identity and listing
 evidence, including exact ISINs, through the raw-first collector and historical
 metadata boundary. It does not yet provide historical lifecycle, universe
-membership, or broad instrument-discovery coverage. See the [B3 acceptance report](acceptance/2026-08-22-b3-instruments-security-master.md).
+membership, or broad instrument-discovery coverage by itself. Separate official B3
+portfolio notices now provide one accepted Ibovespa add/remove chain. See the
+[B3 acceptance report](acceptance/2026-08-22-b3-instruments-security-master.md) and
+[membership publication report](acceptance/2026-08-23-index-membership-publication.md).
 The separate B3 listed-company endpoint now has a source-native corporate-action
 evidence adapter and live acceptance, but no canonical action publication: the
 endpoint does not expose a provider event ID, earliest public publication time,
@@ -127,6 +131,10 @@ to close the v0.2 calendar gate. See the
 - Latest exchange-calendar provider boundary: `acd8eec` (`feat(provider): parse official exchange calendars`)
 - Latest exchange-calendar publication boundary: `77fee79` (`feat(data): publish versioned exchange calendars`)
 - Exchange-calendar acceptance: [bounded BVMF/XNYS canonical publication](acceptance/2026-08-23-exchange-calendar-publication.md); historical publication/revision chronology remains blocked
+- Latest index-membership provider boundary: `629e82b` (`feat(provider): parse official index membership notices`)
+- Latest index-membership publication boundary: `376d0e0` (`feat(data): publish historical universe memberships`)
+- Latest mixed-universe identity boundary: `9f488a9` (`fix(metadata): support issuers without SEC identifiers`)
+- Index-membership acceptance: [bounded Nasdaq-100/Ibovespa historical publication](acceptance/2026-08-23-index-membership-publication.md); historical identifier/listing lifecycle remains open
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
@@ -870,12 +878,16 @@ The following are not accidental omissions:
 - Historical identity/listing/membership and calendar contracts now have a durable
   PostgreSQL publication/resolution boundary plus synthetic resolver fixtures. The
   bounded B3 public instrument source populates only exact current/reference
-  identifier/listing rows; it is not a full historical security-master or complete
-  exchange-calendar source.
+  identifier/listing rows. A later bounded live slice publishes official Nasdaq-100
+  and Ibovespa add/remove membership revisions and passes exact before/at knowledge
+  boundaries, but historical identifier/listing lifecycle evidence is still open.
+  Neither slice is a full historical security-master or complete exchange-calendar
+  source.
 - No broad B3/CVM market instrument discovery or complete Brazilian market-data
   path. Yahoo `.SA` passed a bounded quote/price verification but failed the
-  security-master evidence gate; B3 lifecycle, membership, and long-history
-  coverage remain pending. B3 listed-company corporate-action evidence is now
+  security-master evidence gate; B3 lifecycle and long-history coverage remain
+  pending, while one bounded official Ibovespa membership chain is accepted. B3
+  listed-company corporate-action evidence is now
   retained source-natively, but its missing publication/revision semantics keep
   canonical adjustment publication blocked.
 - No canonical CVM CAD dataset or CAD snapshot table.
@@ -901,8 +913,10 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Extend the admitted B3 snapshot path (and add the bounded US source) with
-   historical lifecycle/membership evidence. For corporate actions, obtain
+1. Extend the admitted B3 snapshot path and add the bounded US identity source with
+   historical identifier/listing lifecycle evidence. Historical membership is now
+   accepted for one Nasdaq-100 and one Ibovespa add/remove chain. For corporate
+   actions, obtain
    authorized UP2DATA Corporate Action access (or a public versioned alternative),
    then define delivery availability, revision semantics, and the corresponding
    point-in-time bias audit.
@@ -911,7 +925,8 @@ Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
    Broaden BVMF coverage only with defensible historical hours intervals, then pass
    bounded availability audits and pin the accepted calendar/decision-clock policy
    into research artifact manifests.
-3. Complete the admitted B3-backed Brazil path with lifecycle/membership and
-   corporate-action evidence; revisit Yahoo `.SA` only as a price bridge after its
+3. Complete the admitted B3-backed Brazil path with lifecycle and corporate-action
+   evidence, then integrate the accepted membership chain into the bias audit;
+   revisit Yahoo `.SA` only as a price bridge after its
    terms, fixture, coverage, and availability checks pass. Do not start strategy or
    execution work by treating current-vintage backfills as historical truth.
