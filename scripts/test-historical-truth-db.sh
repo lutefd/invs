@@ -148,7 +148,11 @@ BEGIN
 
     SELECT count(*) INTO after_validity
     FROM security_identifier_versions
-    WHERE valid_from <= '2026-04-01T00:00:00Z'
+    WHERE data_source_id = '11111111-1111-4111-8111-111111111111'
+      AND identifier_type = 'ticker'
+      AND normalized_value = 'ABC'
+      AND identifier_scope = 'XNAS'
+      AND valid_from <= '2026-04-01T00:00:00Z'
       AND '2026-04-01T00:00:00Z' < valid_until;
     IF after_validity <> 0 THEN
         RAISE EXCEPTION 'exclusive validity boundary returned % rows', after_validity;
@@ -220,12 +224,18 @@ DECLARE
 BEGIN
     SELECT count(*) INTO before_close
     FROM trading_sessions
-    WHERE session_status = 'open'
+    WHERE data_source_id = '11111111-1111-4111-8111-111111111111'
+      AND calendar_version = 'nasdaq-2026'
+      AND mic = 'XNAS'
+      AND session_status = 'open'
       AND open_at <= '2026-01-02T20:59:59.999999Z'
       AND '2026-01-02T20:59:59.999999Z' < close_at;
     SELECT count(*) INTO at_close
     FROM trading_sessions
-    WHERE session_status = 'open'
+    WHERE data_source_id = '11111111-1111-4111-8111-111111111111'
+      AND calendar_version = 'nasdaq-2026'
+      AND mic = 'XNAS'
+      AND session_status = 'open'
       AND open_at <= '2026-01-02T21:00:00Z'
       AND '2026-01-02T21:00:00Z' < close_at;
     IF before_close <> 1 OR at_close <> 0 THEN
