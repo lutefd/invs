@@ -19,7 +19,8 @@ machine-learning pipeline.
 ## Decision
 
 The schemas `feature-observation.schema.json` and `feature-manifest.schema.json`
-define the `market-basic` feature set at version `1.0.0`. The feature registry is
+define the `market-basic` feature set at version `1.0.0`. Their artifact contract
+is version `1.1.0` after the calendar-pin extension required by ADR 0007. The feature registry is
 closed and consists of these exact decimal-string-or-null fields:
 
 - `close`: the selected daily price-bar close;
@@ -36,7 +37,8 @@ not omitted, renamed, coerced to a JSON number, or filled from a later vintage.
 
 The feature manifest is the only committed reader pointer for an artifact. It
 contains the fixed feature-set/version identity, immutable artifact metadata,
-the same point-in-time timing fields, selected input manifest paths and SHA-256
+the same point-in-time timing fields, the exact calendar manifest pin and decision-clock
+policy required by ADR 0007, selected input manifest paths and SHA-256
 hashes, selected input part paths and SHA-256 hashes, and content-named output parts
 with their hashes and row counts. A changed input selection or output is a new
 artifact publication; an existing artifact ID/version is never rewritten.
@@ -68,6 +70,14 @@ of this envelope:
 
 ```json
 {
+  "calendar_pin": {
+    "calendar_available_at": "<UTC instant>",
+    "calendar_version": "<immutable version>",
+    "data_source_id": "<UUID>",
+    "decision_clock_policy": "after_close_next_session",
+    "mic": "<MIC>",
+    "session_fingerprint": "<64 lowercase hex>"
+  },
   "decision_at": "<UTC instant>",
   "feature_set": "market-basic",
   "feature_set_version": "1.0.0",
@@ -80,7 +90,9 @@ of this envelope:
 }
 ```
 
-The two arrays are sorted by `(path, sha256)` before canonicalization. The listed
+The two arrays are sorted by `(path, sha256)` before canonicalization. The calendar
+pin is canonicalized as part of the same envelope, and its `calendar_available_at`
+must be no later than `decision_at`. The listed
 manifest and part hashes are the authoritative selection; recursive discovery,
 unlisted parts, latest-only snapshots, or a provider request made at feature-build
 time are not equivalent inputs. Semantic validation also checks that each

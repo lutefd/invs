@@ -340,6 +340,15 @@ type featureArtifactMetadata struct {
 	CreatedAt        string `json:"created_at"`
 }
 
+type featureCalendarPin struct {
+	CalendarAvailableAt string `json:"calendar_available_at"`
+	CalendarVersion     string `json:"calendar_version"`
+	DataSourceID        string `json:"data_source_id"`
+	DecisionClockPolicy string `json:"decision_clock_policy"`
+	MIC                 string `json:"mic"`
+	SessionFingerprint  string `json:"session_fingerprint"`
+}
+
 type featureManifest struct {
 	SchemaVersion           string                  `json:"schema_version"`
 	ManifestVersion         string                  `json:"manifest_version"`
@@ -347,6 +356,7 @@ type featureManifest struct {
 	FeatureSetVersion       string                  `json:"feature_set_version"`
 	FeatureNames            []string                `json:"feature_names"`
 	Artifact                featureArtifactMetadata `json:"artifact"`
+	CalendarPin             featureCalendarPin      `json:"calendar_pin"`
 	DecisionAt              string                  `json:"decision_at"`
 	InputAvailableAt        string                  `json:"input_available_at"`
 	ComputationDelaySeconds int                     `json:"computation_delay_seconds"`
@@ -435,13 +445,18 @@ func readFeatureManifest(path string) (featureManifest, error) {
 		}
 		return featureManifest{}, fmt.Errorf("decode feature manifest trailing data: %w", err)
 	}
-	if manifest.SchemaVersion != "1.0.0" || manifest.ManifestVersion != "1.0.0" || manifest.FeatureSet != "market-basic" || manifest.FeatureSetVersion != "1.0.0" {
+	isV1 := manifest.SchemaVersion == "1.0.0" && manifest.ManifestVersion == "1.0.0" && manifest.Artifact.ArtifactVersion == "1.0.0"
+	isV11 := manifest.SchemaVersion == "1.1.0" && manifest.ManifestVersion == "1.1.0" && manifest.Artifact.ArtifactVersion == "1.1.0"
+	if (!isV1 && !isV11) || manifest.FeatureSet != "market-basic" || manifest.FeatureSetVersion != "1.0.0" {
 		return featureManifest{}, errors.New("unsupported feature manifest version or feature set")
+	}
+	if isV1 && manifest.CalendarPin != (featureCalendarPin{}) {
+		return featureManifest{}, errors.New("feature manifest 1.0.0 cannot declare a calendar pin")
 	}
 	if len(manifest.FeatureNames) != 4 || manifest.FeatureNames[0] != "close" || manifest.FeatureNames[1] != "return_1d" || manifest.FeatureNames[2] != "range_1d" || manifest.FeatureNames[3] != "volume" {
 		return featureManifest{}, errors.New("feature manifest feature_names do not match market-basic v1")
 	}
-	if _, err := uuid.Parse(manifest.Artifact.ArtifactID); err != nil || manifest.Artifact.ArtifactVersion != "1.0.0" || manifest.Artifact.GeneratorVersion == "" || !validGitCommit(manifest.Artifact.GitCommit) || !validUTCTimestamp(manifest.Artifact.CreatedAt) {
+	if _, err := uuid.Parse(manifest.Artifact.ArtifactID); err != nil || manifest.Artifact.GeneratorVersion == "" || !validGitCommit(manifest.Artifact.GitCommit) || !validUTCTimestamp(manifest.Artifact.CreatedAt) {
 		return featureManifest{}, errors.New("feature manifest artifact metadata is incomplete")
 	}
 	if !validUTCTimestamp(manifest.DecisionAt) || !validUTCTimestamp(manifest.InputAvailableAt) || !validUTCTimestamp(manifest.AvailableAt) || manifest.ComputationDelaySeconds < 0 || !validSHA256(manifest.InputFingerprint) {
@@ -449,6 +464,15 @@ func readFeatureManifest(path string) (featureManifest, error) {
 	}
 	if len(manifest.SelectedInputManifests) == 0 || len(manifest.SelectedInputParts) == 0 || len(manifest.Parts) == 0 || manifest.RowCount < 0 {
 		return featureManifest{}, errors.New("feature manifest must contain selected inputs and output parts")
+	}
+	if isV11 {
+		if err := validateFeatureCalendarPin(manifest); err != nil {
+			return featureManifest{}, err
+		}
+		fingerprint, err := featureInputFingerprint(manifest)
+		if err != nil || fingerprint != manifest.InputFingerprint {
+			return featureManifest{}, errors.New("feature manifest calendar-aware input fingerprint is invalid")
+		}
 	}
 	seenManifests := make(map[string]struct{}, len(manifest.SelectedInputManifests))
 	for _, input := range manifest.SelectedInputManifests {
@@ -488,6 +512,76 @@ func readFeatureManifest(path string) (featureManifest, error) {
 		return featureManifest{}, errors.New("feature manifest row_count does not equal output part row counts")
 	}
 	return manifest, nil
+}
+
+func validateFeatureCalendarPin(manifest featureManifest) error {
+	pin := manifest.CalendarPin
+	dataSourceID, idErr := uuid.Parse(pin.DataSourceID)
+	if idErr != nil || dataSourceID.String() != pin.DataSourceID || !validMIC(pin.MIC) || !validCalendarVersion(pin.CalendarVersion) || !validSHA256(pin.SessionFingerprint) || pin.DecisionClockPolicy != "after_close_next_session" || !validUTCTimestamp(pin.CalendarAvailableAt) {
+		return errors.New("feature manifest calendar pin is invalid")
+	}
+	decisionAt, _ := time.Parse(time.RFC3339Nano, manifest.DecisionAt)
+	inputAvailableAt, _ := time.Parse(time.RFC3339Nano, manifest.InputAvailableAt)
+	calendarAvailableAt, _ := time.Parse(time.RFC3339Nano, pin.CalendarAvailableAt)
+	if calendarAvailableAt.After(decisionAt) || inputAvailableAt.Before(calendarAvailableAt) {
+		return errors.New("feature manifest calendar pin violates the knowledge boundary")
+	}
+	return nil
+}
+
+func validMIC(value string) bool {
+	if len(value) != 4 {
+		return false
+	}
+	for _, char := range value {
+		if !((char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9')) {
+			return false
+		}
+	}
+	return true
+}
+
+func validCalendarVersion(value string) bool {
+	if len(value) < 2 || len(value) > 64 || value[0] < 'a' || value[0] > 'z' {
+		return false
+	}
+	for _, char := range value[1:] {
+		if !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '_' || char == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func featureInputFingerprint(manifest featureManifest) (string, error) {
+	selectedManifests := append([]featureInput(nil), manifest.SelectedInputManifests...)
+	selectedParts := append([]featureInput(nil), manifest.SelectedInputParts...)
+	sort.Slice(selectedManifests, func(i, j int) bool {
+		if selectedManifests[i].Path != selectedManifests[j].Path {
+			return selectedManifests[i].Path < selectedManifests[j].Path
+		}
+		return selectedManifests[i].SHA256 < selectedManifests[j].SHA256
+	})
+	sort.Slice(selectedParts, func(i, j int) bool {
+		if selectedParts[i].Path != selectedParts[j].Path {
+			return selectedParts[i].Path < selectedParts[j].Path
+		}
+		return selectedParts[i].SHA256 < selectedParts[j].SHA256
+	})
+	envelope := struct {
+		CalendarPin            featureCalendarPin `json:"calendar_pin"`
+		DecisionAt             string             `json:"decision_at"`
+		FeatureSet             string             `json:"feature_set"`
+		FeatureSetVersion      string             `json:"feature_set_version"`
+		SelectedInputManifests []featureInput     `json:"selected_input_manifests"`
+		SelectedInputParts     []featureInput     `json:"selected_input_parts"`
+	}{manifest.CalendarPin, manifest.DecisionAt, manifest.FeatureSet, manifest.FeatureSetVersion, selectedManifests, selectedParts}
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func validSHA256(value string) bool {

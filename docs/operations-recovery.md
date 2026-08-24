@@ -36,7 +36,8 @@ The report checks:
 - normalized manifests, missing or hash-mismatched listed parts, and unlisted
   Parquet files;
 - feature-manifest structure, output parts, unlisted artifact files, and each
-  selected normalized input manifest/part.
+  selected normalized input manifest/part, including the required calendar pin
+  and its input-fingerprint contribution.
 
 The report never cancels a run, deletes an orphan, or rewrites evidence. If an
 active run is confirmed orphaned, use the existing explicit collector command

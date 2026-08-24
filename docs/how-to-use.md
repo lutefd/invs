@@ -705,13 +705,29 @@ timestamp:
 - `volume`: the latest volume, or null when the price bar has no volume.
 
 There is no forward fill, `DOUBLE` calculation, strategy, signal, or model
-hidden behind this registry. The supported operator command requires an explicit
-security and decision timestamp:
+hidden behind this registry. Artifact contract `1.1.0` also requires an exact
+calendar pin selected from the durable calendar manifest resolver at the same
+decision time. Save that resolver result as a JSON object such as:
+
+```json
+{
+  "data_source_id": "<calendar data-source UUID>",
+  "mic": "XNAS",
+  "calendar_version": "<immutable calendar version>",
+  "session_fingerprint": "<64 lowercase hex>",
+  "calendar_available_at": "<canonical UTC timestamp>",
+  "decision_clock_policy": "after_close_next_session"
+}
+```
+
+The supported operator command requires the security, decision timestamp, and
+that file explicitly:
 
 ```sh
 make feature \
   SECURITY_ID=469fc20f-7d4b-45bb-b827-05f8410e71aa \
   DECISION_AT=2026-08-12T21:00:00Z \
+  CALENDAR_PIN=/data/calendar-pins/xnas.json \
   FEATURE_DELAY=30
 ```
 
@@ -740,6 +756,14 @@ manifest_path = publish_market_basic(
     catalog,
     decision_at="2026-08-12T21:00:00Z",
     security_id="469fc20f-7d4b-45bb-b827-05f8410e71aa",
+    calendar_pin={
+        "data_source_id": "<calendar data-source UUID>",
+        "mic": "XNAS",
+        "calendar_version": "<immutable calendar version>",
+        "session_fingerprint": "<64 lowercase hex>",
+        "calendar_available_at": "<canonical UTC timestamp>",
+        "decision_clock_policy": "after_close_next_session",
+    },
     features_root="data/features",
     computation_delay_seconds=30,
     git_commit="unknown",  # or a full lower-case 40-character Git SHA
@@ -759,11 +783,12 @@ data/features/market-basic/1.0.0/artifact-<artifact-uuid>/manifest.json
 data/features/market-basic/1.0.0/artifact-<artifact-uuid>/part-<sha256>.parquet
 ```
 
-The manifest records the decision time, maximum input availability, computation
+The manifest records the calendar pin and decision-clock policy, decision time, maximum input availability, computation
 delay, derived feature availability, selected input manifests and parts, input
 fingerprint, generator version, and Git commit. The artifact identity is
-deterministic for the feature set, version, security, and decision time by
-default. Re-publishing identical content is idempotent; attempting to reuse an
+deterministic for the feature set, artifact version, security, decision time, and
+complete input fingerprint by default. A price-lineage or calendar-pin change
+therefore forks identity. Re-publishing identical content is idempotent; attempting to reuse an
 identity with changed content raises a conflict. Validation rejects hash
 mismatches, unsupported versions, malformed decimal strings, wrong physical
 types, duplicate JSON keys, missing listed parts, and unlisted files.

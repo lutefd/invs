@@ -13,6 +13,7 @@
     "feature_set_version",
     "feature_names",
     "artifact",
+    "calendar_pin",
     "decision_at",
     "input_available_at",
     "computation_delay_seconds",
@@ -24,14 +25,15 @@
     "parts"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
-    "manifest_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
+    "manifest_version": { "const": "1.1.0" },
     "feature_set": { "const": "market-basic" },
     "feature_set_version": { "const": "1.0.0" },
     "feature_names": {
       "const": ["close", "return_1d", "range_1d", "volume"]
     },
     "artifact": { "$ref": "#/$defs/artifactMetadata" },
+    "calendar_pin": { "$ref": "#/$defs/calendarPin" },
     "decision_at": {
       "$ref": "common.schema.json#/$defs/utcTimestamp",
       "$comment": "The explicit as-of cutoff used to select every input for this artifact. It is never inferred from a trading date or from available_at."
@@ -90,7 +92,7 @@
       ],
       "properties": {
         "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "artifact_version": { "const": "1.0.0" },
+        "artifact_version": { "const": "1.1.0" },
         "generator_version": {
           "type": "string",
           "minLength": 1,
@@ -103,6 +105,29 @@
           ]
         },
         "created_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+      }
+    },
+    "calendarPin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_source_id",
+        "mic",
+        "calendar_version",
+        "session_fingerprint",
+        "calendar_available_at",
+        "decision_clock_policy"
+      ],
+      "properties": {
+        "data_source_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "mic": { "$ref": "common.schema.json#/$defs/mic" },
+        "calendar_version": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+        },
+        "session_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "calendar_available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "decision_clock_policy": { "const": "after_close_next_session" }
       }
     },
     "relativePath": {

@@ -23,16 +23,19 @@ from .catalog import ResearchCatalog
 
 FEATURE_SET: Final[str] = "market-basic"
 FEATURE_SET_VERSION: Final[str] = "1.0.0"
-SCHEMA_VERSION: Final[str] = "1.0.0"
-MANIFEST_VERSION: Final[str] = "1.0.0"
+SCHEMA_VERSION: Final[str] = "1.1.0"
+MANIFEST_VERSION: Final[str] = "1.1.0"
+ARTIFACT_VERSION: Final[str] = "1.1.0"
 FEATURE_NAMES: Final[tuple[str, ...]] = ("close", "return_1d", "range_1d", "volume")
-DEFAULT_GENERATOR_VERSION: Final[str] = "python-market-basic-1.0.0"
+DEFAULT_GENERATOR_VERSION: Final[str] = "python-market-basic-1.1.0"
 
 _DEFAULT_FEATURE_ROOT = Path("data/features")
 _ARTIFACT_NAMESPACE = UUID("2e9fcd7f-7ed1-5c65-bdf3-49b8f0b19c72")
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _DECIMAL_PATTERN = re.compile(r"^-?(0|[1-9][0-9]*)(\.[0-9]+)?$")
 _PART_PATTERN = re.compile(r"^part-([0-9a-f]{64})\.parquet$")
+_CALENDAR_VERSION_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
+_MIC_PATTERN = re.compile(r"^[A-Z0-9]{4}$")
 _UTC_TIMESTAMP_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$"
 )
@@ -45,6 +48,7 @@ _MANIFEST_FIELDS = frozenset(
         "feature_set_version",
         "feature_names",
         "artifact",
+        "calendar_pin",
         "decision_at",
         "input_available_at",
         "computation_delay_seconds",
@@ -58,6 +62,16 @@ _MANIFEST_FIELDS = frozenset(
 )
 _ARTIFACT_FIELDS = frozenset(
     {"artifact_id", "artifact_version", "generator_version", "git_commit", "created_at"}
+)
+_CALENDAR_PIN_FIELDS = frozenset(
+    {
+        "data_source_id",
+        "mic",
+        "calendar_version",
+        "session_fingerprint",
+        "calendar_available_at",
+        "decision_clock_policy",
+    }
 )
 _SELECTED_MANIFEST_FIELDS = frozenset({"path", "sha256"})
 _SELECTED_PART_FIELDS = frozenset({"path", "sha256"})
@@ -205,6 +219,48 @@ def _validate_sha256(value: Any, *, field: str) -> str:
     return value
 
 
+def _canonical_calendar_pin(
+    value: Any,
+    *,
+    decision_at: datetime,
+    field: str = "calendar_pin",
+) -> dict[str, str]:
+    if not isinstance(value, Mapping) or set(value) != _CALENDAR_PIN_FIELDS:
+        raise FeatureArtifactError(f"{field} has an unsupported field set")
+    data_source_id = _canonical_uuid(value["data_source_id"], field=f"{field}.data_source_id")
+    if value["data_source_id"] != data_source_id:
+        raise FeatureArtifactError(f"{field}.data_source_id must be a canonical UUID")
+    mic = value["mic"]
+    if not isinstance(mic, str) or _MIC_PATTERN.fullmatch(mic) is None:
+        raise FeatureArtifactError(f"{field}.mic must be a canonical MIC")
+    calendar_version = value["calendar_version"]
+    if not isinstance(calendar_version, str) or _CALENDAR_VERSION_PATTERN.fullmatch(
+        calendar_version
+    ) is None:
+        raise FeatureArtifactError(f"{field}.calendar_version is invalid")
+    fingerprint = _validate_sha256(
+        value["session_fingerprint"], field=f"{field}.session_fingerprint"
+    )
+    available_at, available_datetime = _canonical_timestamp(
+        value["calendar_available_at"], field=f"{field}.calendar_available_at"
+    )
+    if value["calendar_available_at"] != available_at:
+        raise FeatureArtifactError(f"{field}.calendar_available_at is not canonical UTC")
+    if available_datetime > decision_at:
+        raise FeatureArtifactError(f"{field}.calendar_available_at is after decision_at")
+    policy = value["decision_clock_policy"]
+    if policy != "after_close_next_session":
+        raise FeatureArtifactError(f"{field}.decision_clock_policy is unsupported")
+    return {
+        "data_source_id": data_source_id,
+        "mic": mic,
+        "calendar_version": calendar_version,
+        "session_fingerprint": fingerprint,
+        "calendar_available_at": available_at,
+        "decision_clock_policy": policy,
+    }
+
+
 def _validate_decimal_string(value: Any, *, field: str) -> str:
     if not isinstance(value, str) or not _DECIMAL_PATTERN.fullmatch(value):
         raise FeatureArtifactValidationError(
@@ -249,10 +305,11 @@ def _canonical_json(value: Mapping[str, Any]) -> bytes:
 def compute_input_fingerprint(manifest: Mapping[str, Any]) -> str:
     """Compute the ADR 0005 SHA-256 input-selection fingerprint.
 
-    Only the six fields in the ADR envelope participate.  The two lineage
+    Only the fields in the ADR envelope participate.  The two lineage
     arrays are sorted by ``(path, sha256)`` before canonical JSON encoding.
     """
     required = {
+        "calendar_pin",
         "decision_at",
         "feature_set",
         "feature_set_version",
@@ -265,6 +322,7 @@ def compute_input_fingerprint(manifest: Mapping[str, Any]) -> str:
             f"input fingerprint envelope is missing field(s): {', '.join(missing)}"
         )
     envelope = {
+        "calendar_pin": manifest["calendar_pin"],
         "decision_at": manifest["decision_at"],
         "feature_set": manifest["feature_set"],
         "feature_set_version": manifest["feature_set_version"],
@@ -564,6 +622,7 @@ def _compute_features(
 class _Selection:
     decision_at: str
     security_id: str
+    calendar_pin: dict[str, str] | None
     input_available_at: str
     available_at: str
     computation_delay_seconds: int
@@ -581,6 +640,7 @@ def _select(
     computation_delay_seconds: int,
     feature_set: str,
     feature_set_version: str,
+    calendar_pin: Mapping[str, Any] | None,
 ) -> _Selection:
     if feature_set != FEATURE_SET:
         raise FeatureArtifactError(f"unsupported feature_set {feature_set!r}")
@@ -589,6 +649,11 @@ def _select(
     delay = _validate_delay(computation_delay_seconds)
     canonical_decision, decision_datetime = _canonical_timestamp(decision_at, field="decision_at")
     canonical_security_id = _canonical_uuid(security_id, field="security_id")
+    canonical_calendar_pin = (
+        _canonical_calendar_pin(calendar_pin, decision_at=decision_datetime)
+        if calendar_pin is not None
+        else None
+    )
     try:
         inputs = catalog.point_in_time_inputs(
             decision_at=canonical_decision,
@@ -615,6 +680,12 @@ def _select(
     if any(value > decision_datetime for value in observed_datetimes):
         raise FeatureArtifactError("point-in-time input selection returned a future observed_at")
     input_available_datetime = max(available_datetimes)
+    if canonical_calendar_pin is not None:
+        _, calendar_available_datetime = _canonical_timestamp(
+            canonical_calendar_pin["calendar_available_at"],
+            field="calendar_pin.calendar_available_at",
+        )
+        input_available_datetime = max(input_available_datetime, calendar_available_datetime)
     input_available_at = _canonical_timestamp(
         input_available_datetime, field="input_available_at"
     )[0]
@@ -622,16 +693,22 @@ def _select(
     available_at = _canonical_timestamp(available_datetime, field="available_at")[0]
     selected_input_manifests, selected_input_parts = _selected_lineage(catalog, records)
     fingerprint_envelope = {
+        "calendar_pin": canonical_calendar_pin,
         "decision_at": canonical_decision,
         "feature_set": FEATURE_SET,
         "feature_set_version": FEATURE_SET_VERSION,
         "selected_input_manifests": selected_input_manifests,
         "selected_input_parts": selected_input_parts,
     }
-    fingerprint = compute_input_fingerprint(fingerprint_envelope)
+    fingerprint = (
+        compute_input_fingerprint(fingerprint_envelope)
+        if canonical_calendar_pin is not None
+        else ""
+    )
     return _Selection(
         decision_at=canonical_decision,
         security_id=canonical_security_id,
+        calendar_pin=canonical_calendar_pin,
         input_available_at=input_available_at,
         available_at=available_at,
         computation_delay_seconds=delay,
@@ -656,12 +733,17 @@ def compute_market_basic_features(
         computation_delay_seconds=0,
         feature_set=FEATURE_SET,
         feature_set_version=FEATURE_SET_VERSION,
+        calendar_pin=None,
     ).features
 
 
-def _artifact_id(security_id: str, decision_at: str) -> str:
+def _artifact_id(security_id: str, decision_at: str, input_fingerprint: str) -> str:
     return str(
-        uuid5(_ARTIFACT_NAMESPACE, f"{FEATURE_SET}:{FEATURE_SET_VERSION}:{security_id}:{decision_at}")
+        uuid5(
+            _ARTIFACT_NAMESPACE,
+            f"{FEATURE_SET}:{FEATURE_SET_VERSION}:{ARTIFACT_VERSION}:{security_id}:"
+            f"{decision_at}:{input_fingerprint}",
+        )
     )
 
 
@@ -681,9 +763,9 @@ def _validate_artifact_metadata(artifact: Any, *, label: str) -> dict[str, Any]:
         raise FeatureArtifactValidationError(str(error)) from error
     if artifact_id != canonical_id:
         raise FeatureArtifactValidationError(f"{label}.artifact_id must be lower-case canonical UUID")
-    if artifact["artifact_version"] != FEATURE_SET_VERSION:
+    if artifact["artifact_version"] != ARTIFACT_VERSION:
         raise FeatureArtifactValidationError(
-            f"{label}.artifact_version must be {FEATURE_SET_VERSION!r}"
+            f"{label}.artifact_version must be {ARTIFACT_VERSION!r}"
         )
     if not isinstance(artifact["generator_version"], str) or not artifact["generator_version"]:
         raise FeatureArtifactValidationError(f"{label}.generator_version must be non-empty")
@@ -738,6 +820,24 @@ def _validate_manifest(document: dict[str, Any], *, manifest_path: Path) -> dict
         if document[field] != canonical:
             raise FeatureArtifactValidationError(f"manifest.{field} is not canonical UTC")
         timestamps[field] = parsed
+    try:
+        calendar_pin = _canonical_calendar_pin(
+            document["calendar_pin"],
+            decision_at=timestamps["decision_at"],
+            field="manifest.calendar_pin",
+        )
+    except FeatureArtifactError as error:
+        raise FeatureArtifactValidationError(str(error)) from error
+    if document["calendar_pin"] != calendar_pin:
+        raise FeatureArtifactValidationError("manifest.calendar_pin is not canonical")
+    _, calendar_available_at = _canonical_timestamp(
+        calendar_pin["calendar_available_at"],
+        field="manifest.calendar_pin.calendar_available_at",
+    )
+    if timestamps["input_available_at"] < calendar_available_at:
+        raise FeatureArtifactValidationError(
+            "manifest input_available_at precedes calendar availability"
+        )
     if timestamps["input_available_at"] > timestamps["decision_at"]:
         raise FeatureArtifactValidationError("manifest input_available_at is after decision_at")
     delay = document["computation_delay_seconds"]
@@ -1005,6 +1105,7 @@ def publish_market_basic(
     *,
     decision_at: str | datetime,
     security_id: str | UUID,
+    calendar_pin: Mapping[str, Any],
     features_root: str | Path = _DEFAULT_FEATURE_ROOT,
     computation_delay_seconds: int = 0,
     artifact_id: str | UUID | None = None,
@@ -1028,11 +1129,16 @@ def publish_market_basic(
         computation_delay_seconds=computation_delay_seconds,
         feature_set=feature_set,
         feature_set_version=feature_set_version,
+        calendar_pin=calendar_pin,
     )
+    if selection.calendar_pin is None:
+        raise FeatureArtifactError("calendar_pin is required for artifact publication")
     canonical_artifact_id = (
         _canonical_uuid(artifact_id, field="artifact_id")
         if artifact_id is not None
-        else _artifact_id(selection.security_id, selection.decision_at)
+        else _artifact_id(
+            selection.security_id, selection.decision_at, selection.input_fingerprint
+        )
     )
     if not isinstance(generator_version, str) or not generator_version:
         raise FeatureArtifactError("generator_version must be a non-empty string")
@@ -1047,7 +1153,7 @@ def publish_market_basic(
     )
     artifact = {
         "artifact_id": canonical_artifact_id,
-        "artifact_version": FEATURE_SET_VERSION,
+        "artifact_version": ARTIFACT_VERSION,
         "generator_version": generator_version,
         "git_commit": git_commit,
         "created_at": canonical_created_at,
@@ -1075,6 +1181,7 @@ def publish_market_basic(
         "feature_set_version": FEATURE_SET_VERSION,
         "feature_names": list(FEATURE_NAMES),
         "artifact": artifact,
+        "calendar_pin": selection.calendar_pin,
         "decision_at": selection.decision_at,
         "input_available_at": selection.input_available_at,
         "computation_delay_seconds": selection.computation_delay_seconds,
@@ -1125,6 +1232,7 @@ def build_market_basic_artifact(*args: Any, **kwargs: Any) -> Path:
 
 
 __all__ = [
+    "ARTIFACT_VERSION",
     "DEFAULT_GENERATOR_VERSION",
     "FEATURE_NAMES",
     "FEATURE_SET",

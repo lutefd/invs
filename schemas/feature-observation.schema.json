@@ -20,7 +20,7 @@
     "features"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "feature_set": { "const": "market-basic" },
     "feature_set_version": { "const": "1.0.0" },
     "security_id": { "$ref": "common.schema.json#/$defs/uuid" },

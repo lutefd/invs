@@ -126,18 +126,26 @@ func TestReconcileResolvesFeatureLineage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	featureManifest := map[string]any{
-		"schema_version":      "1.0.0",
-		"manifest_version":    "1.0.0",
+	featureDocument := map[string]any{
+		"schema_version":      "1.1.0",
+		"manifest_version":    "1.1.0",
 		"feature_set":         "market-basic",
 		"feature_set_version": "1.0.0",
 		"feature_names":       []string{"close", "return_1d", "range_1d", "volume"},
 		"artifact": map[string]string{
 			"artifact_id":       uuid.NewString(),
-			"artifact_version":  "1.0.0",
+			"artifact_version":  "1.1.0",
 			"generator_version": "test",
 			"git_commit":        "unknown",
 			"created_at":        "2026-01-01T00:00:00Z",
+		},
+		"calendar_pin": map[string]string{
+			"data_source_id":        "11111111-1111-4111-8111-111111111111",
+			"mic":                   "XNAS",
+			"calendar_version":      "xnas_2026_fixture",
+			"session_fingerprint":   stringsRepeat("e", 64),
+			"calendar_available_at": "2025-12-31T00:00:00Z",
+			"decision_clock_policy": "after_close_next_session",
 		},
 		"decision_at":               "2026-01-01T00:00:00Z",
 		"input_available_at":        "2026-01-01T00:00:00Z",
@@ -149,7 +157,20 @@ func TestReconcileResolvesFeatureLineage(t *testing.T) {
 		"row_count":                 1,
 		"parts":                     []map[string]any{{"path": "part-" + outputHashText + ".parquet", "sha256": outputHashText, "row_count": 1}},
 	}
-	featureBytes, err := json.Marshal(featureManifest)
+	canonicalBytes, err := json.Marshal(featureDocument)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var canonicalManifest featureManifest
+	if err := json.Unmarshal(canonicalBytes, &canonicalManifest); err != nil {
+		t.Fatal(err)
+	}
+	fingerprint, err := featureInputFingerprint(canonicalManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	featureDocument["input_fingerprint"] = fingerprint
+	featureBytes, err := json.Marshal(featureDocument)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,4 +204,35 @@ func stringsRepeat(value string, count int) string {
 		result += value
 	}
 	return result
+}
+
+func TestReadFeatureManifestSupportsPinnedV11AndLegacyV1(t *testing.T) {
+	fixturePath := "../../schemas/feature-manifest.fixture.json"
+	if _, err := readFeatureManifest(fixturePath); err != nil {
+		t.Fatalf("pinned 1.1 fixture: %v", err)
+	}
+	body, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var legacy map[string]any
+	if err := json.Unmarshal(body, &legacy); err != nil {
+		t.Fatal(err)
+	}
+	legacy["schema_version"] = "1.0.0"
+	legacy["manifest_version"] = "1.0.0"
+	delete(legacy, "calendar_pin")
+	artifact := legacy["artifact"].(map[string]any)
+	artifact["artifact_version"] = "1.0.0"
+	legacyPath := filepath.Join(t.TempDir(), "manifest.json")
+	legacyBytes, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyPath, legacyBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readFeatureManifest(legacyPath); err != nil {
+		t.Fatalf("legacy 1.0 fixture: %v", err)
+	}
 }

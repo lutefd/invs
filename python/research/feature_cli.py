@@ -25,6 +25,7 @@ def _summary(artifact: Any, *, action: str) -> dict[str, Any]:
         "artifact_id": manifest["artifact"]["artifact_id"],
         "feature_set": manifest["feature_set"],
         "feature_set_version": manifest["feature_set_version"],
+        "calendar_pin": manifest["calendar_pin"],
         "decision_at": manifest["decision_at"],
         "input_available_at": manifest["input_available_at"],
         "available_at": manifest["available_at"],
@@ -48,6 +49,11 @@ def _parser() -> argparse.ArgumentParser:
     publish.add_argument("--features-root", default="/data/features")
     publish.add_argument("--security-id", required=True)
     publish.add_argument("--decision-at", required=True)
+    publish.add_argument(
+        "--calendar-pin",
+        required=True,
+        help="path to an exact calendar-manifest pin JSON object",
+    )
     publish.add_argument("--computation-delay-seconds", type=int, default=0)
     publish.add_argument("--git-commit", default=os.environ.get("INVS_GIT_COMMIT", "unknown"))
 
@@ -56,6 +62,24 @@ def _parser() -> argparse.ArgumentParser:
     )
     validate.add_argument("--manifest", required=True)
     return parser
+
+
+def _load_calendar_pin(path: str) -> dict[str, Any]:
+    def object_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        document: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in document:
+                raise ValueError(f"duplicate JSON key {key!r}")
+            document[key] = value
+        return document
+
+    document = json.loads(
+        Path(path).read_text(encoding="utf-8"),
+        object_pairs_hook=object_without_duplicates,
+    )
+    if not isinstance(document, dict):
+        raise TypeError("calendar pin must be a JSON object")
+    return document
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
                 catalog,
                 decision_at=args.decision_at,
                 security_id=args.security_id,
+                calendar_pin=_load_calendar_pin(args.calendar_pin),
                 features_root=args.features_root,
                 computation_delay_seconds=args.computation_delay_seconds,
                 git_commit=args.git_commit,
@@ -76,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             artifact = validate_feature_artifact(Path(args.manifest))
             result = _summary(artifact, action="validated")
-    except (DatasetSchemaError, FeatureArtifactError, OSError, ValueError) as error:
+    except (DatasetSchemaError, FeatureArtifactError, OSError, TypeError, ValueError) as error:
         print(f"invs-feature: {error}", file=sys.stderr)
         return 1
 

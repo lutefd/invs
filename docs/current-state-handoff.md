@@ -707,10 +707,13 @@ The current engine:
 - does not forward-fill missing prerequisites;
 - records `decision_at`, maximum selected input availability, computation delay, and
   derived feature `available_at`;
-- fingerprints the canonical input-selection envelope, including selected manifest
-  and part hashes;
+- requires and validates the ADR 0007 calendar pin and
+  `after_close_next_session` decision-clock policy;
+- fingerprints the canonical input-selection envelope, including the calendar pin
+  plus selected manifest and part hashes;
 - writes an immutable content-named Parquet part and a manifest;
-- uses deterministic artifact identity by default and detects identity conflicts;
+- derives deterministic artifact identity from the complete input fingerprint and
+  detects explicit identity conflicts;
 - rejects tampered parts, unknown versions/features, duplicate JSON keys, unlisted
   files, hash mismatches, timing violations, and physical schema drift.
 

@@ -88,11 +88,13 @@ restore: config
 feature: config
 	@test -n "$(SECURITY_ID)" || (echo "SECURITY_ID is required" >&2; exit 2)
 	@test -n "$(DECISION_AT)" || (echo "DECISION_AT is required" >&2; exit 2)
+	@test -n "$(CALENDAR_PIN)" || (echo "CALENDAR_PIN is required" >&2; exit 2)
 	@$(COMPOSE) run --rm --no-deps jupyter python -m research.feature_cli publish \
 		--data-root /data \
 		--features-root /data/features \
 		--security-id "$(SECURITY_ID)" \
 		--decision-at "$(DECISION_AT)" \
+		--calendar-pin "$(CALENDAR_PIN)" \
 		--computation-delay-seconds "$(or $(FEATURE_DELAY),0)" \
 		--git-commit "$(or $(INVS_GIT_COMMIT),unknown)"
 

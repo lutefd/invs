@@ -25,6 +25,14 @@ from research.features import (
 SECURITY_ID = "469fc20f-7d4b-45bb-b827-05f8410e71aa"
 SOURCE_ID = "5d6ac836-54fd-4df2-a745-0744180420db"
 RUN_ID = "c7286917-ce45-4879-834f-fc975c80c49e"
+CALENDAR_PIN = {
+    "data_source_id": "11111111-1111-4111-8111-111111111111",
+    "mic": "XNAS",
+    "calendar_version": "xnas_2025_fixture",
+    "session_fingerprint": "f" * 64,
+    "calendar_available_at": "2024-12-01T00:00:00Z",
+    "decision_clock_policy": "after_close_next_session",
+}
 
 
 def _sql(value: str) -> str:
@@ -140,6 +148,7 @@ def test_market_basic_exact_decimals_point_in_time_and_lineage(tmp_path: Path) -
         catalog,
         decision_at=decision_at,
         security_id=SECURITY_ID,
+        calendar_pin=CALENDAR_PIN,
         features_root=tmp_path / "features",
         computation_delay_seconds=30,
     )
@@ -200,7 +209,51 @@ def test_missing_lookback_and_missing_volume_are_null(tmp_path: Path) -> None:
     }
 
 
-def test_idempotent_publication_and_changed_input_conflict(tmp_path: Path) -> None:
+def test_calendar_pin_controls_artifact_availability_and_fails_closed(tmp_path: Path) -> None:
+    catalog = _catalog(tmp_path, _two_days()[:2])
+    late_pin = dict(CALENDAR_PIN)
+    late_pin["calendar_available_at"] = "2025-01-02T22:30:00Z"
+    manifest_path = publish_market_basic(
+        catalog,
+        decision_at="2025-01-02T23:00:00Z",
+        security_id=SECURITY_ID,
+        calendar_pin=late_pin,
+        computation_delay_seconds=30,
+        features_root=tmp_path / "features",
+    )
+    manifest = read_feature_artifact(manifest_path).manifest
+    assert manifest["calendar_pin"] == late_pin
+    assert manifest["input_available_at"] == "2025-01-02T22:30:00Z"
+    assert manifest["available_at"] == "2025-01-02T22:30:30Z"
+
+    future_pin = dict(CALENDAR_PIN)
+    future_pin["calendar_available_at"] = "2025-01-02T23:00:00.000001Z"
+    with pytest.raises(FeatureArtifactError, match="after decision_at"):
+        publish_market_basic(
+            catalog,
+            decision_at="2025-01-02T23:00:00Z",
+            security_id=SECURITY_ID,
+            calendar_pin=future_pin,
+            features_root=tmp_path / "future-features",
+        )
+
+
+def test_tampered_calendar_pin_is_rejected(tmp_path: Path) -> None:
+    manifest_path = publish_market_basic(
+        _catalog(tmp_path, _two_days()[:2]),
+        decision_at="2025-01-02T23:00:00Z",
+        security_id=SECURITY_ID,
+        calendar_pin=CALENDAR_PIN,
+        features_root=tmp_path / "features",
+    )
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    document["calendar_pin"]["decision_clock_policy"] = "same_session"
+    manifest_path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(FeatureArtifactError, match="decision_clock_policy"):
+        read_feature_artifact(manifest_path)
+
+
+def test_idempotent_publication_and_changed_inputs_fork_artifact_identity(tmp_path: Path) -> None:
     rows = _two_days()[:2]
     first_catalog = _catalog(tmp_path / "first", rows)
     features_root = tmp_path / "features"
@@ -208,6 +261,7 @@ def test_idempotent_publication_and_changed_input_conflict(tmp_path: Path) -> No
         first_catalog,
         decision_at="2025-01-02T23:00:00Z",
         security_id=SECURITY_ID,
+        calendar_pin=CALENDAR_PIN,
         features_root=features_root,
     )
     first_bytes = first.read_bytes()
@@ -216,6 +270,7 @@ def test_idempotent_publication_and_changed_input_conflict(tmp_path: Path) -> No
         first_catalog,
         decision_at="2025-01-02T23:00:00Z",
         security_id=SECURITY_ID,
+        calendar_pin=CALENDAR_PIN,
         features_root=features_root,
     )
     assert second == first
@@ -225,13 +280,41 @@ def test_idempotent_publication_and_changed_input_conflict(tmp_path: Path) -> No
     changed = [dict(row) for row in rows]
     changed[-1]["close"] = "102.000000000000000001"
     changed_catalog = _catalog(tmp_path / "changed", changed)
+    changed_path = publish_market_basic(
+        changed_catalog,
+        decision_at="2025-01-02T23:00:00Z",
+        security_id=SECURITY_ID,
+        calendar_pin=CALENDAR_PIN,
+        features_root=features_root,
+    )
+    assert changed_path != first
+    first_artifact = read_feature_artifact(first)
+    changed_artifact = read_feature_artifact(changed_path)
+    assert (
+        changed_artifact.manifest["input_fingerprint"]
+        != first_artifact.manifest["input_fingerprint"]
+    )
     with pytest.raises(FeatureArtifactConflictError):
         publish_market_basic(
             changed_catalog,
             decision_at="2025-01-02T23:00:00Z",
             security_id=SECURITY_ID,
+            calendar_pin=CALENDAR_PIN,
+            artifact_id=first_artifact.manifest["artifact"]["artifact_id"],
             features_root=features_root,
         )
+
+    corrected_pin = dict(CALENDAR_PIN)
+    corrected_pin["calendar_version"] = "xnas_2025_corrected"
+    corrected_pin["session_fingerprint"] = "e" * 64
+    calendar_fork = publish_market_basic(
+        first_catalog,
+        decision_at="2025-01-02T23:00:00Z",
+        security_id=SECURITY_ID,
+        calendar_pin=corrected_pin,
+        features_root=features_root,
+    )
+    assert calendar_fork not in {first, changed_path}
 
 
 def test_tampered_and_unlisted_parts_are_rejected(tmp_path: Path) -> None:
@@ -240,6 +323,7 @@ def test_tampered_and_unlisted_parts_are_rejected(tmp_path: Path) -> None:
         catalog,
         decision_at="2025-01-02T23:00:00Z",
         security_id=SECURITY_ID,
+        calendar_pin=CALENDAR_PIN,
         features_root=tmp_path / "features",
     )
     artifact = read_feature_artifact(manifest_path)
@@ -253,6 +337,7 @@ def test_tampered_and_unlisted_parts_are_rejected(tmp_path: Path) -> None:
         _catalog(tmp_path / "fresh-input", _two_days()[:2]),
         decision_at="2025-01-02T23:00:00Z",
         security_id=SECURITY_ID,
+        calendar_pin=CALENDAR_PIN,
         features_root=tmp_path / "fresh-features",
     )
     fresh_artifact = read_feature_artifact(fresh_manifest)
@@ -275,6 +360,7 @@ def test_unknown_feature_or_version_is_rejected(tmp_path: Path, mutation) -> Non
         _catalog(tmp_path, _two_days()[:2]),
         decision_at="2025-01-02T23:00:00Z",
         security_id=SECURITY_ID,
+        calendar_pin=CALENDAR_PIN,
         features_root=tmp_path / "features",
     )
     document = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -290,6 +376,7 @@ def test_unknown_publish_version_fails_closed(tmp_path: Path) -> None:
             _catalog(tmp_path, _two_days()[:2]),
             decision_at="2025-01-02T23:00:00Z",
             security_id=SECURITY_ID,
+            calendar_pin=CALENDAR_PIN,
             features_root=tmp_path / "features",
             feature_set_version="2.0.0",
         )
@@ -312,6 +399,8 @@ def test_feature_cli_publishes_idempotently_and_validates(
 ) -> None:
     catalog = _catalog(tmp_path, _two_days()[:2])
     features_root = tmp_path / "features"
+    calendar_pin_path = tmp_path / "calendar-pin.json"
+    calendar_pin_path.write_text(json.dumps(CALENDAR_PIN), encoding="utf-8")
     publish_args = [
         "publish",
         "--data-root",
@@ -322,6 +411,8 @@ def test_feature_cli_publishes_idempotently_and_validates(
         SECURITY_ID,
         "--decision-at",
         "2025-01-02T23:00:00Z",
+        "--calendar-pin",
+        str(calendar_pin_path),
         "--computation-delay-seconds",
         "30",
         "--git-commit",
@@ -333,6 +424,7 @@ def test_feature_cli_publishes_idempotently_and_validates(
     assert first["action"] == "published"
     assert first["row_count"] == 1
     assert first["features"]["close"] == "101.000000000000000001"
+    assert first["calendar_pin"] == CALENDAR_PIN
     manifest_path = Path(first["manifest_path"])
     manifest_mtime = manifest_path.stat().st_mtime_ns
 
