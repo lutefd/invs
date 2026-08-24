@@ -23,9 +23,7 @@ NON_TERMINATING_SIGNIFICANT_DIGITS: Final[int] = 50
 _ARTIFACT_NAMESPACE = UUID("4a633f8c-58b6-5f0d-a33a-59a99555b1b7")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _DECIMAL = re.compile(r"^(0|[1-9][0-9]*)(\.[0-9]+)?$")
-_UTC_TIMESTAMP = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$"
-)
+_UTC_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$")
 _PART = re.compile(r"^part-([0-9a-f]{64})\.parquet$")
 _NORMALIZED_MANIFEST_FIELDS = frozenset(
     {
@@ -69,6 +67,19 @@ _CORPORATE_ACTION_FIELDS = frozenset(
         "recorded_at",
         "provenance",
     }
+)
+_PROVENANCE_FIELDS = frozenset(
+    {
+        "data_source_id",
+        "ingestion_run_id",
+        "raw_payload_hash",
+        "raw_record_locator",
+        "ingested_at",
+        "normalizer_version",
+    }
+)
+_PROVENANCE_REQUIRED_FIELDS = frozenset(
+    {"data_source_id", "ingestion_run_id", "raw_payload_hash", "ingested_at"}
 )
 _ADJUSTMENT_MANIFEST_FIELDS = frozenset(
     {
@@ -361,9 +372,9 @@ def _read_raw_rows(
         identities.add((row["source"], row["interval"], row["currency"]))
         canonical = dict(row)
         canonical["observed_at"] = timestamp
-        canonical["available_at"] = _canonical_timestamp(
-            row["available_at"], field="available_at"
-        )[0]
+        canonical["available_at"] = _canonical_timestamp(row["available_at"], field="available_at")[
+            0
+        ]
         rows.append(canonical)
     if not rows:
         raise AdjustmentArtifactError("no raw price rows are eligible at decision_at")
@@ -390,11 +401,21 @@ def _select_actions(
             raise AdjustmentArtifactError(f"corporate action {index} violates schema 2.0.0")
         if action.get("security_id") != security_id:
             raise AdjustmentArtifactError(f"corporate action {index} has another security")
+        action["id"] = _canonical_uuid(action.get("id"), field="action.id")
+        action["security_id"] = _canonical_uuid(
+            action.get("security_id"), field="action.security_id"
+        )
+        if action.get("target_security_id") is not None:
+            action["target_security_id"] = _canonical_uuid(
+                action["target_security_id"], field="action.target_security_id"
+            )
         source_event_id = action.get("source_event_id")
         if not isinstance(source_event_id, str) or not source_event_id:
             raise AdjustmentArtifactError(f"corporate action {index} lacks source_event_id")
         if source_event_id in families:
-            raise AdjustmentArtifactError(f"corporate action family {source_event_id!r} is unresolved")
+            raise AdjustmentArtifactError(
+                f"corporate action family {source_event_id!r} is unresolved"
+            )
         families.add(source_event_id)
         revision = action.get("revision")
         if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
@@ -430,8 +451,57 @@ def _select_actions(
         if kind == "cash_dividend" and action.get("currency") != currency:
             raise AdjustmentArtifactError(f"cash dividend {source_event_id!r} currency mismatch")
         action["observed_at"] = observed_text
+        action["published_at"] = _canonical_timestamp(
+            action.get("published_at"), field="action.published_at"
+        )[0]
         action["available_at"] = available_text
         action["effective_at"] = effective_text
+        action["recorded_at"] = _canonical_timestamp(
+            action.get("recorded_at"), field="action.recorded_at"
+        )[0]
+        provenance_value = action.get("provenance")
+        if not isinstance(provenance_value, Mapping):
+            raise AdjustmentArtifactError(f"corporate action {source_event_id!r} lacks provenance")
+        provenance = dict(provenance_value)
+        if (
+            not _PROVENANCE_REQUIRED_FIELDS <= set(provenance)
+            or not set(provenance) <= _PROVENANCE_FIELDS
+        ):
+            raise AdjustmentArtifactError(
+                f"corporate action {source_event_id!r} has invalid provenance fields"
+            )
+        provenance["data_source_id"] = _canonical_uuid(
+            provenance.get("data_source_id"), field="action.provenance.data_source_id"
+        )
+        provenance["ingestion_run_id"] = _canonical_uuid(
+            provenance.get("ingestion_run_id"),
+            field="action.provenance.ingestion_run_id",
+        )
+        raw_payload_hash = provenance.get("raw_payload_hash")
+        if not isinstance(raw_payload_hash, str) or _SHA256.fullmatch(raw_payload_hash) is None:
+            raise AdjustmentArtifactError(
+                f"corporate action {source_event_id!r} has invalid raw payload hash"
+            )
+        provenance["ingested_at"] = _canonical_timestamp(
+            provenance.get("ingested_at"), field="action.provenance.ingested_at"
+        )[0]
+        if provenance.get("raw_record_locator") is None:
+            provenance.pop("raw_record_locator", None)
+        elif (
+            not isinstance(provenance["raw_record_locator"], str)
+            or not provenance["raw_record_locator"]
+        ):
+            raise AdjustmentArtifactError(
+                f"corporate action {source_event_id!r} has invalid raw record locator"
+            )
+        if "normalizer_version" in provenance and (
+            not isinstance(provenance["normalizer_version"], str)
+            or not provenance["normalizer_version"]
+        ):
+            raise AdjustmentArtifactError(
+                f"corporate action {source_event_id!r} has invalid normalizer version"
+            )
+        action["provenance"] = provenance
         record_sha = _sha256_bytes(_canonical_json(action))
         pins.append(
             {
@@ -467,7 +537,9 @@ def _adjust_rows(
         kind = action["action_type"]
         if kind in {"split", "reverse_split"}:
             post = _fraction(action.get("ratio_numerator"), field="ratio_numerator", positive=True)
-            pre = _fraction(action.get("ratio_denominator"), field="ratio_denominator", positive=True)
+            pre = _fraction(
+                action.get("ratio_denominator"), field="ratio_denominator", positive=True
+            )
             price_factor, volume_factor = pre / post, post / pre
         else:
             prior = [row for date, row in by_date.items() if date < action_date]
@@ -534,11 +606,23 @@ def _parquet_bytes(rows: list[dict[str, Any]]) -> bytes:
         pa.field("observed_at", pa.string()),
         pa.field("available_at", pa.string()),
     ]
-    fields.extend(pa.field(name, pa.string()) for name in (
-        "raw_open", "raw_high", "raw_low", "raw_close", "raw_volume",
-        "price_factor", "volume_factor", "adjusted_open", "adjusted_high",
-        "adjusted_low", "adjusted_close", "adjusted_volume",
-    ))
+    fields.extend(
+        pa.field(name, pa.string())
+        for name in (
+            "raw_open",
+            "raw_high",
+            "raw_low",
+            "raw_close",
+            "raw_volume",
+            "price_factor",
+            "volume_factor",
+            "adjusted_open",
+            "adjusted_high",
+            "adjusted_low",
+            "adjusted_close",
+            "adjusted_volume",
+        )
+    )
     fields.append(pa.field("has_volume", pa.bool_()))
     table = pa.Table.from_pylist(rows, schema=pa.schema(fields))
     sink = pa.BufferOutputStream()
@@ -642,7 +726,9 @@ def publish_adjusted_prices(
         if output_manifest.is_file() and output_manifest.read_bytes() == manifest_bytes:
             validate_adjustment_artifact(output_manifest)
             return output_manifest
-        raise AdjustmentArtifactConflictError(f"immutable adjustment artifact conflict: {artifact_id}")
+        raise AdjustmentArtifactConflictError(
+            f"immutable adjustment artifact conflict: {artifact_id}"
+        )
     directory.mkdir(parents=True, exist_ok=False)
     try:
         (directory / output_name).write_bytes(part_bytes)
@@ -694,12 +780,8 @@ def validate_adjustment_artifact(path: str | Path) -> ValidatedAdjustmentArtifac
         observed_at = _canonical_timestamp(
             pin["observed_at"], field=f"selected_actions[{index}].observed_at"
         )[0]
-        _canonical_timestamp(
-            pin["available_at"], field=f"selected_actions[{index}].available_at"
-        )
-        _canonical_timestamp(
-            pin["effective_at"], field=f"selected_actions[{index}].effective_at"
-        )
+        _canonical_timestamp(pin["available_at"], field=f"selected_actions[{index}].available_at")
+        _canonical_timestamp(pin["effective_at"], field=f"selected_actions[{index}].effective_at")
         order = (observed_at, pin["source_event_id"])
         if previous_order is not None and order <= previous_order:
             raise AdjustmentArtifactValidationError("selected_actions are not uniquely ordered")
@@ -722,9 +804,7 @@ def validate_adjustment_artifact(path: str | Path) -> ValidatedAdjustmentArtifac
         "raw_price_part_sha256": manifest["raw_price_part_sha256"],
         "corporate_action_snapshot_sha256": manifest["corporate_action_snapshot_sha256"],
     }
-    expected_artifact_id = str(
-        uuid5(_ARTIFACT_NAMESPACE, _sha256_bytes(_canonical_json(identity)))
-    )
+    expected_artifact_id = str(uuid5(_ARTIFACT_NAMESPACE, _sha256_bytes(_canonical_json(identity))))
     if artifact_id != expected_artifact_id:
         raise AdjustmentArtifactValidationError("adjustment artifact_id mismatch")
     parts = manifest.get("parts")

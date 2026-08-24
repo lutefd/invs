@@ -22,13 +22,7 @@ RUN_ID = "c7286917-ce45-4879-834f-fc975c80c49e"
 
 
 def _write_raw_prices(root: Path, *, source: str = "fixture") -> Path:
-    directory = (
-        root
-        / "normalized"
-        / "prices"
-        / f"source={source}"
-        / f"security_id={SECURITY_ID}"
-    )
+    directory = root / "normalized" / "prices" / f"source={source}" / f"security_id={SECURITY_ID}"
     directory.mkdir(parents=True)
     rows = []
     for index, (date, close, volume) in enumerate(
@@ -163,9 +157,10 @@ def test_adjustment_artifact_pins_inputs_and_applies_exact_factors(tmp_path: Pat
     rows = artifact.rows
 
     assert manifest["raw_price_basis"] == "raw"
-    assert manifest["raw_price_manifest_sha256"] == hashlib.sha256(
-        raw_manifest.read_bytes()
-    ).hexdigest()
+    assert (
+        manifest["raw_price_manifest_sha256"]
+        == hashlib.sha256(raw_manifest.read_bytes()).hexdigest()
+    )
     assert [row["source_event_id"] for row in manifest["selected_actions"]] == [
         "fixture/dividend",
         "fixture/split",
@@ -187,6 +182,23 @@ def test_adjustment_artifact_pins_inputs_and_applies_exact_factors(tmp_path: Pat
     )
     assert replay == path
     assert hashlib.sha256(raw_manifest.read_bytes()).hexdigest() == raw_hash
+
+    alternate_lexemes = json.loads(json.dumps(_actions()))
+    for action in alternate_lexemes:
+        action["published_at"] = action["published_at"].replace("Z", "+00:00")
+        action["recorded_at"] = action["recorded_at"].replace("Z", "+00:00")
+        action["provenance"]["ingested_at"] = action["provenance"]["ingested_at"].replace(
+            "Z", "+00:00"
+        )
+    alternate = publish_adjusted_prices(
+        raw_manifest,
+        alternate_lexemes,
+        decision_at="2025-01-09T00:00:00+00:00",
+        adjustments_root=tmp_path / "alternate-adjusted",
+    )
+    assert (
+        validate_adjustment_artifact(alternate).manifest["artifact_id"] == manifest["artifact_id"]
+    )
 
 
 def test_unsupported_and_not_yet_knowable_actions_write_nothing(tmp_path: Path) -> None:
@@ -227,19 +239,22 @@ def test_adjustment_validation_detects_tampering_and_cli_round_trip(
     actions_path = tmp_path / "actions.json"
     actions_path.write_text(json.dumps({"actions": _actions()}), encoding="utf-8")
     root = tmp_path / "adjusted"
-    assert adjustment_cli_main(
-        [
-            "publish",
-            "--raw-manifest",
-            str(raw_manifest),
-            "--actions",
-            str(actions_path),
-            "--decision-at",
-            "2025-01-09T00:00:00Z",
-            "--adjustments-root",
-            str(root),
-        ]
-    ) == 0
+    assert (
+        adjustment_cli_main(
+            [
+                "publish",
+                "--raw-manifest",
+                str(raw_manifest),
+                "--actions",
+                str(actions_path),
+                "--decision-at",
+                "2025-01-09T00:00:00Z",
+                "--adjustments-root",
+                str(root),
+            ]
+        )
+        == 0
+    )
     summary = json.loads(capsys.readouterr().out)
     manifest_path = Path(summary["manifest_path"])
     assert adjustment_cli_main(["validate", "--manifest", str(manifest_path)]) == 0
