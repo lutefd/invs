@@ -30,6 +30,7 @@ import (
 	"github.com/luisdourado/invs/internal/providers/alfred"
 	"github.com/luisdourado/invs/internal/providers/b3"
 	"github.com/luisdourado/invs/internal/providers/bcb"
+	"github.com/luisdourado/invs/internal/providers/calendarartifact"
 	"github.com/luisdourado/invs/internal/providers/cvm"
 	"github.com/luisdourado/invs/internal/providers/fred"
 	"github.com/luisdourado/invs/internal/providers/nasdaq"
@@ -123,6 +124,43 @@ type calendarEvidenceResource struct {
 	Metadata      map[string]string `json:"metadata"`
 }
 
+type historicalCalendarEvidenceManifest struct {
+	SchemaVersion     string                               `json:"schema_version"`
+	Source            string                               `json:"source"`
+	MIC               string                               `json:"mic"`
+	ExchangeTimezone  string                               `json:"exchange_timezone"`
+	Year              int                                  `json:"year"`
+	CoverageStart     string                               `json:"coverage_start"`
+	CoverageEnd       string                               `json:"coverage_end"`
+	RegularOpenLocal  string                               `json:"regular_open_local"`
+	RegularCloseLocal string                               `json:"regular_close_local"`
+	AvailableAt       string                               `json:"available_at"`
+	Revision          int                                  `json:"revision"`
+	WeekendPolicy     string                               `json:"weekend_policy"`
+	AdmissionPolicy   string                               `json:"admission_policy"`
+	Resources         []historicalCalendarEvidenceResource `json:"resources"`
+	Events            []historicalCalendarEvidenceEvent    `json:"events"`
+}
+
+type historicalCalendarEvidenceResource struct {
+	Kind          string            `json:"kind"`
+	Key           string            `json:"key"`
+	URL           string            `json:"url"`
+	SHA256        string            `json:"sha256"`
+	ContentType   string            `json:"content_type"`
+	ParserVersion string            `json:"parser_version"`
+	Metadata      map[string]string `json:"metadata"`
+}
+
+type historicalCalendarEvidenceEvent struct {
+	Date          string `json:"date"`
+	Status        string `json:"status"`
+	OpenLocal     string `json:"open_local,omitempty"`
+	CloseLocal    string `json:"close_local,omitempty"`
+	ResourceKind  string `json:"resource_kind"`
+	SourceLocator string `json:"source_locator"`
+}
+
 type membershipEvidenceEvent struct {
 	Ticker           string
 	Member           bool
@@ -160,7 +198,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, b3-calendar, b3-membership, b3-listing-history, nasdaq-membership, nyse, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, b3-calendar, b3-calendar-history, b3-membership, b3-listing-history, nasdaq-calendar-history, nasdaq-membership, nyse, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -288,7 +326,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-calendar": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-calendar": true, "b3-calendar-history": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-calendar-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -312,6 +350,12 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "b3-calendar" && (!a.cfg.Providers.B3.Enabled || !a.cfg.Providers.B3.Calendar.Enabled) {
 		return errors.New("B3 calendar provider is disabled")
+	}
+	if source == "b3-calendar-history" && !a.cfg.Providers.B3CalendarHistory.Enabled {
+		return errors.New("B3 historical calendar provider is disabled")
+	}
+	if source == "nasdaq-calendar-history" && !a.cfg.Providers.NasdaqCalendarHistory.Enabled {
+		return errors.New("Nasdaq historical calendar provider is disabled")
 	}
 	if source == "nyse" && !a.cfg.Providers.NYSE.Enabled {
 		return errors.New("NYSE calendar provider is disabled")
@@ -366,6 +410,16 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "nyse") && a.cfg.Providers.NYSE.Enabled {
 		if err := a.collectNYSECalendar(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "b3-calendar-history") && a.cfg.Providers.B3CalendarHistory.Enabled {
+		if err := a.collectHistoricalCalendar(ctx, "b3_calendar", "b3-calendar-history", "BVMF", "America/Sao_Paulo", a.cfg.Providers.B3CalendarHistory); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "nasdaq-calendar-history") && a.cfg.Providers.NasdaqCalendarHistory.Enabled {
+		if err := a.collectHistoricalCalendar(ctx, "nasdaq_calendar", "nasdaq-calendar-history", "XNAS", "America/New_York", a.cfg.Providers.NasdaqCalendarHistory); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -1144,6 +1198,172 @@ func (a *app) publishCalendar(ctx context.Context, batch metadata.HistoricalTrut
 		return fmt.Errorf("calendar historical truth publication: %w", err)
 	}
 	return nil
+}
+
+func (a *app) collectHistoricalCalendar(ctx context.Context, sourceCode, selector, mic, timezone string, provider config.HistoricalCalendarProvider) error {
+	m := metrics{
+		Source: sourceCode, RunKey: selector, StartedAt: a.nowUTC(),
+		Cursor: map[string]any{
+			"provider": sourceCode, "kind": "market_calendar", "mic": mic,
+			"year": provider.Year, "historical_fitness": "official_artifact_publication_time",
+		},
+	}
+	run, skip, err := a.start(ctx, &m, historicalCalendarRunInputs(sourceCode, mic, provider))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+
+	client := calendarartifact.NewClient(a.http)
+	coverageStart, coverageEnd, err := calendarCoverage(config.CalendarProvider{
+		Year: provider.Year, CoverageStart: provider.CoverageStart, CoverageEnd: provider.CoverageEnd,
+	}, timezone)
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	batch := metadata.HistoricalTruthBatch{}
+	versions := make([]map[string]any, 0, len(provider.Versions))
+	for _, configuredVersion := range provider.Versions {
+		request := calendarartifact.Request{
+			Source: sourceCode, MIC: mic, Year: provider.Year, Revision: configuredVersion.Revision,
+			Resources: make([]calendarartifact.ResourceRequest, 0, len(configuredVersion.Resources)),
+		}
+		for _, resource := range configuredVersion.Resources {
+			request.Resources = append(request.Resources, calendarartifact.ResourceRequest{
+				Kind: resource.Kind, URL: resource.URL, ExpectedSHA256: resource.SHA256, ContentType: resource.ContentType,
+			})
+		}
+		result, collectErr := client.Collect(ctx, request)
+		storeErr := a.storeHistoricalCalendarResources(ctx, &m, sourceCode, provider.Year, configuredVersion.Revision, result.Resources)
+		if collectErr = errors.Join(collectErr, storeErr); collectErr != nil {
+			return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+		}
+		m.Received += len(result.Resources) + len(configuredVersion.Events)
+
+		evidenceHash, evidenceReference, evidenceErr := a.storeHistoricalCalendarEvidence(
+			ctx, &m, sourceCode, mic, timezone, provider, configuredVersion, result.Resources,
+		)
+		if evidenceErr != nil {
+			return errors.Join(evidenceErr, a.finish(ctx, run, m, evidenceErr, nil, nil))
+		}
+		availableAt, parseErr := time.Parse(time.RFC3339, configuredVersion.AvailableAt)
+		if parseErr != nil {
+			return errors.Join(parseErr, a.finish(ctx, run, m, parseErr, nil, nil))
+		}
+		events := make([]marketcalendar.Event, 0, len(configuredVersion.Events))
+		for _, event := range configuredVersion.Events {
+			date, dateErr := time.Parse(time.DateOnly, event.Date)
+			if dateErr != nil {
+				return errors.Join(dateErr, a.finish(ctx, run, m, dateErr, nil, nil))
+			}
+			events = append(events, marketcalendar.Event{
+				Date: date, Status: event.Status, OpenLocal: event.OpenLocal, CloseLocal: event.CloseLocal,
+				SourceReference: event.ResourceKind + "/" + event.SourceLocator,
+			})
+		}
+		marketcalendar.SortEvents(events)
+		version := calendarVersion(strings.ToLower(mic), provider.Year, evidenceHash)
+		compiled, compileErr := marketcalendar.Compile(marketcalendar.Definition{
+			DataSourceID: run.DataSourceID, MIC: mic, ExchangeTimezone: timezone,
+			CalendarVersion: version, CoverageStart: coverageStart, CoverageEnd: coverageEnd,
+			RegularOpenLocal: provider.RegularOpenLocal, RegularCloseLocal: provider.RegularCloseLocal,
+			AvailableAt: availableAt, RecordedAt: m.StartedAt, SourceReference: evidenceReference,
+			RawPayloadHash: evidenceHash, Revision: configuredVersion.Revision, Events: events,
+		})
+		if compileErr != nil {
+			return errors.Join(compileErr, a.finish(ctx, run, m, compileErr, nil, nil))
+		}
+		batch.Calendars = append(batch.Calendars, compiled.Calendars...)
+		batch.Sessions = append(batch.Sessions, compiled.Sessions...)
+		versions = append(versions, map[string]any{
+			"revision": configuredVersion.Revision, "available_at": availableAt,
+			"calendar_version": version, "session_fingerprint": compiled.Calendars[0].SessionFingerprint,
+		})
+	}
+	if err := a.publishCalendar(ctx, batch); err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	m.OutputRows = len(batch.Calendars) + len(batch.Sessions)
+	m.Cursor["status"] = "canonical_published"
+	m.Cursor["versions"] = versions
+	m.Cursor["calendar_versions"] = len(batch.Calendars)
+	m.Cursor["session_rows"] = len(batch.Sessions)
+	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+func (a *app) storeHistoricalCalendarResources(ctx context.Context, m *metrics, source string, year, revision int, resources []providers.RawResource) error {
+	for _, resource := range resources {
+		attributes := make(map[string]string, len(resource.ParserMetadata)+4)
+		for key, value := range resource.ParserMetadata {
+			attributes[key] = value
+		}
+		attributes["source_url"] = resource.URL
+		attributes["parser_version"] = resource.ParserVersion
+		attributes["adapter_sha256"] = resource.SHA256
+		attributes["calendar_revision"] = strconv.Itoa(revision)
+		fetchedAt := resourceFetchedAt(resource, m.StartedAt)
+		extension := "html"
+		if resource.ContentType == "application/pdf" {
+			extension = "pdf"
+		}
+		key := rawKey(source, "calendar-history", fmt.Sprintf("year-%d-revision-%03d-%s", year, revision, resource.Kind), resource.Bytes, fetchedAt, extension)
+		logicalKey := fmt.Sprintf("%s/calendar-history/year=%d/revision=%03d/resource=%s", source, year, revision, resource.Kind)
+		if _, err := a.storeRaw(ctx, m, key, resource.Bytes, storage.RawMetadata{
+			Source: source, ContentType: resource.ContentType, FetchedAt: fetchedAt, Attributes: attributes,
+		}, logicalKey, source+"/calendar-history/"+resource.Kind, resource.SHA256); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *app) storeHistoricalCalendarEvidence(ctx context.Context, m *metrics, source, mic, timezone string, provider config.HistoricalCalendarProvider, version config.HistoricalCalendarVersion, resources []providers.RawResource) (string, string, error) {
+	manifest := historicalCalendarEvidenceManifest{
+		SchemaVersion: "1", Source: source, MIC: mic, ExchangeTimezone: timezone, Year: provider.Year,
+		CoverageStart: provider.CoverageStart, CoverageEnd: provider.CoverageEnd,
+		RegularOpenLocal: provider.RegularOpenLocal, RegularCloseLocal: provider.RegularCloseLocal,
+		AvailableAt: version.AvailableAt, Revision: version.Revision,
+		WeekendPolicy:   "Saturday and Sunday are materialized as explicit closed rows",
+		AdmissionPolicy: "immutable official artifacts verified by exact SHA-256; declarative exceptions are source-located",
+		Resources:       make([]historicalCalendarEvidenceResource, 0, len(resources)),
+		Events:          make([]historicalCalendarEvidenceEvent, 0, len(version.Events)),
+	}
+	for _, resource := range resources {
+		manifest.Resources = append(manifest.Resources, historicalCalendarEvidenceResource{
+			Kind: resource.Kind, Key: resource.Key, URL: resource.URL, SHA256: resource.SHA256,
+			ContentType: resource.ContentType, ParserVersion: resource.ParserVersion, Metadata: resource.ParserMetadata,
+		})
+	}
+	for _, event := range version.Events {
+		manifest.Events = append(manifest.Events, historicalCalendarEvidenceEvent{
+			Date: event.Date, Status: event.Status, OpenLocal: event.OpenLocal, CloseLocal: event.CloseLocal,
+			ResourceKind: event.ResourceKind, SourceLocator: event.SourceLocator,
+		})
+	}
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		return "", "", fmt.Errorf("encode historical calendar evidence manifest: %w", err)
+	}
+	hash := providers.SHA256(encoded)
+	availableAt, err := time.Parse(time.RFC3339, version.AvailableAt)
+	if err != nil {
+		return "", "", err
+	}
+	logicalKey := fmt.Sprintf("%s/calendar-history-evidence/year=%d/mic=%s/revision=%03d", source, provider.Year, mic, version.Revision)
+	key := rawKey(source, "calendar-history-evidence", fmt.Sprintf("year-%d-%s-revision-%03d", provider.Year, strings.ToLower(mic), version.Revision), encoded, availableAt, "json")
+	storedHash, err := a.storeRaw(ctx, m, key, encoded, storage.RawMetadata{
+		Source: source, ContentType: "application/json", FetchedAt: m.StartedAt,
+		Attributes: map[string]string{
+			"mic": mic, "year": strconv.Itoa(provider.Year), "revision": strconv.Itoa(version.Revision),
+			"available_at": version.AvailableAt, "historical_fitness": "official_artifact_publication_time",
+		},
+	}, logicalKey, source+"/calendar-history-evidence", hash)
+	if err != nil {
+		return "", "", err
+	}
+	return storedHash, logicalKey + "/sha256=" + storedHash, nil
 }
 
 func (a *app) collectNasdaqMembership(ctx context.Context) error {
@@ -2164,6 +2384,42 @@ func calendarRunInputs(source, mic string, provider config.CalendarProvider) met
 			CalendarMIC: mic, CalendarCoverageStart: strings.TrimSpace(provider.CoverageStart),
 			CalendarCoverageEnd: strings.TrimSpace(provider.CoverageEnd), Format: "html",
 			Vintage: "current_reference_receipt_time",
+		},
+	}
+}
+
+func historicalCalendarRunInputs(source, mic string, provider config.HistoricalCalendarProvider) metadata.RunInputs {
+	versions := make([]metadata.CalendarArtifactInput, 0, len(provider.Versions))
+	for _, version := range provider.Versions {
+		configured := metadata.CalendarArtifactInput{
+			AvailableAt: strings.TrimSpace(version.AvailableAt), Revision: version.Revision,
+			Resources: make([]metadata.CalendarArtifactResourceInput, 0, len(version.Resources)),
+			Events:    make([]metadata.CalendarArtifactEventInput, 0, len(version.Events)),
+		}
+		for _, resource := range version.Resources {
+			configured.Resources = append(configured.Resources, metadata.CalendarArtifactResourceInput{
+				Kind: strings.TrimSpace(resource.Kind), URL: strings.TrimSpace(resource.URL),
+				SHA256: strings.TrimSpace(resource.SHA256), ContentType: strings.TrimSpace(resource.ContentType),
+			})
+		}
+		for _, event := range version.Events {
+			configured.Events = append(configured.Events, metadata.CalendarArtifactEventInput{
+				Date: strings.TrimSpace(event.Date), Status: strings.TrimSpace(event.Status),
+				OpenLocal: strings.TrimSpace(event.OpenLocal), CloseLocal: strings.TrimSpace(event.CloseLocal),
+				ResourceKind: strings.TrimSpace(event.ResourceKind), SourceLocator: strings.TrimSpace(event.SourceLocator),
+			})
+		}
+		versions = append(versions, configured)
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        source,
+		Provider: metadata.ProviderInputs{
+			Name: source, Kind: "market_calendar", CalendarYear: provider.Year, CalendarMIC: mic,
+			CalendarCoverageStart: strings.TrimSpace(provider.CoverageStart), CalendarCoverageEnd: strings.TrimSpace(provider.CoverageEnd),
+			CalendarRegularOpen: strings.TrimSpace(provider.RegularOpenLocal), CalendarRegularClose: strings.TrimSpace(provider.RegularCloseLocal),
+			CalendarArtifactVersions: versions, Format: "official_artifacts_with_declarative_transcription",
+			Vintage: "historical_source_publication",
 		},
 	}
 }

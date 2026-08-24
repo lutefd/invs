@@ -1,6 +1,8 @@
 package metadata
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -128,6 +130,87 @@ func TestCalendarFingerprintIsOrderIndependentAndUTCCanonical(t *testing.T) {
 	}
 	if first != second {
 		t.Fatalf("equivalent/reordered sessions produced different fingerprints: %s != %s", first, second)
+	}
+}
+
+func TestCalendarFingerprintExcludesVersionLineage(t *testing.T) {
+	first := validHistoricalSessions()
+	second := validHistoricalSessions()
+	for index := range second {
+		second[index].CalendarVersion = "xnas_2026_corrected"
+		second[index].AvailableAt = second[index].AvailableAt.Add(24 * time.Hour)
+		second[index].RecordedAt = second[index].RecordedAt.Add(24 * time.Hour)
+		second[index].RawPayloadHash = strings.Repeat("b", 64)
+		second[index].Revision++
+	}
+	firstHash, err := calendarSessionFingerprint(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondHash, err := calendarSessionFingerprint(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstHash != secondHash {
+		t.Fatalf("identical session semantics across source versions produced %s and %s", firstHash, secondHash)
+	}
+}
+
+func TestCalendarFingerprintMatchesSharedSchemaFixture(t *testing.T) {
+	body, err := os.ReadFile("../../schemas/calendar.fixture.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Manifests []CalendarManifest `json:"manifests"`
+		Sessions  []TradingSession   `json:"sessions"`
+	}
+	if err := json.Unmarshal(body, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, manifest := range fixture.Manifests {
+		sessions := make([]TradingSession, 0, manifest.SessionCount)
+		for _, session := range fixture.Sessions {
+			if session.MIC == manifest.MIC && session.CalendarVersion == manifest.CalendarVersion {
+				sessions = append(sessions, session)
+			}
+		}
+		fingerprint, err := CalendarSessionFingerprint(sessions)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fingerprint != manifest.SessionFingerprint {
+			t.Fatalf("%s/%s fingerprint = %s, want %s", manifest.MIC, manifest.CalendarVersion, fingerprint, manifest.SessionFingerprint)
+		}
+	}
+}
+
+func TestSelectCalendarManifestUsesDecisionClockRankAndFailsClosed(t *testing.T) {
+	base := CalendarManifest{
+		SchemaVersion: HistoricalSchemaVersion, ID: "11111111-1111-4111-8111-111111111111",
+		CalendarVersion: "xnas_2025_original", MIC: "XNAS", ExchangeTimezone: "America/New_York",
+		AvailableAt: time.Date(2024, 12, 13, 5, 0, 0, 0, time.UTC),
+		RecordedAt:  time.Date(2026, 8, 24, 3, 0, 0, 0, time.UTC), DataSourceID: testHistoricalDataSource,
+		SourceReference: "source/original", RawPayloadHash: strings.Repeat("a", 64),
+		SessionFingerprint: strings.Repeat("c", 64), SessionCount: 3,
+	}
+	corrected := base
+	corrected.ID = "22222222-2222-4222-8222-222222222222"
+	corrected.CalendarVersion = "xnas_2025_corrected"
+	corrected.AvailableAt = base.AvailableAt.Add(24 * time.Hour)
+	corrected.SourceReference = "source/corrected"
+	corrected.RawPayloadHash = strings.Repeat("b", 64)
+	selected, err := selectCalendarManifest([]CalendarManifest{base, corrected})
+	if err != nil || selected == nil || selected.CalendarVersion != corrected.CalendarVersion {
+		t.Fatalf("selected manifest/error = %+v/%v", selected, err)
+	}
+
+	conflict := corrected
+	conflict.ID = "33333333-3333-4333-8333-333333333333"
+	conflict.CalendarVersion = "xnas_2025_conflict"
+	conflict.RawPayloadHash = strings.Repeat("d", 64)
+	if _, err := selectCalendarManifest([]CalendarManifest{corrected, conflict}); err == nil || !strings.Contains(err.Error(), "equal-ranked") {
+		t.Fatalf("equal-ranked conflict error = %v", err)
 	}
 }
 

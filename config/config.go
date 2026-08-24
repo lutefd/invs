@@ -703,6 +703,8 @@ func validateHistoricalCalendarProvider(prefix string, provider HistoricalCalend
 		availableAt, availableErr := canonicalUTCTimestamp(version.AvailableAt)
 		if availableErr != nil {
 			errs = append(errs, fmt.Errorf("%s.available_at must be a canonical UTC RFC 3339 timestamp", versionPrefix))
+		} else if availableAt.After(time.Now().UTC()) {
+			errs = append(errs, fmt.Errorf("%s.available_at must not be in the future", versionPrefix))
 		} else if !previousAvailability.IsZero() && !availableAt.After(previousAvailability) {
 			errs = append(errs, fmt.Errorf("%s.available_at must be later than the prior version", versionPrefix))
 		}

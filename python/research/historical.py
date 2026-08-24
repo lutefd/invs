@@ -18,7 +18,6 @@ from typing import Any
 type Record = Mapping[str, Any]
 _UTC_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$")
 _CALENDAR_FINGERPRINT_FIELDS = (
-    "calendar_version",
     "mic",
     "exchange_timezone",
     "session_date",
@@ -143,7 +142,7 @@ def security_identifier_as_of(
     normalized = value.strip().upper()
     kind = identifier_type.strip().lower()
     scope = identifier_scope.strip().upper()
-    known = (
+    known = tuple(
         row
         for row in rows
         if str(row.get("identifier_type", "")).lower() == kind
@@ -346,6 +345,65 @@ def _calendar_row_matches(
     )
 
 
+def calendar_manifest_as_of(
+    rows: Iterable[Record],
+    *,
+    data_source_id: str,
+    mic: str,
+    decision_at: str | datetime,
+) -> Record | None:
+    """Select the latest explicit calendar version knowable at ``decision_at``."""
+
+    decision_time = parse_utc(decision_at, field="decision_at")
+    requested_mic = mic.strip().upper()
+    known = tuple(
+        row
+        for row in rows
+        if row.get("data_source_id") == data_source_id
+        and str(row.get("mic", "")).upper() == requested_mic
+        and _available_by(row, decision_time)
+    )
+    if not known:
+        return None
+    highest_rank = max(
+        (
+            parse_utc(row["available_at"], field="available_at"),
+            parse_utc(row["recorded_at"], field="recorded_at"),
+        )
+        for row in known
+    )
+    leaders = tuple(
+        row
+        for row in known
+        if (
+            parse_utc(row["available_at"], field="available_at"),
+            parse_utc(row["recorded_at"], field="recorded_at"),
+        )
+        == highest_rank
+    )
+    identities = {
+        (
+            row.get("id"),
+            row.get("schema_version"),
+            row.get("calendar_version"),
+            row.get("mic"),
+            row.get("exchange_timezone"),
+            row.get("source_reference"),
+            row.get("data_source_id"),
+            row.get("raw_payload_hash"),
+            row.get("session_fingerprint"),
+            row.get("session_count"),
+        )
+        for row in leaders
+    }
+    if len(identities) > 1:
+        raise AmbiguousHistoricalResolution(
+            f"calendar manifest {data_source_id}/{requested_mic} has equal-ranked "
+            "records with conflicting identities"
+        )
+    return max(leaders, key=lambda row: str(row.get("id", "")))
+
+
 def trading_session_at(
     rows: Iterable[Record],
     *,
@@ -487,6 +545,7 @@ __all__ = [
     "HistoricalResolutionError",
     "after_close_execution_session",
     "calendar_fingerprint",
+    "calendar_manifest_as_of",
     "listing_as_of",
     "listings_as_of",
     "membership_as_of",

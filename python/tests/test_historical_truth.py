@@ -13,6 +13,7 @@ from research.historical import (
     HistoricalResolutionError,
     after_close_execution_session,
     calendar_fingerprint,
+    calendar_manifest_as_of,
     listing_as_of,
     next_trading_session,
     parse_utc,
@@ -339,6 +340,44 @@ def test_calendar_fixture_pins_holidays_early_close_and_availability() -> None:
     ) is None
 
 
+def test_calendar_manifest_resolver_obeys_knowledge_time_and_fails_closed() -> None:
+    original = deepcopy(CALENDAR_FIXTURE["manifests"][0])
+    test_data_source = "11111111-1111-4111-8111-111111111111"
+    original["data_source_id"] = test_data_source
+    original["available_at"] = "2024-12-01T00:00:00Z"
+    original["recorded_at"] = "2026-08-24T03:00:00Z"
+    corrected = deepcopy(original)
+    corrected["id"] = "22222222-2222-4222-8222-222222222222"
+    corrected["calendar_version"] = "fixture-xnas-2025-v2"
+    corrected["available_at"] = "2025-01-01T00:00:00Z"
+    corrected["raw_payload_hash"] = "b" * 64
+
+    selected = calendar_manifest_as_of(
+        [original, corrected],
+        data_source_id=test_data_source,
+        mic="XNAS",
+        decision_at="2024-12-31T23:59:59.999999Z",
+    )
+    assert selected is not None and selected["calendar_version"] == original["calendar_version"]
+    selected = calendar_manifest_as_of(
+        [original, corrected],
+        data_source_id=test_data_source,
+        mic="XNAS",
+        decision_at="2025-01-01T00:00:00Z",
+    )
+    assert selected is not None and selected["calendar_version"] == corrected["calendar_version"]
+
+    conflict = deepcopy(corrected)
+    conflict["id"] = "33333333-3333-4333-8333-333333333333"
+    conflict["calendar_version"] = "fixture-xnas-2025-conflict"
+    conflict["raw_payload_hash"] = "c" * 64
+    with pytest.raises(AmbiguousHistoricalResolution, match="calendar manifest"):
+        calendar_manifest_as_of(
+            [corrected, conflict],
+            data_source_id=test_data_source,
+            mic="XNAS",
+            decision_at="2025-01-01T00:00:00Z",
+        )
 def test_after_close_clock_uses_next_explicit_session() -> None:
     rows = CALENDAR_FIXTURE["sessions"]
     version = "fixture-xnas-2025-v1"

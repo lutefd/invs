@@ -454,6 +454,21 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	if calendarInputs.Source != "nyse" || calendarInputs.Provider.Kind != "market_calendar" || calendarInputs.Provider.CalendarYear != 2026 || calendarInputs.Provider.CalendarMIC != "XNYS" || calendarInputs.Provider.CalendarCoverageStart != "2026-01-01" || calendarInputs.Provider.Vintage != "current_reference_receipt_time" {
 		t.Fatalf("calendar run inputs = %+v", calendarInputs)
 	}
+	historicalCalendarInputs := historicalCalendarRunInputs("nasdaq_calendar", "XNAS", config.HistoricalCalendarProvider{
+		Year: 2025, CoverageStart: "2025-12-24", CoverageEnd: "2025-12-25",
+		RegularOpenLocal: "09:30", RegularCloseLocal: "16:00",
+		Versions: []config.HistoricalCalendarVersion{{
+			AvailableAt: "2024-12-13T05:00:00Z", Revision: 0,
+			Resources: []config.HistoricalCalendarResource{{Kind: "annual_calendar", URL: "https://www.nasdaqtrader.com/content/technicalsupport/2025tradingcalendar.pdf", SHA256: strings.Repeat("a", 64), ContentType: "application/pdf"}},
+			Events:    []config.HistoricalCalendarEvent{{Date: "2025-12-24", Status: "open", CloseLocal: "13:00", ResourceKind: "annual_calendar", SourceLocator: "calendar/date=2025-12-24"}},
+		}},
+	})
+	if historicalCalendarInputs.Source != "nasdaq_calendar" || historicalCalendarInputs.Provider.Vintage != "historical_source_publication" || historicalCalendarInputs.Provider.CalendarRegularOpen != "09:30" || len(historicalCalendarInputs.Provider.CalendarArtifactVersions) != 1 {
+		t.Fatalf("historical calendar run inputs = %+v", historicalCalendarInputs)
+	}
+	if got := historicalCalendarInputs.Provider.CalendarArtifactVersions[0]; got.AvailableAt != "2024-12-13T05:00:00Z" || got.Resources[0].SHA256 != strings.Repeat("a", 64) || got.Events[0].SourceLocator != "calendar/date=2025-12-24" {
+		t.Fatalf("historical calendar version inputs = %+v", got)
+	}
 	membershipInputs := membershipRunInputs("nasdaq", config.IndexMembershipProvider{
 		UniverseID: "nasdaq_100", Tickers: []string{"INSM"},
 		Notices: []string{"https://www.globenewswire.com/news-release/2026/remove", "https://www.globenewswire.com/news-release/2025/add"},
@@ -480,7 +495,7 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		t.Fatalf("listing-history notice input = %+v", got)
 	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs, membershipInputs, listingHistoryInputs} {
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs, historicalCalendarInputs, membershipInputs, listingHistoryInputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -843,6 +858,109 @@ func TestCollectorNYSECalendarPublishesHolidayAndEarlyClose(t *testing.T) {
 	}
 	if published.Sessions[0].SessionStatus != "closed" || published.Sessions[1].SessionStatus != "open" || !published.Sessions[1].IsEarlyClose || published.Sessions[1].CloseAt == nil || published.Sessions[1].CloseAt.Format(time.RFC3339) != "2026-11-27T18:00:00Z" {
 		t.Fatalf("NYSE sessions = %+v", published.Sessions)
+	}
+}
+
+func TestCollectorHistoricalCalendarPublishesFullCorrectionVersionsAtomically(t *testing.T) {
+	originalBody := []byte("%PDF-1.7\noriginal B3 calendar")
+	correctionBody := []byte("%PDF-1.7\ncorrected B3 calendar")
+	originalURL := "https://www.b3.com.br/data/files/AA/original.pdf"
+	correctionURL := "https://www.b3.com.br/data/files/BB/correction.pdf"
+	events := []config.HistoricalCalendarEvent{
+		{Date: "2026-02-16", Status: "closed", ResourceKind: "calendar_circular", SourceLocator: "page=1/date=2026-02-16"},
+		{Date: "2026-02-17", Status: "closed", ResourceKind: "calendar_circular", SourceLocator: "page=1/date=2026-02-17"},
+		{Date: "2026-02-18", Status: "open", OpenLocal: "13:00", CloseLocal: "18:00", ResourceKind: "calendar_circular", SourceLocator: "page=1/date=2026-02-18"},
+	}
+	provider := config.HistoricalCalendarProvider{
+		Enabled: true, Year: 2026, CoverageStart: "2026-02-16", CoverageEnd: "2026-02-18",
+		RegularOpenLocal: "10:00", RegularCloseLocal: "17:00",
+		Versions: []config.HistoricalCalendarVersion{
+			{
+				AvailableAt: "2025-12-05T03:00:00Z", Revision: 0,
+				Resources: []config.HistoricalCalendarResource{{Kind: "calendar_circular", URL: originalURL, SHA256: hashPayload(originalBody), ContentType: "application/pdf"}},
+				Events:    append([]config.HistoricalCalendarEvent(nil), events...),
+			},
+			{
+				AvailableAt: "2026-01-09T03:00:00Z", Revision: 1,
+				Resources: []config.HistoricalCalendarResource{{Kind: "calendar_circular", URL: correctionURL, SHA256: hashPayload(correctionBody), ContentType: "application/pdf"}},
+				Events:    append([]config.HistoricalCalendarEvent(nil), events...),
+			},
+		},
+	}
+	raw := &orderingRawStore{}
+	var published metadata.HistoricalTruthBatch
+	var started metadata.RunInputs
+	app := &app{
+		cfg: config.Config{Providers: config.Providers{B3CalendarHistory: provider}},
+		raw: raw,
+		http: collectorHTTPFake{responses: map[string][]byte{
+			"original.pdf": originalBody, "correction.pdf": correctionBody,
+		}},
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: testRun(), onStartInputs: func(inputs metadata.RunInputs) {
+			started = inputs
+		}, onHistorical: func(batch metadata.HistoricalTruthBatch) {
+			published = batch
+		}},
+		batchKey: "b3-calendar-history-test",
+		now:      func() time.Time { return time.Date(2026, 8, 24, 3, 0, 0, 123456789, time.UTC) },
+	}
+	if err := app.run(context.Background(), "b3-calendar-history"); err != nil {
+		t.Fatal(err)
+	}
+	if started.Source != "b3_calendar" || started.Provider.CalendarMIC != "BVMF" || len(started.Provider.CalendarArtifactVersions) != 2 {
+		t.Fatalf("run inputs = %+v", started)
+	}
+	if len(raw.events) != 4 || len(published.Calendars) != 2 || len(published.Sessions) != 6 {
+		t.Fatalf("raw/published = %v/%+v", raw.events, published)
+	}
+	if published.Calendars[0].CalendarVersion == published.Calendars[1].CalendarVersion || published.Calendars[0].RawPayloadHash == published.Calendars[1].RawPayloadHash {
+		t.Fatalf("correction versions did not retain distinct evidence: %+v", published.Calendars)
+	}
+	if published.Calendars[0].SessionFingerprint != published.Calendars[1].SessionFingerprint {
+		t.Fatalf("non-equity correction changed the listed-equity session fingerprint: %+v", published.Calendars)
+	}
+	for versionIndex := range 2 {
+		session := published.Sessions[versionIndex*3+2]
+		if session.Revision != versionIndex || session.OpenAt == nil || session.CloseAt == nil || session.OpenAt.Format(time.RFC3339) != "2026-02-18T16:00:00Z" || session.CloseAt.Format(time.RFC3339) != "2026-02-18T21:00:00Z" {
+			t.Fatalf("corrected late-open session %d = %+v", versionIndex, session)
+		}
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 4 || manifest.Entries[0].LogicalKey == manifest.Entries[2].LogicalKey {
+		t.Fatalf("historical calendar raw manifest = %+v", manifest.Entries)
+	}
+}
+
+func TestCollectorHistoricalCalendarRetainsHashMismatchWithoutPublication(t *testing.T) {
+	body := []byte("%PDF-1.7\nunexpected")
+	provider := config.HistoricalCalendarProvider{
+		Enabled: true, Year: 2025, CoverageStart: "2025-12-24", CoverageEnd: "2025-12-25",
+		RegularOpenLocal: "09:30", RegularCloseLocal: "16:00",
+		Versions: []config.HistoricalCalendarVersion{{
+			AvailableAt: "2024-12-13T05:00:00Z", Revision: 0,
+			Resources: []config.HistoricalCalendarResource{{Kind: "annual_calendar", URL: "https://www.nasdaqtrader.com/content/technicalsupport/2025tradingcalendar.pdf", SHA256: strings.Repeat("a", 64), ContentType: "application/pdf"}},
+		}},
+	}
+	raw := &orderingRawStore{}
+	published := false
+	app := &app{
+		cfg: config.Config{Providers: config.Providers{NasdaqCalendarHistory: provider}},
+		raw: raw, http: collectorHTTPFake{payload: body}, log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: testRun(), onHistorical: func(metadata.HistoricalTruthBatch) { published = true }},
+		batchKey: "nasdaq-calendar-mismatch-test",
+		now:      func() time.Time { return time.Date(2026, 8, 24, 3, 0, 0, 0, time.UTC) },
+	}
+	err := app.run(context.Background(), "nasdaq-calendar-history")
+	if err == nil || !strings.Contains(err.Error(), "does not match pinned") {
+		t.Fatalf("hash mismatch error = %v", err)
+	}
+	if published || len(raw.events) != 1 {
+		t.Fatalf("hash mismatch publication/raw = %t/%v", published, raw.events)
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 1 || manifest.Entries[0].SHA256 != hashPayload(body) {
+		t.Fatalf("hash mismatch evidence manifest = %+v", manifest.Entries)
 	}
 }
 

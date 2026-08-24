@@ -12,7 +12,7 @@
       "recorded_at": "2024-12-01T00:00:00Z",
       "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
       "raw_payload_hash": "2121212121212121212121212121212121212121212121212121212121212121",
-      "session_fingerprint": "77b95d8f4d49ec38bef9551076c975d3b74ff9cdcad91946f59f50a787dfc550",
+      "session_fingerprint": "bc882b62f4dec006eef6b40890393d8c63ea904c51ed0ceed29af311e38ef040",
       "session_count": 4
     },
     {
@@ -26,7 +26,7 @@
       "recorded_at": "2024-12-01T00:00:00Z",
       "data_source_id": "5d6ac836-54fd-4df2-a745-0744180420db",
       "raw_payload_hash": "2222222222222222222222222222222222222222222222222222222222222222",
-      "session_fingerprint": "b040df9adc6c38e223a75914bf2c781c7fc98ac7e503f11d49da2cc25f4bac6a",
+      "session_fingerprint": "db1dba82c902acbc63bb8dc5c827b340bc7f93d52a0e9f0b9fc20d8b1e1af7da",
       "session_count": 3
     }
   ],

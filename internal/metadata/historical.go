@@ -279,6 +279,17 @@ WHERE data_source_id=$1::uuid
   AND available_at <= $5::timestamptz
 ORDER BY open_at, available_at DESC, revision DESC, recorded_at DESC, id DESC`
 
+const resolveCalendarManifestSQL = `
+SELECT id::text, schema_version, calendar_version, mic, exchange_timezone,
+       available_at, source_reference, recorded_at, data_source_id::text,
+       raw_payload_hash, session_fingerprint, session_count
+FROM calendar_manifests
+WHERE data_source_id=$1::uuid
+  AND mic=$2
+  AND available_at <= $3::timestamptz
+ORDER BY available_at DESC, recorded_at DESC, id DESC
+LIMIT 2`
+
 func canonicalRecordHash(record any) (string, error) {
 	record = canonicalHistoricalRecord(record)
 	encoded, err := json.Marshal(record)
@@ -462,14 +473,13 @@ type calendarKey struct {
 }
 
 type fingerprintSession struct {
-	CalendarVersion  string     `json:"calendar_version"`
-	MIC              string     `json:"mic"`
+	CloseAt          *time.Time `json:"close_at"`
 	ExchangeTimezone string     `json:"exchange_timezone"`
+	IsEarlyClose     bool       `json:"is_early_close"`
+	MIC              string     `json:"mic"`
+	OpenAt           *time.Time `json:"open_at"`
 	SessionDate      string     `json:"session_date"`
 	SessionStatus    string     `json:"session_status"`
-	OpenAt           *time.Time `json:"open_at"`
-	CloseAt          *time.Time `json:"close_at"`
-	IsEarlyClose     bool       `json:"is_early_close"`
 }
 
 func keyForCalendar(dataSourceID, mic, version string) calendarKey {
@@ -482,7 +492,6 @@ func CalendarSessionFingerprint(records []TradingSession) (string, error) {
 	canonical := make([]fingerprintSession, len(records))
 	for i, record := range records {
 		canonical[i] = fingerprintSession{
-			CalendarVersion:  record.CalendarVersion,
 			MIC:              record.MIC,
 			ExchangeTimezone: record.ExchangeTimezone,
 			SessionDate:      record.SessionDate,
@@ -516,7 +525,6 @@ func fingerprintSortKey(record fingerprintSession) string {
 		closeAt = record.CloseAt.UTC().Format(time.RFC3339Nano)
 	}
 	return strings.Join([]string{
-		record.CalendarVersion,
 		record.MIC,
 		record.ExchangeTimezone,
 		record.SessionDate,
@@ -987,6 +995,63 @@ func membershipRevisionIdentity(record UniverseMembership) string {
 	return strings.Join([]string{
 		record.UniverseID, record.SecurityID, record.ValidFrom.UTC().Format(time.RFC3339Nano),
 		validUntil, strconv.FormatBool(record.Member),
+	}, "\x00")
+}
+
+// ResolveCalendarManifest returns the latest source version that was knowable
+// at decisionAt. Callers then use its explicit calendar version for session
+// resolution; an unqualified latest calendar is never selected.
+func (r *Repository) ResolveCalendarManifest(ctx context.Context, dataSourceID, mic string, decisionAt time.Time) (*CalendarManifest, error) {
+	if r == nil {
+		return nil, errors.New("PostgreSQL metadata repository is required for historical resolution")
+	}
+	rows, err := r.pool.Query(ctx, resolveCalendarManifestSQL, dataSourceID, strings.ToUpper(strings.TrimSpace(mic)), decisionAt.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	candidates := make([]CalendarManifest, 0, 2)
+	for rows.Next() {
+		var record CalendarManifest
+		if err := rows.Scan(&record.ID, &record.SchemaVersion, &record.CalendarVersion, &record.MIC, &record.ExchangeTimezone, &record.AvailableAt, &record.SourceReference, &record.RecordedAt, &record.DataSourceID, &record.RawPayloadHash, &record.SessionFingerprint, &record.SessionCount); err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return selectCalendarManifest(candidates)
+}
+
+func selectCalendarManifest(candidates []CalendarManifest) (*CalendarManifest, error) {
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	selected := candidates[0]
+	for _, candidate := range candidates[1:] {
+		if candidate.AvailableAt.After(selected.AvailableAt) || candidate.AvailableAt.Equal(selected.AvailableAt) && candidate.RecordedAt.After(selected.RecordedAt) {
+			selected = candidate
+			continue
+		}
+		if !candidate.AvailableAt.Equal(selected.AvailableAt) || !candidate.RecordedAt.Equal(selected.RecordedAt) {
+			continue
+		}
+		if calendarManifestIdentity(candidate) != calendarManifestIdentity(selected) {
+			return nil, errors.New("equal-ranked calendar manifests disagree")
+		}
+		if candidate.ID > selected.ID {
+			selected = candidate
+		}
+	}
+	return &selected, nil
+}
+
+func calendarManifestIdentity(record CalendarManifest) string {
+	return strings.Join([]string{
+		record.ID, record.SchemaVersion, record.CalendarVersion, record.MIC,
+		record.ExchangeTimezone, record.SourceReference, record.DataSourceID,
+		record.RawPayloadHash, record.SessionFingerprint, strconv.Itoa(record.SessionCount),
 	}, "\x00")
 }
 

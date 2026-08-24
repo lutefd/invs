@@ -321,6 +321,9 @@ func TestValidateHistoricalCalendarArtifacts(t *testing.T) {
 		"noncanonical availability": func(provider *HistoricalCalendarProvider) {
 			provider.Versions[0].AvailableAt = "2024-12-13T00:00:00-05:00"
 		},
+		"future availability": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].AvailableAt = time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second).Format(time.RFC3339)
+		},
 		"revision gap": func(provider *HistoricalCalendarProvider) {
 			provider.Versions[0].Revision = 1
 		},
