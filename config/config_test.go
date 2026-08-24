@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -190,6 +191,49 @@ func TestValidateIndexMembershipProvidersRequireAdmittedNoticesAndScopedMappings
 			mutate(&candidate)
 			if err := candidate.Validate(); err == nil {
 				t.Fatal("invalid membership provider accepted")
+			}
+		})
+	}
+}
+
+func TestValidateB3HistoricalPricesRequiresClosedBoundedExactMappings(t *testing.T) {
+	c := validConfig()
+	c.Providers.Prices.Enabled = false
+	c.Providers.FRED.Enabled = false
+	c.Universe[0].CountryCode = "BR"
+	c.Universe[0].Ticker = "PETZ3"
+	c.Universe[0].ISIN = "BRPETZACNOR2"
+	c.Universe[0].IdentifierValidFrom = "2021-09-06"
+	c.Universe[0].Exchange = "B3"
+	c.Universe[0].MIC = "BVMF"
+	c.Universe[0].Currency = "BRL"
+	c.Universe[0].PrimaryListing = true
+	c.Providers.B3HistoricalPrices = B3HistoricalPriceProvider{
+		Enabled: true, Year: 2021, Start: "2021-09-06", End: "2021-09-10", Tickers: []string{"PETZ3"},
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valid B3 historical prices provider: %v", err)
+	}
+
+	for name, mutate := range map[string]func(*Config){
+		"open annual file": func(candidate *Config) {
+			candidate.Providers.B3HistoricalPrices.Year = time.Now().UTC().Year()
+			candidate.Providers.B3HistoricalPrices.Start = fmt.Sprintf("%d-01-01", time.Now().UTC().Year())
+			candidate.Providers.B3HistoricalPrices.End = fmt.Sprintf("%d-01-02", time.Now().UTC().Year())
+		},
+		"range outside year":  func(candidate *Config) { candidate.Providers.B3HistoricalPrices.End = "2022-01-01" },
+		"noncanonical ticker": func(candidate *Config) { candidate.Providers.B3HistoricalPrices.Tickers = []string{"petz3"} },
+		"duplicate ticker":    func(candidate *Config) { candidate.Providers.B3HistoricalPrices.Tickers = []string{"PETZ3", "PETZ3"} },
+		"missing ISIN":        func(candidate *Config) { candidate.Universe[0].ISIN = "" },
+		"wrong MIC":           func(candidate *Config) { candidate.Universe[0].MIC = "XNAS" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := c
+			candidate.Universe = append([]Security(nil), c.Universe...)
+			candidate.Providers.B3HistoricalPrices.Tickers = append([]string(nil), c.Providers.B3HistoricalPrices.Tickers...)
+			mutate(&candidate)
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid B3 historical prices provider accepted")
 			}
 		})
 	}

@@ -53,6 +53,14 @@ providers:
       # deliberately bounded to dates supported by the retained page version.
       coverage_start: 2026-08-24
       coverage_end: 2026-08-28
+  b3_historical_prices:
+    enabled: false
+    # Closed annual COTAHIST files only. Canonical rows remain knowable from
+    # local receipt time because the archive has no exact historical release time.
+    year: 2021
+    start: 2021-09-06
+    end: 2021-09-10
+    tickers: []
   nyse:
     enabled: false
     year: 2026

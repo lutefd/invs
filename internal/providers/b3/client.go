@@ -38,16 +38,17 @@ type Getter interface {
 }
 
 type Client struct {
-	http                   Getter
-	apiBaseURL             string
-	listedCompaniesBaseURL string
-	marketCalendarBaseURL  string
-	tradingHoursBaseURL    string
-	now                    func() time.Time
+	http                    Getter
+	apiBaseURL              string
+	historicalQuotesBaseURL string
+	listedCompaniesBaseURL  string
+	marketCalendarBaseURL   string
+	tradingHoursBaseURL     string
+	now                     func() time.Time
 }
 
 func NewClient(getter Getter) *Client {
-	return &Client{http: getter, apiBaseURL: DefaultAPIBaseURL, now: time.Now}
+	return &Client{http: getter, apiBaseURL: DefaultAPIBaseURL, historicalQuotesBaseURL: DefaultHistoricalQuotesBaseURL, now: time.Now}
 }
 
 // Request deliberately requires an explicit report date and exact ticker

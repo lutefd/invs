@@ -68,6 +68,7 @@ type Providers struct {
 	BCB                   BCBProvider                `yaml:"bcb"`
 	PTAX                  PTAXProvider               `yaml:"ptax"`
 	B3                    B3Provider                 `yaml:"b3"`
+	B3HistoricalPrices    B3HistoricalPriceProvider  `yaml:"b3_historical_prices"`
 	B3Membership          IndexMembershipProvider    `yaml:"b3_membership"`
 	B3ListingHistory      ListingHistoryProvider     `yaml:"b3_listing_history"`
 	NasdaqMembership      IndexMembershipProvider    `yaml:"nasdaq_membership"`
@@ -128,6 +129,13 @@ type B3Provider struct {
 	ReportDate string           `yaml:"report_date"`
 	Tickers    []string         `yaml:"tickers"`
 	Calendar   CalendarProvider `yaml:"calendar"`
+}
+type B3HistoricalPriceProvider struct {
+	Enabled bool     `yaml:"enabled"`
+	Year    int      `yaml:"year"`
+	Start   string   `yaml:"start"`
+	End     string   `yaml:"end"`
+	Tickers []string `yaml:"tickers"`
 }
 type CalendarProvider struct {
 	Enabled       bool   `yaml:"enabled"`
@@ -500,6 +508,56 @@ func (c Config) Validate() error {
 	} else if c.Providers.B3.Calendar.Enabled {
 		errs = append(errs, errors.New("providers.b3.calendar requires providers.b3.enabled"))
 	}
+	if c.Providers.B3HistoricalPrices.Enabled {
+		provider := c.Providers.B3HistoricalPrices
+		currentYear := time.Now().UTC().Year()
+		if provider.Year < 1986 || provider.Year >= currentYear {
+			errs = append(errs, fmt.Errorf("providers.b3_historical_prices.year must be between 1986 and %d", currentYear-1))
+		}
+		start, startErr := requiredISODate(provider.Start)
+		end, endErr := requiredISODate(provider.End)
+		if startErr != nil {
+			errs = append(errs, errors.New("providers.b3_historical_prices.start must be an ISO date"))
+		}
+		if endErr != nil {
+			errs = append(errs, errors.New("providers.b3_historical_prices.end must be an ISO date"))
+		}
+		if startErr == nil && endErr == nil && (start.Year() != provider.Year || end.Year() != provider.Year || end.Before(start)) {
+			errs = append(errs, errors.New("providers.b3_historical_prices start/end must be an ordered range within year"))
+		}
+		if len(provider.Tickers) == 0 {
+			errs = append(errs, errors.New("enabled B3 historical prices provider requires at least one ticker"))
+		}
+		universeByTicker := make(map[string][]Security)
+		for _, security := range c.Universe {
+			ticker := strings.ToUpper(strings.TrimSpace(security.Ticker))
+			universeByTicker[ticker] = append(universeByTicker[ticker], security)
+		}
+		seenTickers := make(map[string]bool, len(provider.Tickers))
+		for index, value := range provider.Tickers {
+			prefix := fmt.Sprintf("providers.b3_historical_prices.tickers[%d]", index)
+			ticker := strings.TrimSpace(value)
+			if ticker != value || !validB3Ticker(ticker) {
+				errs = append(errs, fmt.Errorf("%s must be an uppercase canonical B3 ticker", prefix))
+			}
+			if seenTickers[ticker] {
+				errs = append(errs, fmt.Errorf("%s duplicates %q", prefix, ticker))
+			}
+			seenTickers[ticker] = true
+			matches := universeByTicker[ticker]
+			if len(matches) != 1 {
+				errs = append(errs, fmt.Errorf("%s must match exactly one universe ticker", prefix))
+				continue
+			}
+			security := matches[0]
+			if security.CountryCode != "BR" || security.Exchange != "B3" || security.MIC != "BVMF" || security.Currency != "BRL" {
+				errs = append(errs, fmt.Errorf("%s universe mapping must declare BR/B3/BVMF/BRL", prefix))
+			}
+			if !validISIN(security.ISIN) {
+				errs = append(errs, fmt.Errorf("%s universe mapping requires a valid uppercase ISIN", prefix))
+			}
+		}
+	}
 	if c.Providers.NYSE.Enabled {
 		errs = append(errs, validateCalendarProvider("providers.nyse", c.Providers.NYSE)...)
 	}
@@ -553,7 +611,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.PTAX.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NasdaqCalendarHistory.Enabled && !c.Providers.B3CalendarHistory.Enabled && !c.Providers.SECActionHistory.Enabled && !c.Providers.B3ActionReplay.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.PTAX.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3HistoricalPrices.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NasdaqCalendarHistory.Enabled && !c.Providers.B3CalendarHistory.Enabled && !c.Providers.SECActionHistory.Enabled && !c.Providers.B3ActionReplay.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -608,7 +666,7 @@ func (c Config) Validate() error {
 			validFrom, err := time.Parse("2006-01-02", s.IdentifierValidFrom)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("%s: identifier_valid_from must be ISO date", pfx))
-			} else if start, parseErr := time.Parse("2006-01-02", c.Providers.Prices.Start); parseErr == nil && validFrom.After(start) {
+			} else if start, parseErr := time.Parse("2006-01-02", c.Providers.Prices.Start); c.Providers.Prices.Enabled && parseErr == nil && validFrom.After(start) {
 				errs = append(errs, fmt.Errorf("%s: identifier_valid_from must not follow prices.start", pfx))
 			}
 		}
