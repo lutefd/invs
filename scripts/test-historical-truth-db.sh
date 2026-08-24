@@ -67,6 +67,33 @@ INSERT INTO ingestion_runs (
     '2026-01-01T00:00:00Z'
 );
 
+INSERT INTO market_price_snapshots (
+    data_source_id, security_id, ingestion_run_id, schema_version, interval,
+    price_basis, currency, observed_at, observed_precision, published_at,
+    available_at, ingested_at, published_precision, open_value, high_value,
+    low_value, close_value, volume_value, raw_payload_hash
+) VALUES (
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+    '77777777-7777-4777-8777-777777777777',
+    '1.0.0', '1d', 'raw', 'USD', '2021-09-08T00:00:00Z', 'date', NULL,
+    '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'unknown',
+    '10', '12', '9', '11', '100',
+    'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
+);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM market_price_snapshots
+        WHERE security_id = '22222222-2222-4222-8222-222222222222'
+          AND published_at IS NULL
+    ) THEN
+        RAISE EXCEPTION 'nullable price publication was not retained';
+    END IF;
+END;
+$$;
+
 INSERT INTO security_identifier_versions (
     id, schema_version, security_id, identifier_type, value, normalized_value,
     identifier_scope, valid_from, valid_until, available_at, source_reference,
@@ -374,7 +401,7 @@ printf '%s\n' 'checking fresh-image migration wiring'
 docker compose build postgres >/dev/null
 fresh_image=$(docker image inspect --format '{{.Id}}' invs-postgres:latest)
 docker run --rm --entrypoint sh "$fresh_image" \
-	-c 'test -r /docker-entrypoint-initdb.d/000006_historical_truth.sql && test -r /docker-entrypoint-initdb.d/000007_corporate_actions.sql && test -r /docker-entrypoint-initdb.d/000008_price_basis.sql'
+	-c 'test -r /docker-entrypoint-initdb.d/000006_historical_truth.sql && test -r /docker-entrypoint-initdb.d/000007_corporate_actions.sql && test -r /docker-entrypoint-initdb.d/000008_price_basis.sql && test -r /docker-entrypoint-initdb.d/000009_nullable_price_publication.sql'
 
 fresh_volume="invs-historical-truth-test-$PPID-$$"
 fresh_container="invs-historical-truth-test-$PPID-$$"
@@ -419,7 +446,17 @@ if [[ "$fresh_price_basis" != *"split_adjusted"* || "$fresh_price_basis" != *"to
 	printf 'fresh initialization retained the raw-only price basis constraint: %s\n' "$fresh_price_basis" >&2
 	exit 1
 fi
+fresh_price_publication_nullable=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test -Atc \
+	"SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'market_price_snapshots' AND column_name = 'published_at';")
+if [[ "$fresh_price_publication_nullable" != "YES" ]]; then
+	printf 'fresh initialization price publication nullable=%s, want YES\n' "$fresh_price_publication_nullable" >&2
+	exit 1
+fi
 
+docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test \
+	< migrations/000009_nullable_price_publication.down.sql >/dev/null
 docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test \
 	< migrations/000008_price_basis.down.sql >/dev/null
@@ -446,6 +483,9 @@ docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test \
 	< migrations/000008_price_basis.up.sql >/dev/null
+docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test \
+	< migrations/000009_nullable_price_publication.up.sql >/dev/null
 after_up_count=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test -Atc \
 	"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'), to_regclass('public.corporate_action_versions'));" | tr -d '[:space:]')
@@ -458,6 +498,13 @@ reapplied_price_basis=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -
 	"SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'public.market_price_snapshots'::regclass AND conname = 'market_price_snapshots_price_basis_check';")
 if [[ "$reapplied_price_basis" != *"split_adjusted"* || "$reapplied_price_basis" != *"total_return_adjusted"* ]]; then
 	printf 'migration re-apply retained the raw-only price basis constraint: %s\n' "$reapplied_price_basis" >&2
+	exit 1
+fi
+reapplied_price_publication_nullable=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test -Atc \
+	"SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'market_price_snapshots' AND column_name = 'published_at';")
+if [[ "$reapplied_price_publication_nullable" != "YES" ]]; then
+	printf 'migration re-apply price publication nullable=%s, want YES\n' "$reapplied_price_publication_nullable" >&2
 	exit 1
 fi
 

@@ -10,3 +10,4 @@ COPY --chmod=0444 migrations/000005_nullable_macro_snapshot_value.up.sql /docker
 COPY --chmod=0444 migrations/000006_historical_truth.up.sql /docker-entrypoint-initdb.d/000006_historical_truth.sql
 COPY --chmod=0444 migrations/000007_corporate_actions.up.sql /docker-entrypoint-initdb.d/000007_corporate_actions.sql
 COPY --chmod=0444 migrations/000008_price_basis.up.sql /docker-entrypoint-initdb.d/000008_price_basis.sql
+COPY --chmod=0444 migrations/000009_nullable_price_publication.up.sql /docker-entrypoint-initdb.d/000009_nullable_price_publication.sql

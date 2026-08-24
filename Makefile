@@ -53,6 +53,10 @@ migrate: setup config
 		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='"'"'public.market_price_snapshots'"'"'::regclass AND conname='"'"'market_price_snapshots_price_basis_check'"'"'"' | \
 		grep -q 'split_adjusted' || \
 		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000008_price_basis.up.sql
+	@$(COMPOSE) exec -T postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT is_nullable FROM information_schema.columns WHERE table_schema='"'"'public'"'"' AND table_name='"'"'market_price_snapshots'"'"' AND column_name='"'"'published_at'"'"'"' | \
+		grep -qx 'YES' || \
+		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000009_nullable_price_publication.up.sql
 
 historical-truth-db-test: config
 	@scripts/test-historical-truth-db.sh

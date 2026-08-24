@@ -550,6 +550,17 @@ func TestValidateSnapshotLineage(t *testing.T) {
 	}
 }
 
+func TestNullableTimestampPreservesUnknownPublication(t *testing.T) {
+	if got := nullableTimestamp(time.Time{}); got != nil {
+		t.Fatalf("zero timestamp = %#v, want nil", got)
+	}
+	at := time.Date(2026, 8, 24, 12, 34, 56, 123456000, time.FixedZone("BRT", -3*60*60))
+	got, ok := nullableTimestamp(at).(time.Time)
+	if !ok || !got.Equal(at) || got.Location() != time.UTC {
+		t.Fatalf("timestamp = %#v, want UTC %s", got, at.UTC())
+	}
+}
+
 func testMacroObservation(run Run, seriesID string, observedAt time.Time, revision int) model.EconomicObservation {
 	return model.EconomicObservation{
 		SeriesID:       seriesID,
