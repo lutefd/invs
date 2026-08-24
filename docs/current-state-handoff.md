@@ -82,8 +82,9 @@ the source timestamp, and emits sell-side direct/inverse conversions with comple
 input pins. The SEC follow-up now publishes accession-keyed filing metadata from
 submissions, uses exact EDGAR acceptance as availability, preserves source civil
 dates and nested primary documents, and exposes the rows through strict
-`filings_as_of`. The next v0.2 unit is the Brazil price bridge and combined bias
-audit.
+`filings_as_of`. The official B3 COTAHIST follow-up closes the Brazil price bridge
+with exact ticker+ISIN mapping, raw prices, and receipt-time availability; only the
+combined bias audit remains.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -164,6 +165,8 @@ to close the v0.2 calendar gate. See the
 - Latest SEC filing provider/publication boundaries: `a6d3c17`, `84c09f5`,
   `f07d3a9`, `39db6d0`, and `5347462`
 - SEC filing acceptance: [bounded accession identity and exact acceptance-time selection](acceptance/2026-08-24-sec-filing-publication.md)
+- Latest B3 COTAHIST provider/publication boundaries: `47c01de`, `317be53`, and `167ce2a`
+- B3 price-bridge acceptance: [bounded official raw PETZ3 installation replay](acceptance/2026-08-24-b3-cotahist-price-bridge.md)
 - Latest index-membership provider boundary: `629e82b` (`feat(provider): parse official index membership notices`)
 - Latest index-membership publication boundary: `376d0e0` (`feat(data): publish historical universe memberships`)
 - Latest mixed-universe identity boundary: `9f488a9` (`fix(metadata): support issuers without SEC identifiers`)
@@ -936,10 +939,10 @@ The following are not accidental omissions:
   artifacts additionally close the bounded historical calendar/decision-clock gate.
   This is not a broad security master or complete all-date calendar archive.
 - No broad B3/CVM market instrument discovery or complete Brazilian market-data
-  path. Yahoo `.SA` passed a bounded quote/price verification but failed the
-  security-master evidence gate; broad B3 lifecycle and long-history coverage remain
-  pending, while one bounded official PETZ3 identity/listing/membership chain is
-  accepted. B3
+  path. The bounded official COTAHIST bridge publishes exact PETZ3 raw prices only
+  from installation receipt; Yahoo `.SA` remains unadmitted. Broad B3 lifecycle and
+  long-history point-in-time availability remain pending, while one bounded official
+  PETZ3 identity/listing/membership chain is accepted. B3
   listed-company corporate-action evidence is retained source-natively, but its
   missing publication/revision semantics keep that endpoint raw-only. The B3
   UP2DATA sample revisions are canonical only for installation replay; their unknown
@@ -975,8 +978,8 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Complete the remaining B3-backed price bridge and integrate the accepted
-   identity/listing/membership/calendar chains into the bounded US/Brazil bias audit.
-   Revisit Yahoo `.SA` only after its terms, fixture, coverage, and availability
-   checks pass. Do not start strategy or execution work by treating current-vintage
-   backfills as historical truth.
+1. Integrate the accepted identity, membership, calendar, macro, action, FX, filing,
+   and B3 COTAHIST price boundaries into the bounded US/Brazil bias audit. Keep
+   COTAHIST installation-replay only and Yahoo `.SA` unadmitted. Do not start
+   strategy or execution work by treating receipt-time backfills as historical
+   truth.

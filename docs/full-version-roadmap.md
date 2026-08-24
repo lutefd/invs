@@ -596,6 +596,12 @@ when submissions do not state an exact amended accession.
 
 ### 7. Brazil market-data bridge and selective B3 enrichment
 
+Bounded v0.2 status: the official COTAHIST bridge is accepted at `167ce2a`; see the
+[B3 price-bridge report](acceptance/2026-08-24-b3-cotahist-price-bridge.md). It uses
+closed annual archives, exact ticker+ISIN mapping, raw prices, and receipt-time
+availability. It is installation-replay only and does not authorize redistribution.
+Yahoo `.SA` remains unadmitted and is not required by the bounded audit path.
+
 - Use official B3 instrument/listing data for the bounded first Brazil identity/listing
   slice. The implemented public snapshot path is accepted for exact ISIN and
   source-defined trading-interval evidence; historical lifecycle remains a separate
@@ -1908,9 +1914,7 @@ v0.1 is accepted. Bounded historical identity/listing/membership, calendar,
 corporate-action, PTAX, and SEC filing publication are accepted for the v0.2 slices.
 The next narrow queue is the remaining v0.2 historical-truth boundary:
 
-1. Revisit Yahoo `.SA` only as a separate price bridge after its terms, fixture,
-   coverage, and availability checks pass.
-2. Integrate the accepted identity, membership, calendar, action, FX, macro, and SEC
+1. Integrate the accepted identity, membership, calendar, action, FX, macro, SEC
    filing chains into the bounded US/Brazil point-in-time bias audits.
 
 Do not start the general backtester while the v0.2 historical-truth gate remains

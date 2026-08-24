@@ -105,11 +105,15 @@ The canonical SEC filing follow-up is accepted in the
 It publishes 1,001 accession-keyed AAPL filings separately from facts, uses exact
 EDGAR acceptance as the knowledge boundary, preserves safe nested primary-document
 URLs and source civil dates, and proves exact-key replay plus before/at selection.
+The official B3 COTAHIST follow-up is accepted in the
+[Brazil price-bridge report](../acceptance/2026-08-24-b3-cotahist-price-bridge.md).
+It publishes exact ticker+ISIN-allowlisted, unadjusted PETZ3 prices from a closed
+annual archive with receipt-time availability. Yahoo `.SA` is no longer required by
+the bounded path and remains unadmitted for unattended raw retention.
 The next unaccepted cohesive units are:
 
-1. complete the Brazil price bridge and
-   bounded US/Brazil point-in-time bias audits. Revisit Yahoo `.SA` only after its
-   separate source, terms, fixture, coverage, and availability checks pass.
+1. complete the bounded US/Brazil point-in-time bias audits across the accepted
+   identity, membership, calendar, macro, action, FX, filing, and price boundaries.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook

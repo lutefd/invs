@@ -86,6 +86,12 @@ recorded explicitly. Its manifest-backed Parquet partition is
 rates, `buy_rate <= sell_rate`, and equality of fixing, publication, and availability
 timestamps for this source contract.
 
+The canonical price contract also admits `source=b3_cotahist` with
+`price_basis=raw`. COTAHIST supplies a date observation rather than an exact close or
+publication instant, so `observed_precision=date`, `published_at` is absent, and
+`available_at` is the durable local receipt of the closed annual archive. Research
+code must not backdate those rows before receipt.
+
 All timestamps are UTC RFC 3339 values ending in `Z`. Financial decimals are strings
 so Go, Python, JSON, and Parquet conversions do not silently round them.
 

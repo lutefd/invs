@@ -299,6 +299,33 @@ expose enough correction chronology to infer a revision safely.
 The retained live proof, exact hashes, decision boundary, and pinned calculations are
 in the [PTAX FX acceptance report](acceptance/2026-08-24-ptax-fx.md).
 
+### B3 COTAHIST historical-price bridge
+
+Use this provider for a bounded, official Brazil price archive without Yahoo. Only
+closed annual files are accepted, and each ticker must resolve to one exact
+BR/B3/BVMF/BRL universe row with an ISIN:
+
+```yaml
+providers:
+  b3_historical_prices:
+    enabled: true
+    year: 2021
+    start: 2021-09-06
+    end: 2021-09-10
+    tickers: [PETZ3]
+```
+
+```sh
+make ingest SOURCE=b3-prices RUN_KEY=b3-cotahist-petz3-2021-09-06-10
+```
+
+The complete annual ZIP is retained before parsing. Canonical output is written to
+`data/normalized/prices/source=b3_cotahist/security_id=<security-uuid>/` with raw
+price basis, date observation precision, no invented publication timestamp, and
+receipt-time availability. It is installation-replay only: an earlier historical
+decision must return no rows. See the
+[B3 COTAHIST acceptance report](acceptance/2026-08-24-b3-cotahist-price-bridge.md).
+
 ### B3 public instrument identity/listing snapshot
 
 B3 collection is deliberately exact and bounded. Add the security to the universe
