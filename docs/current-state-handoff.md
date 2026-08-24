@@ -79,7 +79,11 @@ blocks its unsupported latest state, and emits immutable adjustment artifacts fr
 resolver-backed snapshots. The PTAX follow-up now collects exact BCB closing
 bulletins, publishes canonical USD/BRL history, selects an explicit fixing date at
 the source timestamp, and emits sell-side direct/inverse conversions with complete
-input pins. The next v0.2 unit is canonical SEC filing metadata.
+input pins. The SEC follow-up now publishes accession-keyed filing metadata from
+submissions, uses exact EDGAR acceptance as availability, preserves source civil
+dates and nested primary documents, and exposes the rows through strict
+`filings_as_of`. The next v0.2 unit is the Brazil price bridge and combined bias
+audit.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -157,6 +161,9 @@ to close the v0.2 calendar gate. See the
 - Latest PTAX provider/publication boundaries: `486d12d`, `8759780`, and `8b97a59`
 - Latest pinned FX research boundary: `cbc0563` (`feat(research): publish pinned PTAX conversions`)
 - PTAX acceptance: [bounded official USD/BRL bulletins and pinned conversions](acceptance/2026-08-24-ptax-fx.md)
+- Latest SEC filing provider/publication boundaries: `a6d3c17`, `84c09f5`,
+  `f07d3a9`, `39db6d0`, and `5347462`
+- SEC filing acceptance: [bounded accession identity and exact acceptance-time selection](acceptance/2026-08-24-sec-filing-publication.md)
 - Latest index-membership provider boundary: `629e82b` (`feat(provider): parse official index membership notices`)
 - Latest index-membership publication boundary: `376d0e0` (`feat(data): publish historical universe memberships`)
 - Latest mixed-universe identity boundary: `9f488a9` (`fix(metadata): support issuers without SEC identifiers`)
@@ -547,7 +554,7 @@ duplicate JSON keys and emits PostgreSQL `EXPLAIN` statements for all dashboard 
   trading date is not treated as proof that the row was knowable on that date.
 - The v0 acceptance retained 1,661 normalized price rows for the configured slice.
 
-### SEC company metadata and facts
+### SEC company metadata, facts, and filings
 
 - Source code: [internal/providers/sec/client.go](../internal/providers/sec/client.go)
 - Config/command: `providers.sec`, `make ingest SOURCE=sec`
@@ -557,11 +564,13 @@ duplicate JSON keys and emits PostgreSQL `EXPLAIN` statements for all dashboard 
 - Uses exact filing acceptance timestamps when SEC supplies them; otherwise applies
   the adapter's conservative fallback rather than treating a filed date as an exact
   instant.
-- SEC facts become canonical fundamental observations. The provider also parses
-  filing metadata needed for acceptance-time reasoning, but the current collector
-  does not publish SEC filing metadata into the canonical filing dataset.
-- The v0 acceptance retained 25,135 normalized SEC fact rows from 26,136 received
-  records and two raw objects.
+- SEC facts become canonical fundamental observations. Submissions separately
+  publish accession-keyed canonical filing metadata with exact acceptance-time
+  publication/availability, primary-document URLs, source civil dates, and raw
+  lineage. Source `reportDate` is not promoted to `observed_at`.
+- The v0.2 filing acceptance retained 25,135 normalized SEC facts and 1,001 filings
+  from 26,136 received records, zero rejects, and two raw objects. See the
+  [acceptance report](acceptance/2026-08-24-sec-filing-publication.md).
 
 ### FRED
 
@@ -936,7 +945,6 @@ The following are not accidental omissions:
   UP2DATA sample revisions are canonical only for installation replay; their unknown
   action state remains unsupported and blocks adjustment.
 - No canonical CVM CAD dataset or CAD snapshot table.
-- No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.
 - Corporate-action publication and adjustment artifacts are accepted for one exact
   SEC split plus a B3 installation-replay revision family. This is not a broad action
@@ -967,8 +975,7 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Publish canonical SEC filing metadata.
-2. Complete the remaining B3-backed price bridge and integrate the accepted
+1. Complete the remaining B3-backed price bridge and integrate the accepted
    identity/listing/membership/calendar chains into the bounded US/Brazil bias audit.
    Revisit Yahoo `.SA` only after its terms, fixture, coverage, and availability
    checks pass. Do not start strategy or execution work by treating current-vintage

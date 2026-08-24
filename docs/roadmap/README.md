@@ -100,10 +100,14 @@ The bounded PTAX follow-up is accepted in the
 official closing bulletins, publishes canonical USD/BRL Parquet, proves exact
 before/at availability selection, and reproduces sell-side direct/inverse conversion
 from a complete observation pin.
+The canonical SEC filing follow-up is accepted in the
+[SEC filing publication report](../acceptance/2026-08-24-sec-filing-publication.md).
+It publishes 1,001 accession-keyed AAPL filings separately from facts, uses exact
+EDGAR acceptance as the knowledge boundary, preserves safe nested primary-document
+URLs and source civil dates, and proves exact-key replay plus before/at selection.
 The next unaccepted cohesive units are:
 
-1. publish canonical SEC filing metadata;
-2. complete the Brazil price bridge and
+1. complete the Brazil price bridge and
    bounded US/Brazil point-in-time bias audits. Revisit Yahoo `.SA` only after its
    separate source, terms, fixture, coverage, and availability checks pass.
 

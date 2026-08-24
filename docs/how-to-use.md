@@ -155,7 +155,7 @@ historical public knowledge time of an old download. Yahoo chart OHLC and volume
 the former `raw` label fail closed and must be archived and reingested; never rewrite
 the immutable manifest in place.
 
-### SEC company metadata and facts
+### SEC company metadata, facts, and filing catalog
 
 Enable SEC and provide a CIK for the issuer. The adapter accepts quoted or
 numeric CIK input, normalizes it to the SEC's ten-digit form, and requires the
@@ -181,9 +181,14 @@ universe:
 make ingest SOURCE=sec RUN_KEY=sec-aapl-2026-08-12
 ```
 
-SEC filing metadata is parsed to establish acceptance timestamps where the
-source provides them. The current canonical fundamental dataset contains SEC
-facts; SEC filing metadata is not the same thing as the CVM `filings` dataset.
+The same raw-first run publishes SEC facts to `fundamentals/source=sec/...` and SEC
+submissions metadata to `filings/source=sec/...`. Filing identity is the accession
+number. Exact EDGAR acceptance is `published_at` and `available_at`; `filing_date`
+and optional source `reportDate` remain separate civil dates and never substitute
+for availability. Safe nested primary-document paths are preserved in the archive
+URL. The submissions feed does not state an exact amended accession for every
+amendment, so `amends_source_document_id` remains empty rather than being inferred.
+See the [SEC filing acceptance report](acceptance/2026-08-24-sec-filing-publication.md).
 
 ### FRED macro series
 

@@ -53,7 +53,8 @@ delivery date as a publication instant. Numeric fundamentals, macro vintages, an
 corporate actions retain their stricter source-specific publication requirements.
 
 The v1 contract includes a canonical filing-metadata dataset, and its writer,
-CVM provider/collector integration, and Python research-catalog exposure are present.
+CVM and SEC provider/collector integration, and Python research-catalog exposure
+are present.
 A bounded CVM IPE replay passed live acceptance at implementation commit `742e5ae`. A CVM
 IPE delivery date is retained as `filing_date` and may populate
 `period_end`/`observed_at` when the source supplies a reference date, but it does not
@@ -63,6 +64,15 @@ is explicit (normally durable receipt time), never derived from `period_end`, an
 supports only known-to-this-installation live replay rather than historical public-
 availability claims. The filing natural key is `(source, source_document_id)`, so a
 source version must be part of `source_document_id` when it changes document identity.
+
+SEC rows use the accession number as `source_document_id`, preserve the primary
+document and exact EDGAR archive URL, and use the exact acceptance timestamp for
+both `published_at` and `available_at`. SEC `filing_date` and optional `reportDate`
+are source civil dates: `reportDate` is retained as `period_end` but neither date is
+promoted to `observed_at` or used as an availability substitute. Because submissions
+are a growing container, an unchanged accession remains idempotent across different
+container hashes while retaining its first raw lineage; changed canonical metadata
+under that accession remains a conflict.
 
 CVM CAD is a current issuer snapshot, not versioned filing history. The collector
 retains it as raw ingestion-only evidence; it is excluded from historical filing

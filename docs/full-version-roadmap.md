@@ -91,8 +91,8 @@ The following baseline limitations drive the version order:
   bounded Yahoo `.SA` check supports a candidate price bridge but failed the
   security-master evidence gate; its separate terms/price-bridge review remains
   outstanding.
-- SEC filing metadata is not yet a canonical dataset, and CVM CAD is intentionally
-  raw-only.
+- SEC filing metadata is canonical and live-accepted for a bounded AAPL submissions
+  slice; CVM CAD remains intentionally raw-only.
 - The feature engine publishes a single bounded feature set and lacks a dataset-wide
   runner and catalog.
 - There is no theme graph, document-event pipeline, hypothesis ledger, backtester,
@@ -577,10 +577,18 @@ carry-forward, midpoint, and triangulation remain outside the admitted policy.
 
 ### 6. SEC filing catalog and document identity
 
+Bounded v0.2 status: accepted at `5347462`; see the
+[SEC filing publication report](acceptance/2026-08-24-sec-filing-publication.md).
+Exact accession identity, acceptance-time availability, safe nested primary
+documents, raw lineage, growing-container replay, and strict `filings_as_of`
+selection are proved. Amendment relationships remain absent rather than inferred
+when submissions do not state an exact amended accession.
+
 - Publish canonical SEC filing metadata separately from company facts.
 - Preserve accession number, form, accepted/publication time, reporting period,
-  amendment relationship, primary document, document URL, issuer identity, and raw
-  lineage.
+  primary document, document URL, issuer identity, raw lineage, and an exact
+  amendment relationship when the admitted source states one; never infer that
+  relationship from a form name or filing order.
 - Keep filing documents/attachments in raw storage where policy and capacity permit.
 - Expose `filings_as_of` with the same strict knowledge cutoff as CVM filings.
 - Do not parse narrative filing content into investment events yet; that belongs to
@@ -1896,16 +1904,14 @@ A version is not done because its happy path runs once. It is done when:
 
 ## First execution queue
 
-v0.1 is accepted. Bounded historical identity/listing/membership publication is now
-accepted for one US and Brazil slice. The next narrow queue is the remaining v0.2
-historical-truth boundary:
+v0.1 is accepted. Bounded historical identity/listing/membership, calendar,
+corporate-action, PTAX, and SEC filing publication are accepted for the v0.2 slices.
+The next narrow queue is the remaining v0.2 historical-truth boundary:
 
-1. Add publication/effective/correction chronology to the bounded canonical
-   US/Brazil calendars, broaden BVMF hours coverage only with defensible historical
-   evidence, then pass availability audits and pin the calendar/decision-clock
-   policy into research artifacts.
-2. Revisit Yahoo `.SA` only as a separate price bridge after its terms, fixture,
+1. Revisit Yahoo `.SA` only as a separate price bridge after its terms, fixture,
    coverage, and availability checks pass.
+2. Integrate the accepted identity, membership, calendar, action, FX, macro, and SEC
+   filing chains into the bounded US/Brazil point-in-time bias audits.
 
 Do not start the general backtester while the v0.2 historical-truth gate remains
 unaccepted. The fastest path to the full platform is to keep every later result
