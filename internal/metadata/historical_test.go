@@ -203,3 +203,66 @@ func TestValidateHistoricalTruthBatchRejectsInvalidAvailabilityAndSessions(t *te
 		t.Fatalf("invalid closed session error = %v", err)
 	}
 }
+
+func TestIdentityCorrectionsShortenOpenEndedIntervals(t *testing.T) {
+	asOf := time.Date(2026, time.January, 10, 0, 0, 0, 0, time.UTC)
+	initial := validHistoricalIdentifier()
+	initial.ID = "33333333-3333-4333-8333-333333333331"
+	correction := initial
+	correction.ID = "33333333-3333-4333-8333-333333333332"
+	validUntil := time.Date(2026, time.January, 5, 0, 0, 0, 0, time.UTC)
+	correction.ValidUntil = &validUntil
+	correction.AvailableAt = time.Date(2026, time.January, 4, 0, 0, 0, 0, time.UTC)
+	correction.RecordedAt = correction.AvailableAt
+	correction.Revision = 1
+
+	selected, err := selectIdentifierRevision([]SecurityIdentifierVersion{initial}, asOf)
+	if err != nil || selected == nil || selected.ID != initial.ID {
+		t.Fatalf("pre-correction identifier = %+v, %v", selected, err)
+	}
+	selected, err = selectIdentifierRevision([]SecurityIdentifierVersion{initial, correction}, asOf)
+	if err != nil || selected != nil {
+		t.Fatalf("corrected identifier = %+v, %v; want nil", selected, err)
+	}
+
+	issuerID := "44444444-4444-4444-8444-444444444444"
+	listing := SecurityListingVersion{
+		ID: "55555555-5555-4555-8555-555555555551", SecurityID: initial.SecurityID,
+		IssuerID: &issuerID, Exchange: "NASDAQ", MIC: "XNAS", Currency: "USD",
+		PrimaryListing: true, ValidFrom: initial.ValidFrom, AvailableAt: initial.AvailableAt,
+		RecordedAt: initial.RecordedAt,
+	}
+	listingCorrection := listing
+	listingCorrection.ID = "55555555-5555-4555-8555-555555555552"
+	listingCorrection.ValidUntil = &validUntil
+	listingCorrection.AvailableAt = correction.AvailableAt
+	listingCorrection.RecordedAt = correction.RecordedAt
+	listingCorrection.Revision = 1
+
+	selectedListing, err := selectListingRevision([]SecurityListingVersion{listing}, asOf)
+	if err != nil || selectedListing == nil || selectedListing.ID != listing.ID {
+		t.Fatalf("pre-correction listing = %+v, %v", selectedListing, err)
+	}
+	selectedListing, err = selectListingRevision([]SecurityListingVersion{listing, listingCorrection}, asOf)
+	if err != nil || selectedListing != nil {
+		t.Fatalf("corrected listing = %+v, %v; want nil", selectedListing, err)
+	}
+}
+
+func TestEqualRankIntervalCorrectionsFailClosed(t *testing.T) {
+	initial := validHistoricalIdentifier()
+	first := initial
+	first.ID = "33333333-3333-4333-8333-333333333331"
+	first.Revision = 1
+	first.ValidUntil = historicalTimePointer(time.Date(2026, time.January, 5, 0, 0, 0, 0, time.UTC))
+	conflict := first
+	conflict.ID = "33333333-3333-4333-8333-333333333332"
+	conflict.ValidUntil = historicalTimePointer(time.Date(2026, time.January, 6, 0, 0, 0, 0, time.UTC))
+	if _, err := selectIdentifierRevision([]SecurityIdentifierVersion{initial, first, conflict}, historicalTestTime(10)); err == nil || !strings.Contains(err.Error(), "corrections disagree") {
+		t.Fatalf("equal-rank correction error = %v", err)
+	}
+}
+
+func historicalTimePointer(value time.Time) *time.Time {
+	return &value
+}

@@ -70,10 +70,19 @@ assertion in market time because the two rows describe different knowledge vinta
 it never overwrites the earlier row. For a requested `as_of` and `decision_at`, the
 resolver:
 
-1. keeps rows whose validity interval contains `as_of`;
-2. keeps rows with `available_at <= decision_at`; and
-3. selects the latest eligible version by the documented total order
+1. keeps rows with `available_at <= decision_at`;
+2. groups revisions of the same source assertion (same source, security, scoped
+   identity or listing key, and `valid_from`) and selects the latest knowable
+   correction;
+3. keeps those selected corrections whose validity interval contains `as_of`; and
+4. selects the latest eligible assertion by the documented total order
    `(available_at, revision, recorded_at, record_id)`.
+
+Correction collapse precedes the validity check. This is required when a later
+source notice shortens an earlier open-ended interval: once that correction is
+knowable, the superseded open-ended row cannot continue leaking beyond the corrected
+`valid_until`. Equal-ranked corrections that disagree about interval or identity
+fail closed.
 
 An equal-ranked set that resolves to different securities, listing facts, or
 membership states is an ambiguity error. It is never resolved with fuzzy name or

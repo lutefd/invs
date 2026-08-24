@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -201,11 +202,8 @@ WHERE data_source_id=$1::uuid
   AND identifier_type=$2
   AND normalized_value=$3
   AND identifier_scope=$4
-  AND valid_from <= $5::timestamptz
-  AND (valid_until IS NULL OR $5::timestamptz < valid_until)
-  AND available_at <= $6::timestamptz
-ORDER BY available_at DESC, revision DESC, recorded_at DESC, id DESC
-LIMIT 2`
+  AND available_at <= $5::timestamptz
+ORDER BY available_at DESC, revision DESC, recorded_at DESC, id DESC`
 
 const resolveSecurityListingSQL = `
 SELECT id::text, schema_version, security_id::text, issuer_id::text, exchange, mic,
@@ -215,11 +213,8 @@ FROM security_listing_versions
 WHERE data_source_id=$1::uuid
   AND security_id=$2::uuid
   AND mic=$3
-  AND valid_from <= $4::timestamptz
-  AND (valid_until IS NULL OR $4::timestamptz < valid_until)
-  AND available_at <= $5::timestamptz
-ORDER BY available_at DESC, revision DESC, recorded_at DESC, id DESC
-LIMIT 2`
+  AND available_at <= $4::timestamptz
+ORDER BY available_at DESC, revision DESC, recorded_at DESC, id DESC`
 
 const resolveUniverseSQL = `
 SELECT id::text, schema_version, universe_id, security_id::text, member,
@@ -228,9 +223,7 @@ SELECT id::text, schema_version, universe_id, security_id::text, member,
 FROM universe_memberships
 WHERE data_source_id=$1::uuid
   AND universe_id=$2
-  AND valid_from <= $3::timestamptz
-  AND (valid_until IS NULL OR $3::timestamptz < valid_until)
-  AND available_at <= $4::timestamptz
+  AND available_at <= $3::timestamptz
 ORDER BY security_id, available_at DESC, revision DESC, recorded_at DESC, id DESC`
 
 const tradingSessionAtSQL = `
@@ -694,6 +687,20 @@ func sameRank(availableA time.Time, revisionA int, recordedA time.Time, availabl
 	return availableA.Equal(availableB) && revisionA == revisionB && recordedA.Equal(recordedB)
 }
 
+func laterRank(availableA time.Time, revisionA int, recordedA time.Time, availableB time.Time, revisionB int, recordedB time.Time) bool {
+	if !availableA.Equal(availableB) {
+		return availableA.After(availableB)
+	}
+	if revisionA != revisionB {
+		return revisionA > revisionB
+	}
+	return recordedA.After(recordedB)
+}
+
+func intervalContains(validFrom time.Time, validUntil *time.Time, asOf time.Time) bool {
+	return !validFrom.After(asOf) && (validUntil == nil || asOf.Before(*validUntil))
+}
+
 // ResolveSecurityIdentifier returns the latest source-backed identifier vintage
 // valid at asOf and knowable by decisionAt. The source is explicit because v0.2
 // has no implicit multi-source priority rule.
@@ -701,7 +708,7 @@ func (r *Repository) ResolveSecurityIdentifier(ctx context.Context, dataSourceID
 	if r == nil {
 		return nil, errors.New("PostgreSQL metadata repository is required for historical resolution")
 	}
-	rows, err := r.pool.Query(ctx, resolveSecurityIdentifierSQL, dataSourceID, strings.ToLower(strings.TrimSpace(identifierType)), strings.ToUpper(strings.TrimSpace(value)), strings.ToUpper(strings.TrimSpace(scope)), asOf.UTC(), decisionAt.UTC())
+	rows, err := r.pool.Query(ctx, resolveSecurityIdentifierSQL, dataSourceID, strings.ToLower(strings.TrimSpace(identifierType)), strings.ToUpper(strings.TrimSpace(value)), strings.ToUpper(strings.TrimSpace(scope)), decisionAt.UTC())
 	if err != nil {
 		return nil, err
 	}
@@ -717,13 +724,64 @@ func (r *Repository) ResolveSecurityIdentifier(ctx context.Context, dataSourceID
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if len(candidates) == 0 {
-		return nil, nil
+	return selectIdentifierRevision(candidates, asOf.UTC())
+}
+
+func selectIdentifierRevision(records []SecurityIdentifierVersion, asOf time.Time) (*SecurityIdentifierVersion, error) {
+	latest := make(map[string]SecurityIdentifierVersion, len(records))
+	for _, record := range records {
+		family := strings.Join([]string{
+			record.SecurityID, record.IdentifierType, record.NormalizedValue,
+			record.IdentifierScope, record.ValidFrom.UTC().Format(time.RFC3339Nano),
+		}, "\x00")
+		current, exists := latest[family]
+		if !exists || laterRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			latest[family] = record
+			continue
+		}
+		if !sameRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			continue
+		}
+		if identifierRevisionIdentity(record) != identifierRevisionIdentity(current) {
+			return nil, errors.New("equal-ranked identifier corrections disagree")
+		}
+		if record.ID > current.ID {
+			latest[family] = record
+		}
 	}
-	if len(candidates) > 1 && sameRank(candidates[0].AvailableAt, candidates[0].Revision, candidates[0].RecordedAt, candidates[1].AvailableAt, candidates[1].Revision, candidates[1].RecordedAt) && candidates[0].SecurityID != candidates[1].SecurityID {
-		return nil, errors.New("equal-ranked identifier versions resolve to different securities")
+	var selected *SecurityIdentifierVersion
+	for _, record := range latest {
+		if !intervalContains(record.ValidFrom, record.ValidUntil, asOf) {
+			continue
+		}
+		if selected == nil || laterRank(record.AvailableAt, record.Revision, record.RecordedAt, selected.AvailableAt, selected.Revision, selected.RecordedAt) {
+			candidate := record
+			selected = &candidate
+			continue
+		}
+		if sameRank(record.AvailableAt, record.Revision, record.RecordedAt, selected.AvailableAt, selected.Revision, selected.RecordedAt) {
+			if record.SecurityID != selected.SecurityID {
+				return nil, errors.New("equal-ranked identifier versions resolve to different securities")
+			}
+			if record.ID > selected.ID {
+				candidate := record
+				selected = &candidate
+			}
+		}
 	}
-	return &candidates[0], nil
+	return selected, nil
+}
+
+func identifierRevisionIdentity(record SecurityIdentifierVersion) string {
+	validUntil := ""
+	if record.ValidUntil != nil {
+		validUntil = record.ValidUntil.UTC().Format(time.RFC3339Nano)
+	}
+	return strings.Join([]string{
+		record.SecurityID, record.IdentifierType, record.Value, record.NormalizedValue,
+		record.IdentifierScope, record.ValidFrom.UTC().Format(time.RFC3339Nano), validUntil,
+		fmt.Sprint(record.IsPrimary),
+	}, "\x00")
 }
 
 // ResolveSecurityListing returns one source-backed listing vintage for a
@@ -732,7 +790,7 @@ func (r *Repository) ResolveSecurityListing(ctx context.Context, dataSourceID, s
 	if r == nil {
 		return nil, errors.New("PostgreSQL metadata repository is required for historical resolution")
 	}
-	rows, err := r.pool.Query(ctx, resolveSecurityListingSQL, dataSourceID, securityID, strings.ToUpper(strings.TrimSpace(mic)), asOf.UTC(), decisionAt.UTC())
+	rows, err := r.pool.Query(ctx, resolveSecurityListingSQL, dataSourceID, securityID, strings.ToUpper(strings.TrimSpace(mic)), decisionAt.UTC())
 	if err != nil {
 		return nil, err
 	}
@@ -748,13 +806,59 @@ func (r *Repository) ResolveSecurityListing(ctx context.Context, dataSourceID, s
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if len(candidates) == 0 {
-		return nil, nil
+	return selectListingRevision(candidates, asOf.UTC())
+}
+
+func selectListingRevision(records []SecurityListingVersion, asOf time.Time) (*SecurityListingVersion, error) {
+	latest := make(map[string]SecurityListingVersion, len(records))
+	for _, record := range records {
+		family := strings.Join([]string{record.SecurityID, record.MIC, record.ValidFrom.UTC().Format(time.RFC3339Nano)}, "\x00")
+		current, exists := latest[family]
+		if !exists || laterRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			latest[family] = record
+			continue
+		}
+		if !sameRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			continue
+		}
+		if listingRevisionIdentity(record) != listingRevisionIdentity(current) {
+			return nil, errors.New("equal-ranked listing corrections disagree")
+		}
+		if record.ID > current.ID {
+			latest[family] = record
+		}
 	}
-	if len(candidates) > 1 && sameRank(candidates[0].AvailableAt, candidates[0].Revision, candidates[0].RecordedAt, candidates[1].AvailableAt, candidates[1].Revision, candidates[1].RecordedAt) && listingIdentity(candidates[0]) != listingIdentity(candidates[1]) {
-		return nil, errors.New("equal-ranked listing versions disagree")
+	var selected *SecurityListingVersion
+	for _, record := range latest {
+		if !intervalContains(record.ValidFrom, record.ValidUntil, asOf) {
+			continue
+		}
+		if selected == nil || laterRank(record.AvailableAt, record.Revision, record.RecordedAt, selected.AvailableAt, selected.Revision, selected.RecordedAt) {
+			candidate := record
+			selected = &candidate
+			continue
+		}
+		if sameRank(record.AvailableAt, record.Revision, record.RecordedAt, selected.AvailableAt, selected.Revision, selected.RecordedAt) {
+			if listingIdentity(record) != listingIdentity(*selected) {
+				return nil, errors.New("equal-ranked listing versions disagree")
+			}
+			if record.ID > selected.ID {
+				candidate := record
+				selected = &candidate
+			}
+		}
 	}
-	return &candidates[0], nil
+	return selected, nil
+}
+
+func listingRevisionIdentity(record SecurityListingVersion) string {
+	validUntil := ""
+	if record.ValidUntil != nil {
+		validUntil = record.ValidUntil.UTC().Format(time.RFC3339Nano)
+	}
+	return strings.Join([]string{
+		listingIdentity(record), record.ValidFrom.UTC().Format(time.RFC3339Nano), validUntil,
+	}, "\x00")
 }
 
 func listingIdentity(record SecurityListingVersion) string {
@@ -771,33 +875,82 @@ func (r *Repository) ResolveUniverse(ctx context.Context, dataSourceID, universe
 	if r == nil {
 		return nil, errors.New("PostgreSQL metadata repository is required for historical resolution")
 	}
-	rows, err := r.pool.Query(ctx, resolveUniverseSQL, dataSourceID, universeID, asOf.UTC(), decisionAt.UTC())
+	rows, err := r.pool.Query(ctx, resolveUniverseSQL, dataSourceID, universeID, decisionAt.UTC())
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	bySecurity := make(map[string][]UniverseMembership)
+	var candidates []UniverseMembership
 	for rows.Next() {
 		var record UniverseMembership
 		if err := rows.Scan(&record.ID, &record.SchemaVersion, &record.UniverseID, &record.SecurityID, &record.Member, &record.ValidFrom, &record.ValidUntil, &record.AnnouncedAt, &record.AvailableAt, &record.SourceReference, &record.RecordedAt, &record.DataSourceID, &record.RawPayloadHash, &record.Revision); err != nil {
 			return nil, err
 		}
-		bySecurity[record.SecurityID] = append(bySecurity[record.SecurityID], record)
+		candidates = append(candidates, record)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	result := make([]string, 0, len(bySecurity))
-	for securityID, records := range bySecurity {
-		if len(records) > 1 && sameRank(records[0].AvailableAt, records[0].Revision, records[0].RecordedAt, records[1].AvailableAt, records[1].Revision, records[1].RecordedAt) && records[0].Member != records[1].Member {
-			return nil, fmt.Errorf("equal-ranked membership versions disagree for security %s", securityID)
+	return selectUniverseRevisions(candidates, asOf.UTC())
+}
+
+func selectUniverseRevisions(records []UniverseMembership, asOf time.Time) ([]string, error) {
+	latestFamilies := make(map[string]UniverseMembership, len(records))
+	for _, record := range records {
+		family := strings.Join([]string{record.UniverseID, record.SecurityID, record.ValidFrom.UTC().Format(time.RFC3339Nano)}, "\x00")
+		current, exists := latestFamilies[family]
+		if !exists || laterRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			latestFamilies[family] = record
+			continue
 		}
-		if records[0].Member {
+		if !sameRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			continue
+		}
+		if membershipRevisionIdentity(record) != membershipRevisionIdentity(current) {
+			return nil, fmt.Errorf("equal-ranked membership corrections disagree for security %s", record.SecurityID)
+		}
+		if record.ID > current.ID {
+			latestFamilies[family] = record
+		}
+	}
+	bySecurity := make(map[string]UniverseMembership)
+	for _, record := range latestFamilies {
+		if !intervalContains(record.ValidFrom, record.ValidUntil, asOf) {
+			continue
+		}
+		current, exists := bySecurity[record.SecurityID]
+		if !exists || laterRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			bySecurity[record.SecurityID] = record
+			continue
+		}
+		if sameRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			if record.Member != current.Member {
+				return nil, fmt.Errorf("equal-ranked membership versions disagree for security %s", record.SecurityID)
+			}
+			if record.ID > current.ID {
+				bySecurity[record.SecurityID] = record
+			}
+		}
+	}
+	result := make([]string, 0, len(bySecurity))
+	for securityID, record := range bySecurity {
+		if record.Member {
 			result = append(result, securityID)
 		}
 	}
 	slices.Sort(result)
 	return result, nil
+}
+
+func membershipRevisionIdentity(record UniverseMembership) string {
+	validUntil := ""
+	if record.ValidUntil != nil {
+		validUntil = record.ValidUntil.UTC().Format(time.RFC3339Nano)
+	}
+	return strings.Join([]string{
+		record.UniverseID, record.SecurityID, record.ValidFrom.UTC().Format(time.RFC3339Nano),
+		validUntil, strconv.FormatBool(record.Member),
+	}, "\x00")
 }
 
 // TradingSessionAt returns the explicit open session containing timestamp. The

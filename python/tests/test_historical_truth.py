@@ -165,6 +165,93 @@ def test_membership_removal_is_knowledge_cutoff_aware() -> None:
     assert "5b27f9b7-2c2a-4ab7-9691-7ad013a0a2b1" in at_removal_availability
 
 
+def test_interval_shortening_correction_suppresses_open_ended_identity() -> None:
+    identifier = deepcopy(_records("us", "security_identifiers")[1])
+    identifier["valid_until"] = None
+    correction = deepcopy(identifier)
+    correction.update(
+        id="10000000-0000-4000-8000-000000000099",
+        valid_until="2023-07-01T00:00:00Z",
+        available_at="2023-07-02T00:00:00Z",
+        recorded_at="2023-07-02T00:00:00Z",
+        revision=1,
+    )
+    query = {
+        "identifier_type": "ticker",
+        "value": "NEW",
+        "identifier_scope": "XNAS",
+        "as_of": "2023-08-01T00:00:00Z",
+    }
+    assert security_identifier_as_of(
+        [identifier, correction],
+        **query,
+        decision_at="2023-07-01T23:59:59.999999Z",
+    ) == identifier
+    assert (
+        security_identifier_as_of(
+            [identifier, correction],
+            **query,
+            decision_at="2023-07-02T00:00:00Z",
+        )
+        is None
+    )
+
+    listing = deepcopy(_records("us", "listings")[0])
+    listing["valid_until"] = None
+    listing_correction = deepcopy(listing)
+    listing_correction.update(
+        id="10000000-0000-4000-8000-000000000199",
+        valid_until="2023-07-01T00:00:00Z",
+        available_at="2023-07-02T00:00:00Z",
+        recorded_at="2023-07-02T00:00:00Z",
+        revision=1,
+    )
+    assert listing_as_of(
+        [listing, listing_correction],
+        security_id=listing["security_id"],
+        mic="XNAS",
+        as_of="2023-08-01T00:00:00Z",
+        decision_at="2023-07-01T23:59:59.999999Z",
+    ) == listing
+    assert (
+        listing_as_of(
+            [listing, listing_correction],
+            security_id=listing["security_id"],
+            mic="XNAS",
+            as_of="2023-08-01T00:00:00Z",
+            decision_at="2023-07-02T00:00:00Z",
+        )
+        is None
+    )
+
+
+def test_equal_rank_interval_corrections_fail_closed() -> None:
+    initial = deepcopy(_records("us", "security_identifiers")[1])
+    initial["valid_until"] = None
+    first = deepcopy(initial)
+    first.update(
+        id="10000000-0000-4000-8000-000000000098",
+        valid_until="2023-07-01T00:00:00Z",
+        available_at="2023-07-02T00:00:00Z",
+        recorded_at="2023-07-02T00:00:00Z",
+        revision=1,
+    )
+    conflict = deepcopy(first)
+    conflict.update(
+        id="10000000-0000-4000-8000-000000000099",
+        valid_until="2023-08-01T00:00:00Z",
+    )
+    with pytest.raises(AmbiguousHistoricalResolution):
+        security_identifier_as_of(
+            [initial, first, conflict],
+            identifier_type="ticker",
+            value="NEW",
+            identifier_scope="XNAS",
+            as_of="2023-07-15T00:00:00Z",
+            decision_at="2023-07-02T00:00:00Z",
+        )
+
+
 def test_brazil_identity_keeps_bvmf_and_currency_explicit() -> None:
     security_id = "8a3d9d9d-0d9e-4a23-915b-2f94d0f62311"
     identifier = security_identifier_as_of(

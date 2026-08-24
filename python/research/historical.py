@@ -103,6 +103,30 @@ def _select_latest(
     return max(leaders, key=lambda row: str(row.get("id", "")))
 
 
+def _collapse_revisions(
+    rows: Iterable[Record],
+    *,
+    family_key: Callable[[Record], tuple[Any, ...]],
+    assertion_key: Callable[[Record], tuple[Any, ...]],
+    label: str,
+) -> tuple[Record, ...]:
+    """Select the latest knowable correction for each source assertion family."""
+
+    families: dict[tuple[Any, ...], list[Record]] = {}
+    for row in rows:
+        families.setdefault(family_key(row), []).append(row)
+    selected = []
+    for family, versions in families.items():
+        latest = _select_latest(
+            versions,
+            identity_key=assertion_key,
+            label=f"{label} correction {family!r}",
+        )
+        if latest is not None:
+            selected.append(latest)
+    return tuple(selected)
+
+
 def security_identifier_as_of(
     rows: Iterable[Record],
     *,
@@ -119,14 +143,35 @@ def security_identifier_as_of(
     normalized = value.strip().upper()
     kind = identifier_type.strip().lower()
     scope = identifier_scope.strip().upper()
-    matches = (
+    known = (
         row
         for row in rows
         if str(row.get("identifier_type", "")).lower() == kind
         and str(row.get("normalized_value", "")).upper() == normalized
         and str(row.get("identifier_scope", "")).upper() == scope
-        and _eligible(row, as_of=world_time, decision_at=decision_time)
+        and _available_by(row, decision_time)
     )
+    revisions = _collapse_revisions(
+        known,
+        family_key=lambda row: (
+            row.get("security_id"),
+            str(row.get("identifier_type", "")).lower(),
+            str(row.get("normalized_value", "")).upper(),
+            str(row.get("identifier_scope", "")).upper(),
+            row.get("valid_from"),
+        ),
+        assertion_key=lambda row: (
+            row.get("security_id"),
+            row.get("value"),
+            row.get("normalized_value"),
+            row.get("identifier_scope"),
+            row.get("valid_from"),
+            row.get("valid_until"),
+            row.get("is_primary"),
+        ),
+        label=f"{kind} {normalized!r} in {scope}",
+    )
+    matches = (row for row in revisions if _interval_contains(row, world_time))
     return _select_latest(
         matches,
         identity_key=lambda row: (row.get("security_id"),),
@@ -147,13 +192,32 @@ def listing_as_of(
     world_time = parse_utc(as_of, field="as_of")
     decision_time = parse_utc(decision_at, field="decision_at")
     requested_mic = mic.strip().upper()
-    matches = (
+    known = (
         row
         for row in rows
         if row.get("security_id") == security_id
         and str(row.get("mic", "")).upper() == requested_mic
-        and _eligible(row, as_of=world_time, decision_at=decision_time)
+        and _available_by(row, decision_time)
     )
+    revisions = _collapse_revisions(
+        known,
+        family_key=lambda row: (
+            row.get("security_id"),
+            str(row.get("mic", "")).upper(),
+            row.get("valid_from"),
+        ),
+        assertion_key=lambda row: (
+            row.get("issuer_id"),
+            row.get("exchange"),
+            row.get("mic"),
+            row.get("currency"),
+            row.get("primary_listing"),
+            row.get("valid_from"),
+            row.get("valid_until"),
+        ),
+        label=f"listing {security_id} on {requested_mic}",
+    )
+    matches = (row for row in revisions if _interval_contains(row, world_time))
     return _select_latest(
         matches,
         identity_key=lambda row: (
@@ -209,13 +273,30 @@ def membership_as_of(
 
     world_time = parse_utc(as_of, field="as_of")
     decision_time = parse_utc(decision_at, field="decision_at")
-    matches = (
+    known = (
         row
         for row in rows
         if row.get("universe_id") == universe_id
         and row.get("security_id") == security_id
-        and _eligible(row, as_of=world_time, decision_at=decision_time)
+        and _available_by(row, decision_time)
     )
+    revisions = _collapse_revisions(
+        known,
+        family_key=lambda row: (
+            row.get("universe_id"),
+            row.get("security_id"),
+            row.get("valid_from"),
+        ),
+        assertion_key=lambda row: (
+            row.get("universe_id"),
+            row.get("security_id"),
+            row.get("member"),
+            row.get("valid_from"),
+            row.get("valid_until"),
+        ),
+        label=f"membership {universe_id}/{security_id}",
+    )
+    matches = (row for row in revisions if _interval_contains(row, world_time))
     return _select_latest(
         matches,
         identity_key=lambda row: (row.get("member"),),
