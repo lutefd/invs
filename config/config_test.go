@@ -365,6 +365,19 @@ func TestValidateHistoricalCalendarAdmitsCanonicalNasdaqNoticeURL(t *testing.T) 
 	}
 }
 
+func TestValidateHistoricalCalendarAdmitsCanonicalNasdaqHoursGuideURL(t *testing.T) {
+	c := validConfig()
+	provider := validHistoricalCalendarProvider()
+	provider.Versions[0].Resources = append(provider.Versions[0].Resources, HistoricalCalendarResource{
+		Kind: "session_hours", URL: "https://www.nasdaqtrader.com/content/productsservices/trading/oe_refguide.pdf",
+		SHA256: strings.Repeat("b", 64), ContentType: "application/pdf",
+	})
+	c.Providers.NasdaqCalendarHistory = provider
+	if err := c.Validate(); err != nil {
+		t.Fatalf("canonical Nasdaq hours guide URL: %v", err)
+	}
+}
+
 func TestValidateALFREDProviderRequirements(t *testing.T) {
 	c := validConfig()
 	c.FREDAPIKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

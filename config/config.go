@@ -447,7 +447,7 @@ func (c Config) Validate() error {
 		errs = append(errs, validateHistoricalCalendarProvider(
 			"providers.nasdaq_calendar_history", c.Providers.NasdaqCalendarHistory,
 			[]string{"www.nasdaqtrader.com", "nasdaqtrader.com"},
-			[]string{"/content/technicalsupport/", "/TraderNews.aspx"},
+			[]string{"/content/technicalsupport/", "/content/productsservices/trading/", "/TraderNews.aspx"},
 		)...)
 	}
 	if c.Providers.B3CalendarHistory.Enabled {
