@@ -73,10 +73,10 @@ The following baseline limitations drive the version order:
   live-accepted. ADRs, synthetic fixtures, and the durable metadata publication/
   resolution boundary now exist. Bounded source-backed INSM/PETZ3 identifier,
   listing, membership, and PETZ3 delisting revisions are live-accepted without
-  backward leakage. Corporate actions and historically admitted exchange calendars
-  remain outstanding. A bounded canonical
-  BVMF/XNYS calendar publisher is live-accepted for current/reference evidence only;
-  its historical publication/correction chronology remains unproven.
+  backward leakage. Corporate actions remain outstanding. Exact official XNAS/BVMF
+  artifacts now close the bounded historical calendar/decision-clock gate, while
+  broader date coverage still requires separately admitted evidence. The canonical
+  BVMF/XNYS current/reference publisher remains available only from receipt time.
 - A bounded official B3 InstrumentsConsolidated path is implemented and live-accepted
   for exact current/reference Brazil identity/listing snapshots. It retains ISIN and
   source trading intervals but does not provide broad historical lifecycle coverage.
@@ -118,8 +118,10 @@ records the implementation, raw fixture, live hash, exact mappings, and conserva
 availability policy. The [B3 corporate-action evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md)
 records the separate source-native endpoint and its canonical-publication block.
 The [exchange-calendar publication report](acceptance/2026-08-23-exchange-calendar-publication.md)
-records the bounded BVMF/XNYS canonical publication and its still-open historical
-availability boundary.
+records the bounded BVMF/XNYS current/reference publication. The later
+[historical calendar report](acceptance/2026-08-24-historical-calendar-publication.md)
+accepts exact official XNAS/BVMF artifact chronology, decision-time version
+selection, and research-artifact calendar pins for the bounded v0.2 gate.
 The [historical index-membership report](acceptance/2026-08-23-index-membership-publication.md)
 records the bounded Nasdaq-100 and Ibovespa publication and exact decision-time
 boundaries.

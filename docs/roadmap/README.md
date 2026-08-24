@@ -86,17 +86,17 @@ next-session selection across an XNYS holiday. These are current/reference versi
 eligible only from receipt time, not historically admitted calendars. See the
 [B3 source report](../acceptance/2026-08-23-b3-market-calendar-evidence.md) and
 [exchange-calendar publication report](../acceptance/2026-08-23-exchange-calendar-publication.md).
+The exact-artifact historical follow-up is accepted in the
+[historical calendar and decision-clock report](../acceptance/2026-08-24-historical-calendar-publication.md).
 The next unaccepted cohesive units are:
 
-1. obtain official archived/versioned US and Brazil calendar evidence (or another
-   admitted source) with publication, effective, and correction chronology; broaden
-   BVMF hours coverage only on that evidence, then pass historical availability
-   audits and pin the calendar/decision-clock policy into research artifacts;
-2. publish corporate actions and reproducible adjustments; for B3 specifically,
+1. publish corporate actions and reproducible adjustments; for B3 specifically,
    resolve authorized UP2DATA access or a public versioned alternative before adding
    a production corporate-action transport;
-3. revisit Yahoo `.SA` only as a price bridge after its source, terms, fixture,
-   coverage, and availability checks pass.
+2. add versioned FX observations and the canonical USD/BRL conversion policy;
+3. publish canonical SEC filing metadata, then complete the Brazil price bridge and
+   bounded US/Brazil point-in-time bias audits. Revisit Yahoo `.SA` only after its
+   separate source, terms, fixture, coverage, and availability checks pass.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook

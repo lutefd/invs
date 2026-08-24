@@ -352,6 +352,23 @@ the regular-hours effective interval. See the
 [exchange-calendar publication report](acceptance/2026-08-23-exchange-calendar-publication.md)
 for the accepted boundary.
 
+For admitted historical artifacts, configure exact resource URLs, lowercase
+SHA-256 hashes, conservative `available_at` timestamps, and declarative exception
+rows under `providers.nasdaq_calendar_history` or
+`providers.b3_calendar_history`. Then run the source-specific collector:
+
+```sh
+make ingest SOURCE=nasdaq-calendar-history RUN_KEY=nasdaq-calendar-history-2024
+make ingest SOURCE=b3-calendar-history RUN_KEY=b3-calendar-history-2026
+```
+
+These selectors publish full immutable versions to the separate
+`nasdaq_calendar` and `b3_calendar` data sources. Never substitute a current page,
+an unpinned download, or an inferred weekday calendar. Select the manifest with
+`available_at <= decision_at`, use its exact `calendar_version` for session
+resolution, and carry the resulting pin into feature publication. See the
+[historical calendar acceptance report](acceptance/2026-08-24-historical-calendar-publication.md).
+
 ### CVM IPE filings and CAD
 
 CVM IPE archives are global. Only rows whose `Codigo_CVM` exactly matches one

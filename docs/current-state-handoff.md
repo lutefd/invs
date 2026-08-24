@@ -69,9 +69,12 @@ revision-aware exclusion constraints and immutable record hashes, Docker/init an
 idempotent migration wiring, focused Go tests, and a real PostgreSQL harness. This
 is an accepted implementation boundary, not source admission or the v0.2 exit gate.
 Later slices admitted bounded membership and current/reference calendars. The
-follow-up historical identity slice now publishes source-backed INSM/PETZ3
+follow-up historical identity slice publishes source-backed INSM/PETZ3
 identifier/listing intervals and a PETZ3 trading-cessation correction with exact
-knowledge-time resolution. Historical calendar chronology remains unaccepted.
+knowledge-time resolution. The historical calendar follow-up now admits exact
+Nasdaq/B3 artifacts, publication/correction chronology, decision-time selection,
+and feature-artifact clock pins. The next v0.2 unit is corporate actions and
+reproducible adjustments.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -132,7 +135,11 @@ to close the v0.2 calendar gate. See the
 - Latest B3 market-calendar evidence boundary: `6f61a84` (`feat(provider): parse B3 market-calendar evidence`)
 - Latest exchange-calendar provider boundary: `acd8eec` (`feat(provider): parse official exchange calendars`)
 - Latest exchange-calendar publication boundary: `77fee79` (`feat(data): publish versioned exchange calendars`)
-- Exchange-calendar acceptance: [bounded BVMF/XNYS canonical publication](acceptance/2026-08-23-exchange-calendar-publication.md); historical publication/revision chronology remains blocked
+- Latest historical-calendar provider boundary: `beba0a1` (`feat(provider): verify historical calendar artifacts`)
+- Latest historical-calendar publication boundary: `173023e` (`feat(data): publish historical calendar artifacts`)
+- Latest calendar-pin research boundary: `d7f4e18` (`feat(research): pin calendar decision clocks`)
+- Latest Nasdaq historical-hours admission fix: `6193dd0` (`fix(provider): admit Nasdaq historical session hours`)
+- Historical calendar acceptance: [bounded XNAS/BVMF artifact chronology and decision clocks](acceptance/2026-08-24-historical-calendar-publication.md)
 - Latest index-membership provider boundary: `629e82b` (`feat(provider): parse official index membership notices`)
 - Latest index-membership publication boundary: `376d0e0` (`feat(data): publish historical universe memberships`)
 - Latest mixed-universe identity boundary: `9f488a9` (`fix(metadata): support issuers without SEC identifiers`)
@@ -892,8 +899,9 @@ The following are not accidental omissions:
   identifier/listing rows. Later bounded live slices publish official Nasdaq-100 and
   Ibovespa add/remove membership revisions, source-backed INSM/PETZ3 initial
   identity/listing intervals, and a PETZ3 trading-cessation correction. Exact
-  before/at knowledge and delisting boundaries pass. This is not a full historical
-  security-master or complete exchange-calendar source.
+  before/at knowledge and delisting boundaries pass. Exact official XNAS/BVMF
+  artifacts additionally close the bounded historical calendar/decision-clock gate.
+  This is not a broad security master or complete all-date calendar archive.
 - No broad B3/CVM market instrument discovery or complete Brazilian market-data
   path. Yahoo `.SA` passed a bounded quote/price verification but failed the
   security-master evidence gate; broad B3 lifecycle and long-history coverage remain
@@ -907,15 +915,16 @@ The following are not accidental omissions:
 - No fundamental or filing latest-only dashboard projection.
 - No canonical corporate-action collector or adjustment publication despite the
   schema boundary existing; B3 listed-company evidence and the UP2DATA sample
-  parser remain source-native only. Exchange calendars now have bounded canonical
-  BVMF/XNYS publication, but the accepted versions are current/reference evidence
-  available only from receipt time, not historical calendar admission.
+  parser remain source-native only. Exchange calendars now have both bounded
+  BVMF/XNYS current/reference publication and accepted exact-artifact XNAS/BVMF
+  historical chronology; dates outside those explicit versions remain unavailable.
 - Current security-to-issuer mappings are current YAML configuration, not historical
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
   multi-user authorization.
-- Feature engine is a closed first registry only; no feature discovery catalog,
-  batch runner, calendar policy, strategy, backtester, portfolio, execution, labels,
+- Feature engine is a closed first registry with one pinned
+  `after_close_next_session` policy only; no feature discovery catalog, batch runner,
+  broader clock policies, strategy, backtester, portfolio, execution, labels,
   training data, or ML behavior.
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
@@ -925,17 +934,14 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Obtain official archived/versioned US and Brazil calendar artifacts (or another
-   admitted source) that establish publication, effective, and correction chronology.
-   Broaden BVMF coverage only with defensible historical hours intervals, then pass
-   bounded availability audits and pin the accepted calendar/decision-clock policy
-   into research artifact manifests.
-2. Publish canonical corporate actions and reproducible adjustment artifacts. For
+1. Publish canonical corporate actions and reproducible adjustment artifacts. For
    B3, obtain authorized UP2DATA Corporate Action access (or a public versioned
    alternative), then define delivery availability, revision semantics, and the
    corresponding point-in-time bias audit.
-3. Complete the remaining admitted B3-backed Brazil path and integrate the accepted
-   identity/listing/membership chain into the bias audit;
-   revisit Yahoo `.SA` only as a price bridge after its
-   terms, fixture, coverage, and availability checks pass. Do not start strategy or
-   execution work by treating current-vintage backfills as historical truth.
+2. Add versioned FX observations and the canonical USD/BRL conversion policy, then
+   publish canonical SEC filing metadata.
+3. Complete the remaining B3-backed price bridge and integrate the accepted
+   identity/listing/membership/calendar chains into the bounded US/Brazil bias audit.
+   Revisit Yahoo `.SA` only after its terms, fixture, coverage, and availability
+   checks pass. Do not start strategy or execution work by treating current-vintage
+   backfills as historical truth.
