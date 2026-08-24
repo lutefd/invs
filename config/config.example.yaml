@@ -36,6 +36,11 @@ providers:
         frequency: daily
         seasonal_adjustment: not_adjusted
         start: 2020-01-01
+  ptax:
+    enabled: false
+    # Inclusive, explicit, and bounded to at most 366 days per run.
+    start: 2026-01-01
+    end: 2026-12-31
   b3:
     enabled: false
     # B3 requests are explicit current/reference snapshots; do not omit the date.

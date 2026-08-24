@@ -75,6 +75,30 @@ func TestValidateBCBProviderRequirements(t *testing.T) {
 	}
 }
 
+func TestValidatePTAXProviderRequirements(t *testing.T) {
+	c := validConfig()
+	c.Providers.PTAX = PTAXProvider{Enabled: true, Start: "2026-01-01", End: "2026-12-31"}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, mutate := range map[string]func(*PTAXProvider){
+		"missing start":  func(provider *PTAXProvider) { provider.Start = "" },
+		"invalid end":    func(provider *PTAXProvider) { provider.End = "31/12/2026" },
+		"before history": func(provider *PTAXProvider) { provider.Start = "1984-11-27" },
+		"reversed":       func(provider *PTAXProvider) { provider.Start, provider.End = "2026-02-01", "2026-01-01" },
+		"too broad":      func(provider *PTAXProvider) { provider.Start, provider.End = "2025-01-01", "2026-01-02" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := c
+			mutate(&candidate.Providers.PTAX)
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid PTAX configuration accepted")
+			}
+		})
+	}
+}
+
 func TestValidateB3ProviderRequiresExplicitUniverseMapping(t *testing.T) {
 	c := validConfig()
 	c.Universe[0].CountryCode = "BR"

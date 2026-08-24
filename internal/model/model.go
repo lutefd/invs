@@ -128,6 +128,20 @@ type EconomicObservation struct {
 	Provenance                               Provenance
 }
 
+// FXObservation is one source-issued exchange-rate bulletin. Pair orientation and
+// rate kind are data, never caller convention.
+type FXObservation struct {
+	ID, Source                         string
+	BaseCurrency, QuoteCurrency        string
+	RateKind, FixingTimezone           string
+	BuyRate, SellRate                  string
+	FixingAt, PublishedAt, AvailableAt time.Time
+	RecordedAt                         time.Time
+	Revision                           int
+	SourceRecordID, RawPayloadHash     string
+	Provenance                         Provenance
+}
+
 // Filing is canonical metadata for one source document. SourceDocumentID is
 // the source-owned identity used for idempotent publication; it must include
 // any source version component that distinguishes a resubmission. The source

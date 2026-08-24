@@ -66,6 +66,7 @@ type Providers struct {
 	FRED                  FREDProvider               `yaml:"fred"`
 	ALFRED                ALFREDProvider             `yaml:"alfred"`
 	BCB                   BCBProvider                `yaml:"bcb"`
+	PTAX                  PTAXProvider               `yaml:"ptax"`
 	B3                    B3Provider                 `yaml:"b3"`
 	B3Membership          IndexMembershipProvider    `yaml:"b3_membership"`
 	B3ListingHistory      ListingHistoryProvider     `yaml:"b3_listing_history"`
@@ -116,6 +117,11 @@ type BCBSeries struct {
 	SeasonalAdjustment string `yaml:"seasonal_adjustment"`
 	Start              string `yaml:"start"`
 	End                string `yaml:"end"`
+}
+type PTAXProvider struct {
+	Enabled bool   `yaml:"enabled"`
+	Start   string `yaml:"start"`
+	End     string `yaml:"end"`
 }
 type B3Provider struct {
 	Enabled    bool             `yaml:"enabled"`
@@ -428,6 +434,26 @@ func (c Config) Validate() error {
 			}
 		}
 	}
+	if c.Providers.PTAX.Enabled {
+		start, startErr := requiredISODate(c.Providers.PTAX.Start)
+		end, endErr := requiredISODate(c.Providers.PTAX.End)
+		if startErr != nil {
+			errs = append(errs, errors.New("enabled PTAX provider requires a valid start date"))
+		}
+		if endErr != nil {
+			errs = append(errs, errors.New("enabled PTAX provider requires a valid end date"))
+		}
+		if startErr == nil && start.Before(time.Date(1984, 11, 28, 0, 0, 0, 0, time.UTC)) {
+			errs = append(errs, errors.New("providers.ptax.start precedes available USD/BRL history"))
+		}
+		if startErr == nil && endErr == nil {
+			if end.Before(start) {
+				errs = append(errs, errors.New("providers.ptax.end must not precede start"))
+			} else if int(end.Sub(start).Hours()/24)+1 > 366 {
+				errs = append(errs, errors.New("providers.ptax range must not exceed 366 inclusive days"))
+			}
+		}
+	}
 	if c.Providers.B3.Enabled {
 		reportDate, reportDateErr := requiredISODate(c.Providers.B3.ReportDate)
 		if reportDateErr != nil {
@@ -527,7 +553,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NasdaqCalendarHistory.Enabled && !c.Providers.B3CalendarHistory.Enabled && !c.Providers.SECActionHistory.Enabled && !c.Providers.B3ActionReplay.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.PTAX.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NasdaqCalendarHistory.Enabled && !c.Providers.B3CalendarHistory.Enabled && !c.Providers.SECActionHistory.Enabled && !c.Providers.B3ActionReplay.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
