@@ -157,6 +157,19 @@ func TestSubmissionsRejectsFilingWithoutExactAcceptanceOrSafePrimaryDocument(t *
 	}
 }
 
+func TestSECPrimaryDocumentAllowsSafeRelativeSubpathsOnly(t *testing.T) {
+	for _, value := range []string{"aapl-20240928.htm", "xslF345X05/wk-form4_1.xml"} {
+		if !validPrimaryDocument(value) {
+			t.Fatalf("safe primary document %q rejected", value)
+		}
+	}
+	for _, value := range []string{"", "/absolute.htm", "../escape.htm", "x/../escape.htm", "x//file.htm", `x\\file.htm`, "x.htm?download=1", "x.htm#part"} {
+		if validPrimaryDocument(value) {
+			t.Fatalf("unsafe primary document %q accepted", value)
+		}
+	}
+}
+
 func TestCollectCompanyRetainsRawOnParseError(t *testing.T) {
 	validSubmissions := []byte(`{"cik":"0000000001","name":"Example Corp","filings":{"recent":{}}}`)
 	validFacts := []byte(`{"cik":1,"facts":{}}`)

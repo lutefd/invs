@@ -189,7 +189,7 @@ func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) 
 		}
 		primary := strings.TrimSpace(r.PrimaryDocument[i])
 		form := strings.TrimSpace(r.Form[i])
-		if form == "" || primary == "" || primary == "." || primary == ".." || strings.ContainsAny(primary, "/\\\x00") {
+		if form == "" || !validPrimaryDocument(primary) {
 			rejected++
 			continue
 		}
@@ -252,6 +252,18 @@ func validAccession(value string) bool {
 		}
 	}
 	return strings.Trim(value, "-") != ""
+}
+
+func validPrimaryDocument(value string) bool {
+	if value == "" || strings.HasPrefix(value, "/") || strings.ContainsAny(value, "\\\x00?#") {
+		return false
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 type companyFacts struct {
