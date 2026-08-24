@@ -486,13 +486,22 @@ func TestMembershipHistoricalTruthBatchPublishesSourceChronology(t *testing.T) {
 		{Ticker: "INSM", Member: true, EffectiveAt: time.Date(2025, 12, 22, 14, 30, 0, 0, time.UTC), AnnouncedAt: addAvailable, AvailableAt: addAvailable, RecordedAt: addAvailable, RawRecordLocator: "nasdaq-100/addition/ticker=INSM", RawPayloadHash: strings.Repeat("a", 64)},
 	}
 	provider := config.IndexMembershipProvider{UniverseID: "nasdaq_100", Tickers: []string{"INSM"}}
-	universe := []config.Security{{SecurityID: testSecurityID, Ticker: "INSM"}}
+	universe := []config.Security{{
+		IssuerID: testIssuerID, SecurityID: testSecurityID, Ticker: "INSM",
+		Exchange: "NASDAQ", MIC: "XNAS", Currency: "USD", PrimaryListing: true,
+	}}
 	batch, ignored, err := membershipHistoricalTruthBatch(testRun(), "nasdaq", provider, universe, evidence)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ignored != 0 || len(batch.Memberships) != 2 {
+	if ignored != 0 || len(batch.Identifiers) != 1 || len(batch.Listings) != 1 || len(batch.Memberships) != 2 {
 		t.Fatalf("ignored/batch = %d/%+v", ignored, batch)
+	}
+	if batch.Identifiers[0].Value != "INSM" || batch.Identifiers[0].IdentifierScope != "XNAS" || !batch.Identifiers[0].ValidFrom.Equal(evidence[1].EffectiveAt) || batch.Identifiers[0].ValidUntil != nil {
+		t.Fatalf("identifier assertion = %+v", batch.Identifiers[0])
+	}
+	if batch.Listings[0].IssuerID == nil || *batch.Listings[0].IssuerID != testIssuerID || batch.Listings[0].Exchange != "NASDAQ" || batch.Listings[0].Currency != "USD" || !batch.Listings[0].PrimaryListing {
+		t.Fatalf("listing assertion = %+v", batch.Listings[0])
 	}
 	if !batch.Memberships[0].Member || batch.Memberships[0].Revision != 0 || batch.Memberships[1].Member || batch.Memberships[1].Revision != 1 {
 		t.Fatalf("membership revisions = %+v", batch.Memberships)
@@ -833,7 +842,10 @@ func TestCollectorNasdaqMembershipPublishesAddRemoveChronology(t *testing.T) {
 			Providers: config.Providers{NasdaqMembership: config.IndexMembershipProvider{
 				Enabled: true, UniverseID: "nasdaq_100", Tickers: []string{"INSM"}, Notices: []string{addURL, removeURL},
 			}},
-			Universe: []config.Security{{SecurityID: testSecurityID, Ticker: "INSM", MIC: "XNAS"}},
+			Universe: []config.Security{{
+				IssuerID: testIssuerID, SecurityID: testSecurityID, Ticker: "INSM",
+				Exchange: "NASDAQ", MIC: "XNAS", Currency: "USD", PrimaryListing: true,
+			}},
 		},
 		raw: raw,
 		http: collectorHTTPFake{responses: map[string][]byte{
@@ -855,7 +867,7 @@ func TestCollectorNasdaqMembershipPublishesAddRemoveChronology(t *testing.T) {
 	if started.Source != "nasdaq" || started.Provider.MembershipUniverseID != "nasdaq_100" {
 		t.Fatalf("run inputs = %+v", started)
 	}
-	if len(raw.events) != 2 || len(published.Memberships) != 2 {
+	if len(raw.events) != 2 || len(published.Identifiers) != 1 || len(published.Listings) != 1 || len(published.Memberships) != 2 {
 		t.Fatalf("raw/published = %v/%+v", raw.events, published)
 	}
 	if !published.Memberships[0].Member || published.Memberships[1].Member || published.Memberships[0].Revision != 0 || published.Memberships[1].Revision != 1 {

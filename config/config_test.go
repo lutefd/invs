@@ -121,6 +121,8 @@ func TestValidateIndexMembershipProvidersRequireAdmittedNoticesAndScopedMappings
 	nasdaq := validConfig()
 	nasdaq.Providers.Prices.Enabled = false
 	nasdaq.Providers.FRED.Enabled = false
+	nasdaq.Universe[0].Exchange = "NASDAQ"
+	nasdaq.Universe[0].PrimaryListing = true
 	nasdaq.Providers.NasdaqMembership = IndexMembershipProvider{
 		Enabled: true, UniverseID: "nasdaq_100", Tickers: []string{"AAPL"},
 		Notices: []string{"https://www.globenewswire.com/news-release/2025/12/13/example.html"},
@@ -137,6 +139,7 @@ func TestValidateIndexMembershipProvidersRequireAdmittedNoticesAndScopedMappings
 	b3.Universe[0].Exchange = "B3"
 	b3.Universe[0].MIC = "BVMF"
 	b3.Universe[0].Currency = "BRL"
+	b3.Universe[0].PrimaryListing = true
 	b3.Providers.B3Membership = IndexMembershipProvider{
 		Enabled: true, UniverseID: "ibovespa", Tickers: []string{"PETZ3"},
 		Notices: []string{"https://www.b3.com.br/pt_br/noticias/example.htm"},

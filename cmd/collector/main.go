@@ -1222,8 +1222,10 @@ func (a *app) collectIndexMembership(ctx context.Context, source, runKey string,
 		err = fmt.Errorf("membership historical truth publication: %w", err)
 		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
 	}
-	m.OutputRows = len(batch.Memberships)
+	m.OutputRows = len(batch.Identifiers) + len(batch.Listings) + len(batch.Memberships)
 	m.Cursor["status"] = "canonical_published"
+	m.Cursor["identifier_rows"] = len(batch.Identifiers)
+	m.Cursor["listing_rows"] = len(batch.Listings)
 	m.Cursor["membership_rows"] = len(batch.Memberships)
 	m.Cursor["unconfigured_events_ignored"] = ignored
 	return a.finish(ctx, run, m, nil, nil, nil)
@@ -1272,6 +1274,40 @@ func membershipHistoricalTruthBatch(run metadata.Run, source string, provider co
 		if !events[0].Member {
 			return metadata.HistoricalTruthBatch{}, ignored, fmt.Errorf("%s membership ticker %s begins with a removal", source, ticker)
 		}
+		first := events[0]
+		if security.IssuerID == "" || security.Exchange == "" || security.MIC == "" || security.Currency == "" {
+			return metadata.HistoricalTruthBatch{}, ignored, fmt.Errorf("%s membership ticker %s has incomplete identity/listing mapping", source, ticker)
+		}
+		identitySourceReference := source + "/" + first.RawRecordLocator
+		identityKey := strings.Join([]string{
+			"identifier", run.DataSourceID, security.SecurityID, "ticker", ticker,
+			security.MIC, first.EffectiveAt.UTC().Format(time.RFC3339Nano),
+		}, "/")
+		listingKey := strings.Join([]string{
+			"listing", run.DataSourceID, security.SecurityID, security.MIC,
+			first.EffectiveAt.UTC().Format(time.RFC3339Nano),
+		}, "/")
+		issuerID := security.IssuerID
+		batch.Identifiers = append(batch.Identifiers, metadata.SecurityIdentifierVersion{
+			SchemaVersion: metadata.HistoricalSchemaVersion,
+			ID:            uuid.NewSHA1(uuid.NameSpaceURL, []byte(identityKey)).String(),
+			SecurityID:    security.SecurityID, IdentifierType: "ticker", Value: ticker,
+			NormalizedValue: ticker, IdentifierScope: security.MIC,
+			ValidFrom: canonicalTime(first.EffectiveAt), AvailableAt: canonicalTime(first.AvailableAt),
+			SourceReference: identitySourceReference, RecordedAt: canonicalTime(first.RecordedAt),
+			DataSourceID: run.DataSourceID, RawPayloadHash: first.RawPayloadHash,
+			Revision: 0, IsPrimary: security.PrimaryListing,
+		})
+		batch.Listings = append(batch.Listings, metadata.SecurityListingVersion{
+			SchemaVersion: metadata.HistoricalSchemaVersion,
+			ID:            uuid.NewSHA1(uuid.NameSpaceURL, []byte(listingKey)).String(),
+			SecurityID:    security.SecurityID, IssuerID: &issuerID,
+			Exchange: security.Exchange, MIC: security.MIC, Currency: security.Currency,
+			PrimaryListing: security.PrimaryListing, ValidFrom: canonicalTime(first.EffectiveAt),
+			AvailableAt: canonicalTime(first.AvailableAt), SourceReference: identitySourceReference,
+			RecordedAt: canonicalTime(first.RecordedAt), DataSourceID: run.DataSourceID,
+			RawPayloadHash: first.RawPayloadHash, Revision: 0,
+		})
 		for revision, event := range events {
 			if revision > 0 {
 				previous := events[revision-1]

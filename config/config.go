@@ -399,10 +399,10 @@ func (c Config) Validate() error {
 		errs = append(errs, validateCalendarProvider("providers.nyse", c.Providers.NYSE)...)
 	}
 	if c.Providers.NasdaqMembership.Enabled {
-		errs = append(errs, validateIndexMembershipProvider("providers.nasdaq_membership", c.Providers.NasdaqMembership, c.Universe, "US", "XNAS", "USD", "www.globenewswire.com", "/news-release/")...)
+		errs = append(errs, validateIndexMembershipProvider("providers.nasdaq_membership", c.Providers.NasdaqMembership, c.Universe, "US", "NASDAQ", "XNAS", "USD", "www.globenewswire.com", "/news-release/")...)
 	}
 	if c.Providers.B3Membership.Enabled {
-		errs = append(errs, validateIndexMembershipProvider("providers.b3_membership", c.Providers.B3Membership, c.Universe, "BR", "BVMF", "BRL", "www.b3.com.br", "/pt_br/noticias/")...)
+		errs = append(errs, validateIndexMembershipProvider("providers.b3_membership", c.Providers.B3Membership, c.Universe, "BR", "B3", "BVMF", "BRL", "www.b3.com.br", "/pt_br/noticias/")...)
 	}
 	if c.Providers.CVM.Enabled {
 		if !c.Providers.CVM.CAD && len(c.Providers.CVM.IPE.Years) == 0 {
@@ -483,7 +483,7 @@ func (c Config) Validate() error {
 	return errors.Join(errs...)
 }
 
-func validateIndexMembershipProvider(prefix string, provider IndexMembershipProvider, universe []Security, country, mic, currency, host, pathPrefix string) []error {
+func validateIndexMembershipProvider(prefix string, provider IndexMembershipProvider, universe []Security, country, exchange, mic, currency, host, pathPrefix string) []error {
 	var errs []error
 	if !validType(provider.UniverseID) {
 		errs = append(errs, fmt.Errorf("%s.universe_id must be lowercase snake_case", prefix))
@@ -505,12 +505,12 @@ func validateIndexMembershipProvider(prefix string, provider IndexMembershipProv
 		seenTickers[value] = struct{}{}
 		matches := 0
 		for _, security := range universe {
-			if security.Ticker == value && security.CountryCode == country && security.MIC == mic && security.Currency == currency {
+			if security.Ticker == value && security.CountryCode == country && security.Exchange == exchange && security.MIC == mic && security.Currency == currency && security.PrimaryListing {
 				matches++
 			}
 		}
 		if matches != 1 {
-			errs = append(errs, fmt.Errorf("%s must match exactly one %s/%s/%s universe security", itemPrefix, country, mic, currency))
+			errs = append(errs, fmt.Errorf("%s must match exactly one primary %s/%s/%s/%s universe security", itemPrefix, country, exchange, mic, currency))
 		}
 	}
 	if len(provider.Notices) == 0 {
