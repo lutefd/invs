@@ -1,4 +1,4 @@
-"""Pure point-in-time resolvers for the v0.2 identity and calendar contracts.
+"""Pure point-in-time resolvers for the v0.2 historical truth contracts.
 
 The functions in this module operate on already validated canonical records. They
 deliberately do not read the current YAML universe, fetch providers, or infer
@@ -404,6 +404,80 @@ def calendar_manifest_as_of(
     return max(leaders, key=lambda row: str(row.get("id", "")))
 
 
+def corporate_actions_as_of(
+    rows: Iterable[Record],
+    *,
+    data_source_id: str,
+    security_id: str,
+    decision_at: str | datetime,
+) -> tuple[Record, ...]:
+    """Select the latest knowable version of every corporate-action family."""
+
+    decision_time = parse_utc(decision_at, field="decision_at")
+
+    def provenance_value(row: Record, field: str) -> Any:
+        provenance = row.get("provenance")
+        if isinstance(provenance, Mapping):
+            return provenance.get(field)
+        return row.get(field)
+
+    known = (
+        row
+        for row in rows
+        if provenance_value(row, "data_source_id") == data_source_id
+        and row.get("security_id") == security_id
+        and _available_by(row, decision_time)
+    )
+    selected = _collapse_revisions(
+        known,
+        family_key=lambda row: (row.get("source_event_id"),),
+        assertion_key=lambda row: (
+            row.get("security_id"),
+            row.get("source_event_id"),
+            row.get("action_status"),
+            row.get("action_type"),
+            row.get("observed_at"),
+            row.get("observed_precision"),
+            row.get("published_at"),
+            row.get("published_precision"),
+            row.get("effective_at"),
+            row.get("effective_precision"),
+            row.get("record_date"),
+            row.get("payment_date"),
+            row.get("ratio_numerator"),
+            row.get("ratio_denominator"),
+            row.get("cash_amount"),
+            row.get("currency"),
+            row.get("target_security_id"),
+            row.get("source_reference"),
+            provenance_value(row, "raw_record_locator"),
+            provenance_value(row, "data_source_id"),
+            provenance_value(row, "ingestion_run_id"),
+            provenance_value(row, "raw_payload_hash"),
+            provenance_value(row, "ingested_at"),
+            provenance_value(row, "normalizer_version"),
+        ),
+        label="corporate action",
+    )
+    active: list[Record] = []
+    for row in selected:
+        status = row.get("action_status")
+        if status == "cancelled":
+            continue
+        if status not in {"active", "unsupported"}:
+            raise HistoricalResolutionError(f"unsupported corporate action status {status!r}")
+        active.append(row)
+    return tuple(
+        sorted(
+            active,
+            key=lambda row: (
+                parse_utc(row["observed_at"], field="observed_at"),
+                str(row.get("source_event_id", "")),
+            ),
+        )
+    )
+
+
 def trading_session_at(
     rows: Iterable[Record],
     *,
@@ -546,6 +620,7 @@ __all__ = [
     "after_close_execution_session",
     "calendar_fingerprint",
     "calendar_manifest_as_of",
+    "corporate_actions_as_of",
     "listing_as_of",
     "listings_as_of",
     "membership_as_of",

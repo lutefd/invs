@@ -83,6 +83,41 @@ func validHistoricalSessions() []TradingSession {
 	}
 }
 
+func validCorporateAction() CorporateActionVersion {
+	cashAmount := "0.82"
+	currency := "USD"
+	recordDate := "2020-08-10"
+	paymentDate := "2020-08-13"
+	locator := "0000320193-20-000060/exhibit-99.1/cash-dividend"
+	normalizer := "sec-action-v1"
+	ingestedAt := time.Date(2026, time.August, 24, 2, 59, 0, 0, time.UTC)
+	return CorporateActionVersion{
+		SchemaVersion: CorporateActionSchemaVersion,
+		ID:            "88888888-8888-4888-8888-888888888888", SecurityID: testHistoricalSecurity,
+		SourceEventID: "0000320193-20-000060/exhibit-99.1/cash-dividend",
+		Revision:      0, ActionStatus: "active", ActionType: "cash_dividend",
+		ObservedAt:         time.Date(2020, time.August, 7, 0, 0, 0, 0, time.UTC),
+		ObservedPrecision:  "date",
+		PublishedAt:        time.Date(2020, time.July, 30, 22, 55, 4, 0, time.UTC),
+		PublishedPrecision: "second",
+		AvailableAt:        time.Date(2020, time.July, 30, 22, 55, 4, 0, time.UTC),
+		EffectiveAt:        time.Date(2020, time.August, 7, 0, 0, 0, 0, time.UTC),
+		EffectivePrecision: "date",
+		RecordDate:         &recordDate, PaymentDate: &paymentDate,
+		CashAmount: &cashAmount, Currency: &currency,
+		SourceReference: "https://www.sec.gov/Archives/edgar/data/320193/000032019320000060/",
+		RecordedAt:      time.Date(2026, time.August, 24, 3, 0, 0, 0, time.UTC),
+		Provenance: CorporateActionProvenance{
+			DataSourceID:      testHistoricalDataSource,
+			IngestionRunID:    "99999999-9999-4999-8999-999999999999",
+			RawPayloadHash:    historicalTestHash('9'),
+			RawRecordLocator:  &locator,
+			IngestedAt:        ingestedAt,
+			NormalizerVersion: &normalizer,
+		},
+	}
+}
+
 func TestCanonicalHistoricalHashesNormalizeEquivalentUTCInstants(t *testing.T) {
 	location := time.FixedZone("BRT", -3*60*60)
 	local := time.Date(2026, time.January, 2, 9, 0, 0, 0, location)
@@ -284,6 +319,110 @@ func TestValidateHistoricalTruthBatchRejectsInvalidAvailabilityAndSessions(t *te
 	}
 	if err := validateHistoricalTruthBatch(HistoricalTruthBatch{Calendars: []CalendarManifest{calendar}, Sessions: sessions}); err == nil || !strings.Contains(err.Error(), "closed session cannot") {
 		t.Fatalf("invalid closed session error = %v", err)
+	}
+}
+
+func TestValidateCorporateActionVersionsFailClosed(t *testing.T) {
+	action := validCorporateAction()
+	if err := validateHistoricalTruthBatch(HistoricalTruthBatch{Actions: []CorporateActionVersion{action}}); err != nil {
+		t.Fatalf("valid corporate action rejected: %v", err)
+	}
+
+	for name, mutate := range map[string]func(*CorporateActionVersion){
+		"availability before publication": func(record *CorporateActionVersion) {
+			record.AvailableAt = record.PublishedAt.Add(-time.Microsecond)
+		},
+		"date precision with time": func(record *CorporateActionVersion) {
+			record.ObservedAt = record.ObservedAt.Add(time.Microsecond)
+		},
+		"cash without currency": func(record *CorporateActionVersion) {
+			record.Currency = nil
+		},
+		"noncanonical decimal": func(record *CorporateActionVersion) {
+			value := "00.82"
+			record.CashAmount = &value
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := validCorporateAction()
+			mutate(&candidate)
+			if err := validateHistoricalTruthBatch(HistoricalTruthBatch{Actions: []CorporateActionVersion{candidate}}); err == nil {
+				t.Fatal("invalid corporate action accepted")
+			}
+		})
+	}
+
+	split := validCorporateAction()
+	split.ActionType = "split"
+	split.CashAmount, split.Currency = nil, nil
+	numerator, denominator := "4", "1"
+	split.RatioNumerator, split.RatioDenominator = &numerator, &denominator
+	if err := validateHistoricalTruthBatch(HistoricalTruthBatch{Actions: []CorporateActionVersion{split}}); err != nil {
+		t.Fatalf("valid split rejected: %v", err)
+	}
+	zero := "0"
+	split.RatioNumerator = &zero
+	if err := validateHistoricalTruthBatch(HistoricalTruthBatch{Actions: []CorporateActionVersion{split}}); err == nil || !strings.Contains(err.Error(), "positive ratio") {
+		t.Fatalf("zero split ratio error = %v", err)
+	}
+	unsupportedSplit := split
+	unsupportedSplit.ActionStatus = "unsupported"
+	unsupportedSplit.RatioNumerator, unsupportedSplit.RatioDenominator = nil, nil
+	if err := validateHistoricalTruthBatch(HistoricalTruthBatch{Actions: []CorporateActionVersion{unsupportedSplit}}); err != nil {
+		t.Fatalf("unsupported incomplete split rejected: %v", err)
+	}
+
+	duplicate := validCorporateAction()
+	duplicate.ID = "aaaaaaaa-8888-4888-8888-888888888888"
+	if err := validateHistoricalTruthBatch(HistoricalTruthBatch{Actions: []CorporateActionVersion{action, duplicate}}); err == nil || !strings.Contains(err.Error(), "duplicate source event revision") {
+		t.Fatalf("duplicate action error = %v", err)
+	}
+}
+
+func TestSelectCorporateActionRevisionsHonorsCorrectionsAndStates(t *testing.T) {
+	original := validCorporateAction()
+	corrected := validCorporateAction()
+	corrected.ID = "88888888-8888-4888-8888-888888888889"
+	corrected.Revision = 1
+	corrected.AvailableAt = original.AvailableAt.Add(24 * time.Hour)
+	corrected.RecordedAt = original.RecordedAt.Add(time.Minute)
+	correctedAmount := "0.84"
+	corrected.CashAmount = &correctedAmount
+
+	selected, err := selectCorporateActionRevisions([]CorporateActionVersion{original, corrected})
+	if err != nil || len(selected) != 1 || selected[0].Revision != 1 || *selected[0].CashAmount != correctedAmount {
+		t.Fatalf("selected correction/error = %+v/%v", selected, err)
+	}
+
+	cancelled := corrected
+	cancelled.ID = "88888888-8888-4888-8888-888888888890"
+	cancelled.Revision = 2
+	cancelled.ActionStatus = "cancelled"
+	cancelled.AvailableAt = corrected.AvailableAt.Add(time.Hour)
+	cancelled.RecordedAt = corrected.RecordedAt.Add(time.Hour)
+	selected, err = selectCorporateActionRevisions([]CorporateActionVersion{original, corrected, cancelled})
+	if err != nil || len(selected) != 0 {
+		t.Fatalf("cancelled family selection/error = %+v/%v", selected, err)
+	}
+
+	unsupported := corrected
+	unsupported.ID = "88888888-8888-4888-8888-888888888891"
+	unsupported.SourceEventID += "/unsupported"
+	unsupported.ActionStatus = "unsupported"
+	selected, err = selectCorporateActionRevisions([]CorporateActionVersion{unsupported})
+	if err != nil || len(selected) != 1 || selected[0].ActionStatus != "unsupported" {
+		t.Fatalf("unsupported selection/error = %+v/%v", selected, err)
+	}
+}
+
+func TestSelectCorporateActionRevisionsRejectsEqualRankConflict(t *testing.T) {
+	first := validCorporateAction()
+	conflict := validCorporateAction()
+	conflict.ID = "88888888-8888-4888-8888-888888888889"
+	amount := "0.83"
+	conflict.CashAmount = &amount
+	if _, err := selectCorporateActionRevisions([]CorporateActionVersion{first, conflict}); err == nil || !strings.Contains(err.Error(), "equal-ranked") {
+		t.Fatalf("equal-ranked action error = %v", err)
 	}
 }
 

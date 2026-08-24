@@ -1,30 +1,61 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.invs.local/corporate-action.schema.json",
-  "title": "CorporateAction",
+  "title": "CorporateActionVersion",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "security_id", "source_event_id", "action_type", "observed_at", "published_at", "effective_at", "provenance"],
+  "required": [
+    "schema_version",
+    "id",
+    "security_id",
+    "source_event_id",
+    "revision",
+    "action_status",
+    "action_type",
+    "observed_at",
+    "observed_precision",
+    "published_at",
+    "published_precision",
+    "available_at",
+    "effective_at",
+    "effective_precision",
+    "record_date",
+    "payment_date",
+    "ratio_numerator",
+    "ratio_denominator",
+    "cash_amount",
+    "currency",
+    "target_security_id",
+    "source_reference",
+    "recorded_at",
+    "provenance"
+  ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "2.0.0" },
     "id": { "$ref": "common.schema.json#/$defs/uuid" },
     "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
     "source_event_id": { "type": "string", "minLength": 1 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "action_status": { "enum": ["active", "cancelled", "unsupported"] },
     "action_type": {
       "enum": ["split", "reverse_split", "cash_dividend", "stock_dividend", "spinoff", "merger", "acquisition", "delisting", "ticker_change", "exchange_change", "rights_issue", "other"]
     },
     "observed_at": {
       "$ref": "common.schema.json#/$defs/utcTimestamp",
-      "$comment": "Ex-date or other market observation date associated with the event."
+      "$comment": "Source-declared ex-date or first split-adjusted trading date."
     },
+    "observed_precision": { "$ref": "common.schema.json#/$defs/observedPrecision" },
     "published_at": {
       "$ref": "common.schema.json#/$defs/utcTimestamp",
-      "$comment": "Earliest public announcement of this exact event version."
+      "$comment": "Earliest source publication timestamp or date encoding for this exact version."
     },
-    "effective_at": {
+    "published_precision": { "$ref": "common.schema.json#/$defs/observedPrecision" },
+    "available_at": {
       "$ref": "common.schema.json#/$defs/utcTimestamp",
-      "$comment": "When the action legally/economically affects the security."
+      "$comment": "Conservative knowledge cutoff used by point-in-time research."
     },
+    "effective_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "effective_precision": { "$ref": "common.schema.json#/$defs/observedPrecision" },
     "record_date": { "oneOf": [{ "$ref": "common.schema.json#/$defs/date" }, { "type": "null" }] },
     "payment_date": { "oneOf": [{ "$ref": "common.schema.json#/$defs/date" }, { "type": "null" }] },
     "ratio_numerator": { "oneOf": [{ "$ref": "common.schema.json#/$defs/nonNegativeDecimal" }, { "type": "null" }] },
@@ -32,6 +63,8 @@
     "cash_amount": { "oneOf": [{ "$ref": "common.schema.json#/$defs/nonNegativeDecimal" }, { "type": "null" }] },
     "currency": { "oneOf": [{ "$ref": "common.schema.json#/$defs/currency" }, { "type": "null" }] },
     "target_security_id": { "oneOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
+    "source_reference": { "type": "string", "minLength": 1 },
+    "recorded_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
     "provenance": { "$ref": "common.schema.json#/$defs/provenance" }
   }
 }

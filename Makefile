@@ -45,6 +45,10 @@ migrate: setup config
 		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('"'"'public.security_identifier_versions'"'"'), to_regclass('"'"'public.security_listing_versions'"'"'), to_regclass('"'"'public.universe_memberships'"'"'), to_regclass('"'"'public.calendar_manifests'"'"'), to_regclass('"'"'public.trading_sessions'"'"'))"' | \
 		grep -qx '5' || \
 		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000006_historical_truth.up.sql
+	@$(COMPOSE) exec -T postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT to_regclass('"'"'public.corporate_action_versions'"'"')"' | \
+		grep -qx 'corporate_action_versions' || \
+		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000007_corporate_actions.up.sql
 
 historical-truth-db-test: config
 	@scripts/test-historical-truth-db.sh

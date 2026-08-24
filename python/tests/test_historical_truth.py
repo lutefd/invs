@@ -14,6 +14,7 @@ from research.historical import (
     after_close_execution_session,
     calendar_fingerprint,
     calendar_manifest_as_of,
+    corporate_actions_as_of,
     listing_as_of,
     next_trading_session,
     parse_utc,
@@ -26,6 +27,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_ROOT = Path(os.environ.get("INVS_SCHEMA_ROOT", str(ROOT / "schemas")))
 FIXTURE = json.loads((SCHEMA_ROOT / "historical-truth.fixture.json").read_text())
 CALENDAR_FIXTURE = json.loads((SCHEMA_ROOT / "calendar.fixture.json").read_text())
+CORPORATE_ACTION_FIXTURE = json.loads(
+    (SCHEMA_ROOT / "corporate-action.fixture.json").read_text()
+)
 
 
 def _schema(name: str) -> dict:
@@ -77,6 +81,15 @@ def test_historical_fixture_matches_strict_entity_contracts() -> None:
         else:
             assert session["open_at"] is None
             assert session["close_at"] is None
+
+    for action in CORPORATE_ACTION_FIXTURE["actions"]:
+        _assert_entity_shape(action, "corporate-action.schema.json")
+        provenance = action["provenance"]
+        provenance_schema = _schema("common.schema.json")["$defs"]["provenance"]
+        assert set(provenance_schema["required"]) <= set(provenance)
+        assert set(provenance) <= set(provenance_schema["properties"])
+        parse_utc(provenance["ingested_at"], field="provenance.ingested_at")
+        assert len(provenance["raw_payload_hash"]) == 64
 
 
 def test_us_identity_preserves_scope_rename_and_delisting() -> None:
@@ -416,3 +429,58 @@ def test_calendar_fingerprints_match_manifests() -> None:
             mic=manifest["mic"],
             calendar_version=manifest["calendar_version"],
         ) == manifest["session_fingerprint"]
+
+
+def test_corporate_action_resolver_honors_revisions_and_cancellation() -> None:
+    rows = CORPORATE_ACTION_FIXTURE["actions"]
+    source = "11111111-1111-4111-8111-111111111111"
+    security = "22222222-2222-4222-8222-222222222222"
+
+    before_correction = corporate_actions_as_of(
+        rows,
+        data_source_id=source,
+        security_id=security,
+        decision_at="2026-01-04T23:59:59.999999Z",
+    )
+    assert [row["source_event_id"] for row in before_correction] == [
+        "fixture/cash-dividend",
+        "fixture/split",
+        "fixture/rights-issue",
+    ]
+    assert before_correction[0]["cash_amount"] == "1.25"
+    assert before_correction[-1]["action_status"] == "unsupported"
+
+    at_correction = corporate_actions_as_of(
+        rows,
+        data_source_id=source,
+        security_id=security,
+        decision_at="2026-01-05T00:00:00Z",
+    )
+    assert at_correction[0]["revision"] == 1
+    assert at_correction[0]["cash_amount"] == "1.30"
+
+    after_cancellation = corporate_actions_as_of(
+        rows,
+        data_source_id=source,
+        security_id=security,
+        decision_at="2026-01-06T00:00:00Z",
+    )
+    assert [row["source_event_id"] for row in after_cancellation] == [
+        "fixture/split",
+        "fixture/rights-issue",
+    ]
+
+
+def test_corporate_action_resolver_rejects_equal_rank_conflicts() -> None:
+    first = deepcopy(CORPORATE_ACTION_FIXTURE["actions"][0])
+    conflict = deepcopy(first)
+    conflict["id"] = "99999999-9999-4999-8999-999999999999"
+    conflict["cash_amount"] = "1.26"
+
+    with pytest.raises(AmbiguousHistoricalResolution, match="corporate action"):
+        corporate_actions_as_of(
+            [first, conflict],
+            data_source_id=first["provenance"]["data_source_id"],
+            security_id=first["security_id"],
+            decision_at=first["available_at"],
+        )

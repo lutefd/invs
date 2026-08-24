@@ -247,11 +247,26 @@ func validateFilingPrecision(at time.Time, precision TimePrecision, field string
 }
 
 type CorporateAction struct {
-	Source, SecurityID, Type, Currency string
-	Temporal                           Temporal
-	EffectiveAt                        time.Time
-	Value                              float64
-	RawPayloadHash                     string
+	SchemaVersion      string
+	ID                 string
+	SecurityID         string
+	SourceEventID      string
+	Revision           int
+	ActionStatus       string
+	ActionType         string
+	Temporal           Temporal
+	EffectiveAt        time.Time
+	EffectivePrecision TimePrecision
+	RecordDate         *string
+	PaymentDate        *string
+	RatioNumerator     *string
+	RatioDenominator   *string
+	CashAmount         *string
+	Currency           *string
+	TargetSecurityID   *string
+	SourceReference    string
+	RecordedAt         time.Time
+	Provenance         Provenance
 }
 
 type DataSource struct{ ID, Name, BaseURL string }

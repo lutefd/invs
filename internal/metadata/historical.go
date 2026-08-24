@@ -17,8 +17,11 @@ import (
 )
 
 const HistoricalSchemaVersion = "1.0.0"
+const CorporateActionSchemaVersion = "2.0.0"
 
 var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+var nonNegativeDecimalPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)
+var currencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
 
 // SecurityIdentifierVersion is a source-backed identifier assertion. Validity
 // describes the market assignment; AvailableAt describes when this exact
@@ -121,6 +124,45 @@ type TradingSession struct {
 	Revision         int        `json:"revision"`
 }
 
+// CorporateActionVersion is one immutable source event version. SourceEventID
+// identifies the correction family; Revision and availability order its
+// point-in-time versions without overwriting earlier knowledge.
+type CorporateActionProvenance struct {
+	DataSourceID      string    `json:"data_source_id"`
+	IngestionRunID    string    `json:"ingestion_run_id"`
+	RawPayloadHash    string    `json:"raw_payload_hash"`
+	RawRecordLocator  *string   `json:"raw_record_locator,omitempty"`
+	IngestedAt        time.Time `json:"ingested_at"`
+	NormalizerVersion *string   `json:"normalizer_version,omitempty"`
+}
+
+type CorporateActionVersion struct {
+	SchemaVersion      string                    `json:"schema_version"`
+	ID                 string                    `json:"id"`
+	SecurityID         string                    `json:"security_id"`
+	SourceEventID      string                    `json:"source_event_id"`
+	Revision           int                       `json:"revision"`
+	ActionStatus       string                    `json:"action_status"`
+	ActionType         string                    `json:"action_type"`
+	ObservedAt         time.Time                 `json:"observed_at"`
+	ObservedPrecision  string                    `json:"observed_precision"`
+	PublishedAt        time.Time                 `json:"published_at"`
+	PublishedPrecision string                    `json:"published_precision"`
+	AvailableAt        time.Time                 `json:"available_at"`
+	EffectiveAt        time.Time                 `json:"effective_at"`
+	EffectivePrecision string                    `json:"effective_precision"`
+	RecordDate         *string                   `json:"record_date"`
+	PaymentDate        *string                   `json:"payment_date"`
+	RatioNumerator     *string                   `json:"ratio_numerator"`
+	RatioDenominator   *string                   `json:"ratio_denominator"`
+	CashAmount         *string                   `json:"cash_amount"`
+	Currency           *string                   `json:"currency"`
+	TargetSecurityID   *string                   `json:"target_security_id"`
+	SourceReference    string                    `json:"source_reference"`
+	RecordedAt         time.Time                 `json:"recorded_at"`
+	Provenance         CorporateActionProvenance `json:"provenance"`
+}
+
 // HistoricalTruthBatch is one atomic publication unit. Every row is immutable;
 // replaying identical IDs is a no-op while changing an existing ID is a conflict.
 type HistoricalTruthBatch struct {
@@ -129,6 +171,7 @@ type HistoricalTruthBatch struct {
 	Memberships []UniverseMembership
 	Calendars   []CalendarManifest
 	Sessions    []TradingSession
+	Actions     []CorporateActionVersion
 }
 
 const insertSecurityIdentifierVersionSQL = `
@@ -177,6 +220,22 @@ INSERT INTO trading_sessions (
 ON CONFLICT (id) DO NOTHING
 RETURNING id::text`
 
+const insertCorporateActionVersionSQL = `
+INSERT INTO corporate_action_versions (
+	id, schema_version, security_id, source_event_id, revision, action_status,
+	action_type, observed_at, observed_precision, published_at,
+	published_precision, available_at, effective_at, effective_precision,
+	record_date, payment_date, ratio_numerator, ratio_denominator, cash_amount,
+	currency, target_security_id, source_reference, raw_record_locator,
+	recorded_at, data_source_id, ingestion_run_id, raw_payload_hash, ingested_at,
+	normalizer_version, record_hash
+) VALUES (
+	$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+	$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30
+)
+ON CONFLICT (id) DO NOTHING
+RETURNING id::text`
+
 const selectSecurityIdentifierHashSQL = `
 SELECT record_hash FROM security_identifier_versions WHERE id=$1`
 
@@ -191,6 +250,9 @@ SELECT record_hash FROM calendar_manifests WHERE id=$1`
 
 const selectTradingSessionHashSQL = `
 SELECT record_hash FROM trading_sessions WHERE id=$1`
+
+const selectCorporateActionHashSQL = `
+SELECT record_hash FROM corporate_action_versions WHERE id=$1`
 
 const historicalIdentityBaseExistsSQL = `
 SELECT EXISTS (
@@ -290,6 +352,20 @@ WHERE data_source_id=$1::uuid
 ORDER BY available_at DESC, recorded_at DESC, id DESC
 LIMIT 2`
 
+const resolveCorporateActionsSQL = `
+SELECT id::text, schema_version, security_id::text, source_event_id, revision,
+       action_status, action_type, observed_at, observed_precision, published_at,
+       published_precision, available_at, effective_at, effective_precision,
+       record_date::text, payment_date::text, ratio_numerator, ratio_denominator,
+       cash_amount, currency, target_security_id::text, source_reference,
+       raw_record_locator, recorded_at, data_source_id::text,
+       ingestion_run_id::text, raw_payload_hash, ingested_at, normalizer_version
+FROM corporate_action_versions
+WHERE data_source_id=$1::uuid
+  AND security_id=$2::uuid
+  AND available_at <= $3::timestamptz
+ORDER BY source_event_id, available_at DESC, revision DESC, recorded_at DESC, id DESC`
+
 func canonicalRecordHash(record any) (string, error) {
 	record = canonicalHistoricalRecord(record)
 	encoded, err := json.Marshal(record)
@@ -330,6 +406,14 @@ func canonicalHistoricalRecord(record any) any {
 		value.CloseAt = canonicalTimePointer(value.CloseAt)
 		value.AvailableAt = value.AvailableAt.UTC()
 		value.RecordedAt = value.RecordedAt.UTC()
+		return value
+	case CorporateActionVersion:
+		value.ObservedAt = value.ObservedAt.UTC()
+		value.PublishedAt = value.PublishedAt.UTC()
+		value.AvailableAt = value.AvailableAt.UTC()
+		value.EffectiveAt = value.EffectiveAt.UTC()
+		value.RecordedAt = value.RecordedAt.UTC()
+		value.Provenance.IngestedAt = value.Provenance.IngestedAt.UTC()
 		return value
 	default:
 		return record
@@ -466,6 +550,131 @@ func validateSession(record TradingSession) error {
 	return nil
 }
 
+func validateCorporateAction(record CorporateActionVersion) error {
+	if record.SchemaVersion != CorporateActionSchemaVersion {
+		return fmt.Errorf("unsupported corporate action schema version %q", record.SchemaVersion)
+	}
+	for name, value := range map[string]string{
+		"id": record.ID, "security_id": record.SecurityID,
+		"source_event_id": record.SourceEventID, "source_reference": record.SourceReference,
+		"data_source_id":   record.Provenance.DataSourceID,
+		"ingestion_run_id": record.Provenance.IngestionRunID,
+	} {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s is required", name)
+		}
+	}
+	if record.Revision < 0 {
+		return errors.New("revision must be non-negative")
+	}
+	if !sha256Pattern.MatchString(record.Provenance.RawPayloadHash) {
+		return errors.New("raw_payload_hash must be a lowercase SHA-256")
+	}
+	if record.PublishedAt.IsZero() || record.AvailableAt.IsZero() || record.RecordedAt.IsZero() || record.ObservedAt.IsZero() || record.EffectiveAt.IsZero() || record.Provenance.IngestedAt.IsZero() {
+		return errors.New("corporate action timestamps are required")
+	}
+	if record.AvailableAt.Before(record.PublishedAt) || record.Provenance.IngestedAt.Before(record.AvailableAt) || record.RecordedAt.Before(record.Provenance.IngestedAt) {
+		return errors.New("corporate action timestamps must satisfy published_at <= available_at <= ingested_at <= recorded_at")
+	}
+	for name, value := range map[string]struct {
+		At        time.Time
+		Precision string
+	}{
+		"observed":  {record.ObservedAt, record.ObservedPrecision},
+		"published": {record.PublishedAt, record.PublishedPrecision},
+		"effective": {record.EffectiveAt, record.EffectivePrecision},
+	} {
+		if err := validateCorporateActionPrecision(value.At, value.Precision); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	if record.Provenance.RawRecordLocator != nil && strings.TrimSpace(*record.Provenance.RawRecordLocator) == "" {
+		return errors.New("raw_record_locator must be null or nonblank")
+	}
+	if record.Provenance.NormalizerVersion != nil && strings.TrimSpace(*record.Provenance.NormalizerVersion) == "" {
+		return errors.New("normalizer_version must be omitted or nonblank")
+	}
+	for name, value := range map[string]*string{"record_date": record.RecordDate, "payment_date": record.PaymentDate} {
+		if value == nil {
+			continue
+		}
+		if _, err := time.Parse(time.DateOnly, *value); err != nil {
+			return fmt.Errorf("%s must be YYYY-MM-DD: %w", name, err)
+		}
+	}
+	for name, value := range map[string]*string{
+		"ratio_numerator":   record.RatioNumerator,
+		"ratio_denominator": record.RatioDenominator,
+		"cash_amount":       record.CashAmount,
+	} {
+		if value != nil && !nonNegativeDecimalPattern.MatchString(*value) {
+			return fmt.Errorf("%s must be a canonical non-negative decimal", name)
+		}
+	}
+	if record.Currency != nil && !currencyPattern.MatchString(*record.Currency) {
+		return errors.New("currency must be an uppercase ISO-like code")
+	}
+	if record.TargetSecurityID != nil && strings.TrimSpace(*record.TargetSecurityID) == "" {
+		return errors.New("target_security_id must be null or nonblank")
+	}
+	validStatuses := map[string]bool{"active": true, "cancelled": true, "unsupported": true}
+	if !validStatuses[record.ActionStatus] {
+		return fmt.Errorf("unsupported corporate action status %q", record.ActionStatus)
+	}
+	validTypes := map[string]bool{
+		"split": true, "reverse_split": true, "cash_dividend": true,
+		"stock_dividend": true, "spinoff": true, "merger": true,
+		"acquisition": true, "delisting": true, "ticker_change": true,
+		"exchange_change": true, "rights_issue": true, "other": true,
+	}
+	if !validTypes[record.ActionType] {
+		return fmt.Errorf("unsupported corporate action type %q", record.ActionType)
+	}
+	if record.ActionStatus == "active" {
+		switch record.ActionType {
+		case "split", "reverse_split":
+			if !positiveDecimal(record.RatioNumerator) || !positiveDecimal(record.RatioDenominator) || record.CashAmount != nil || record.Currency != nil {
+				return errors.New("active split actions require positive ratio fields and no cash fields")
+			}
+		case "cash_dividend":
+			if record.CashAmount == nil || record.Currency == nil || record.RatioNumerator != nil || record.RatioDenominator != nil {
+				return errors.New("active cash dividends require cash_amount/currency and no ratio fields")
+			}
+		}
+	}
+	return nil
+}
+
+func validateCorporateActionPrecision(at time.Time, precision string) error {
+	if at.Nanosecond()%1000 != 0 {
+		return errors.New("timestamp must have microsecond precision or coarser")
+	}
+	switch precision {
+	case "date":
+		utc := at.UTC()
+		if utc.Hour() != 0 || utc.Minute() != 0 || utc.Second() != 0 || utc.Nanosecond() != 0 {
+			return errors.New("date precision requires UTC midnight")
+		}
+	case "second":
+		if at.Nanosecond() != 0 {
+			return errors.New("second precision requires a whole-second timestamp")
+		}
+	case "unknown":
+	default:
+		return fmt.Errorf("unsupported precision %q", precision)
+	}
+	return nil
+}
+
+func positiveDecimal(value *string) bool {
+	if value == nil || !nonNegativeDecimalPattern.MatchString(*value) {
+		return false
+	}
+	trimmed := strings.TrimLeft(*value, "0")
+	trimmed = strings.TrimLeft(trimmed, ".")
+	return strings.Trim(trimmed, "0") != ""
+}
+
 type calendarKey struct {
 	DataSourceID    string
 	MIC             string
@@ -550,6 +759,17 @@ func validateHistoricalTruthBatch(batch HistoricalTruthBatch) error {
 		if err := validateMembership(record); err != nil {
 			return fmt.Errorf("membership %d: %w", i, err)
 		}
+	}
+	actionKeys := make(map[string]struct{}, len(batch.Actions))
+	for i, record := range batch.Actions {
+		if err := validateCorporateAction(record); err != nil {
+			return fmt.Errorf("corporate action %d: %w", i, err)
+		}
+		key := strings.Join([]string{record.Provenance.DataSourceID, record.SourceEventID, strconv.Itoa(record.Revision)}, "\x00")
+		if _, exists := actionKeys[key]; exists {
+			return fmt.Errorf("corporate action %d: duplicate source event revision", i)
+		}
+		actionKeys[key] = struct{}{}
 	}
 	calendars := make(map[calendarKey]CalendarManifest, len(batch.Calendars))
 	for i, record := range batch.Calendars {
@@ -686,6 +906,27 @@ func (r *Repository) PublishHistoricalTruth(ctx context.Context, batch Historica
 			record.AvailableAt.UTC(), record.SourceReference, record.RecordedAt.UTC(),
 			record.DataSourceID, record.RawPayloadHash, record.Revision, hash); err != nil {
 			return fmt.Errorf("session %d: %w", i, err)
+		}
+	}
+	for i, record := range batch.Actions {
+		hash, err := canonicalRecordHash(record)
+		if err != nil {
+			return fmt.Errorf("corporate action %d: %w", i, err)
+		}
+		if err := insertImmutable(ctx, tx, "corporate action", record.ID, insertCorporateActionVersionSQL,
+			selectCorporateActionHashSQL, hash,
+			record.ID, record.SchemaVersion, record.SecurityID, record.SourceEventID,
+			record.Revision, record.ActionStatus, record.ActionType, record.ObservedAt.UTC(),
+			record.ObservedPrecision, record.PublishedAt.UTC(), record.PublishedPrecision,
+			record.AvailableAt.UTC(), record.EffectiveAt.UTC(), record.EffectivePrecision,
+			record.RecordDate, record.PaymentDate, record.RatioNumerator,
+			record.RatioDenominator, record.CashAmount, record.Currency,
+			record.TargetSecurityID, record.SourceReference, record.Provenance.RawRecordLocator,
+			record.RecordedAt.UTC(), record.Provenance.DataSourceID,
+			record.Provenance.IngestionRunID, record.Provenance.RawPayloadHash,
+			record.Provenance.IngestedAt.UTC(), record.Provenance.NormalizerVersion,
+			hash); err != nil {
+			return fmt.Errorf("corporate action %d: %w", i, err)
 		}
 	}
 	return tx.Commit(ctx)
@@ -996,6 +1237,102 @@ func membershipRevisionIdentity(record UniverseMembership) string {
 		record.UniverseID, record.SecurityID, record.ValidFrom.UTC().Format(time.RFC3339Nano),
 		validUntil, strconv.FormatBool(record.Member),
 	}, "\x00")
+}
+
+// ResolveCorporateActions returns the latest knowable version of every action
+// family for one explicit source/security. Cancelled families are omitted;
+// unsupported latest states remain present so downstream adjustment fails closed.
+func (r *Repository) ResolveCorporateActions(ctx context.Context, dataSourceID, securityID string, decisionAt time.Time) ([]CorporateActionVersion, error) {
+	if r == nil {
+		return nil, errors.New("PostgreSQL metadata repository is required for corporate action resolution")
+	}
+	rows, err := r.pool.Query(ctx, resolveCorporateActionsSQL, dataSourceID, securityID, decisionAt.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	candidates := make([]CorporateActionVersion, 0)
+	for rows.Next() {
+		var record CorporateActionVersion
+		if err := rows.Scan(
+			&record.ID, &record.SchemaVersion, &record.SecurityID, &record.SourceEventID,
+			&record.Revision, &record.ActionStatus, &record.ActionType,
+			&record.ObservedAt, &record.ObservedPrecision, &record.PublishedAt,
+			&record.PublishedPrecision, &record.AvailableAt, &record.EffectiveAt,
+			&record.EffectivePrecision, &record.RecordDate, &record.PaymentDate,
+			&record.RatioNumerator, &record.RatioDenominator, &record.CashAmount,
+			&record.Currency, &record.TargetSecurityID, &record.SourceReference,
+			&record.Provenance.RawRecordLocator, &record.RecordedAt,
+			&record.Provenance.DataSourceID, &record.Provenance.IngestionRunID,
+			&record.Provenance.RawPayloadHash, &record.Provenance.IngestedAt,
+			&record.Provenance.NormalizerVersion,
+		); err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return selectCorporateActionRevisions(candidates)
+}
+
+func selectCorporateActionRevisions(records []CorporateActionVersion) ([]CorporateActionVersion, error) {
+	latest := make(map[string]CorporateActionVersion, len(records))
+	for _, record := range records {
+		current, exists := latest[record.SourceEventID]
+		if !exists || laterRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			latest[record.SourceEventID] = record
+			continue
+		}
+		if !sameRank(record.AvailableAt, record.Revision, record.RecordedAt, current.AvailableAt, current.Revision, current.RecordedAt) {
+			continue
+		}
+		if corporateActionIdentity(record) != corporateActionIdentity(current) {
+			return nil, fmt.Errorf("equal-ranked corporate action revisions disagree for %s", record.SourceEventID)
+		}
+		if record.ID > current.ID {
+			latest[record.SourceEventID] = record
+		}
+	}
+	result := make([]CorporateActionVersion, 0, len(latest))
+	for _, record := range latest {
+		if record.ActionStatus != "cancelled" {
+			result = append(result, record)
+		}
+	}
+	slices.SortFunc(result, func(a, b CorporateActionVersion) int {
+		if order := a.ObservedAt.Compare(b.ObservedAt); order != 0 {
+			return order
+		}
+		return strings.Compare(a.SourceEventID, b.SourceEventID)
+	})
+	return result, nil
+}
+
+func corporateActionIdentity(record CorporateActionVersion) string {
+	return strings.Join([]string{
+		record.SecurityID, record.SourceEventID, record.ActionStatus, record.ActionType,
+		record.ObservedAt.UTC().Format(time.RFC3339Nano), record.ObservedPrecision,
+		record.PublishedAt.UTC().Format(time.RFC3339Nano), record.PublishedPrecision,
+		record.EffectiveAt.UTC().Format(time.RFC3339Nano), record.EffectivePrecision,
+		stringPointerValue(record.RecordDate), stringPointerValue(record.PaymentDate),
+		stringPointerValue(record.RatioNumerator), stringPointerValue(record.RatioDenominator),
+		stringPointerValue(record.CashAmount), stringPointerValue(record.Currency),
+		stringPointerValue(record.TargetSecurityID), record.SourceReference,
+		stringPointerValue(record.Provenance.RawRecordLocator),
+		record.Provenance.DataSourceID, record.Provenance.IngestionRunID,
+		record.Provenance.RawPayloadHash,
+		record.Provenance.IngestedAt.UTC().Format(time.RFC3339Nano),
+		stringPointerValue(record.Provenance.NormalizerVersion),
+	}, "\x00")
+}
+
+func stringPointerValue(value *string) string {
+	if value == nil {
+		return "<nil>"
+	}
+	return *value
 }
 
 // ResolveCalendarManifest returns the latest source version that was knowable

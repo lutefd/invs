@@ -57,6 +57,16 @@ INSERT INTO securities (
     '2026-01-01T00:00:00Z'
 );
 
+INSERT INTO ingestion_runs (
+    id, data_source_id, run_key, status, started_at
+) VALUES (
+    '77777777-7777-4777-8777-777777777777',
+    '11111111-1111-4111-8111-111111111111',
+    'historical-truth-corporate-action-fixture',
+    'running',
+    '2026-01-01T00:00:00Z'
+);
+
 INSERT INTO security_identifier_versions (
     id, schema_version, security_id, identifier_type, value, normalized_value,
     identifier_scope, valid_from, valid_until, available_at, source_reference,
@@ -217,6 +227,110 @@ INSERT INTO trading_sessions (
     '9999999999999999999999999999999999999999999999999999999999999999'
 );
 
+INSERT INTO corporate_action_versions (
+    id, schema_version, security_id, source_event_id, revision, action_status,
+    action_type, observed_at, observed_precision, published_at,
+    published_precision, available_at, effective_at, effective_precision,
+    record_date, payment_date, ratio_numerator, ratio_denominator, cash_amount,
+    currency, target_security_id, source_reference, raw_record_locator,
+    recorded_at, data_source_id, ingestion_run_id, raw_payload_hash, ingested_at,
+    normalizer_version, record_hash
+) VALUES (
+    '12121212-1212-4212-8212-121212121212', '2.0.0',
+    '22222222-2222-4222-8222-222222222222',
+    'fixture/cash-dividend', 0, 'active', 'cash_dividend',
+    '2026-01-08T00:00:00Z', 'date', '2026-01-02T00:00:00Z', 'date',
+    '2026-01-03T00:00:00Z', '2026-01-08T00:00:00Z', 'date',
+    '2026-01-07', '2026-01-10', NULL, NULL, '1.25', 'USD', NULL,
+    'https://example.test/action/0', 'fixture.csv#row=2',
+    '2026-01-03T00:01:00Z', '11111111-1111-4111-8111-111111111111',
+    '77777777-7777-4777-8777-777777777777',
+    '1212121212121212121212121212121212121212121212121212121212121212',
+    '2026-01-03T00:00:30Z', 'fixture-action-v1',
+    '1212121212121212121212121212121212121212121212121212121212121212'
+), (
+    '13131313-1313-4313-8313-131313131313', '2.0.0',
+    '22222222-2222-4222-8222-222222222222',
+    'fixture/cash-dividend', 1, 'active', 'cash_dividend',
+    '2026-01-08T00:00:00Z', 'date', '2026-01-04T00:00:00Z', 'date',
+    '2026-01-05T00:00:00Z', '2026-01-08T00:00:00Z', 'date',
+    '2026-01-07', '2026-01-10', NULL, NULL, '1.30', 'USD', NULL,
+    'https://example.test/action/1', 'fixture.csv#row=3',
+    '2026-01-05T00:01:00Z', '11111111-1111-4111-8111-111111111111',
+    '77777777-7777-4777-8777-777777777777',
+    '1313131313131313131313131313131313131313131313131313131313131313',
+    '2026-01-05T00:00:30Z', 'fixture-action-v1',
+    '1313131313131313131313131313131313131313131313131313131313131313'
+);
+
+-- Unsupported action versions must remain storable even when the missing
+-- economics are the reason downstream adjustment will fail closed.
+INSERT INTO corporate_action_versions (
+    id, schema_version, security_id, source_event_id, revision, action_status,
+    action_type, observed_at, observed_precision, published_at,
+    published_precision, available_at, effective_at, effective_precision,
+    record_date, payment_date, ratio_numerator, ratio_denominator, cash_amount,
+    currency, target_security_id, source_reference, raw_record_locator,
+    recorded_at, data_source_id, ingestion_run_id, raw_payload_hash, ingested_at,
+    normalizer_version, record_hash
+)
+SELECT
+    '14141414-1414-4414-8414-141414141414', schema_version, security_id,
+    'fixture/unsupported-split', 0, 'unsupported', 'split', observed_at,
+    observed_precision, published_at, published_precision, available_at,
+    effective_at, effective_precision, NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, 'https://example.test/action/unsupported', 'fixture.csv#row=4',
+    recorded_at, data_source_id, ingestion_run_id,
+    '1414141414141414141414141414141414141414141414141414141414141414',
+    ingested_at, normalizer_version,
+    '1414141414141414141414141414141414141414141414141414141414141414'
+FROM corporate_action_versions
+WHERE id = '12121212-1212-4212-8212-121212121212';
+
+DO $$
+DECLARE
+    before_revision text;
+    at_revision text;
+BEGIN
+    SELECT cash_amount INTO before_revision
+    FROM corporate_action_versions
+    WHERE data_source_id = '11111111-1111-4111-8111-111111111111'
+      AND security_id = '22222222-2222-4222-8222-222222222222'
+      AND source_event_id = 'fixture/cash-dividend'
+      AND available_at <= '2026-01-04T23:59:59.999999Z'
+    ORDER BY available_at DESC, revision DESC, recorded_at DESC
+    LIMIT 1;
+    IF before_revision <> '1.25' THEN
+        RAISE EXCEPTION 'pre-correction action amount %, want 1.25', before_revision;
+    END IF;
+
+    SELECT cash_amount INTO at_revision
+    FROM corporate_action_versions
+    WHERE data_source_id = '11111111-1111-4111-8111-111111111111'
+      AND security_id = '22222222-2222-4222-8222-222222222222'
+      AND source_event_id = 'fixture/cash-dividend'
+      AND available_at <= '2026-01-05T00:00:00Z'
+    ORDER BY available_at DESC, revision DESC, recorded_at DESC
+    LIMIT 1;
+    IF at_revision <> '1.30' THEN
+        RAISE EXCEPTION 'inclusive action correction amount %, want 1.30', at_revision;
+    END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+    BEGIN
+        UPDATE corporate_action_versions
+        SET cash_amount = '9.99'
+        WHERE id = '12121212-1212-4212-8212-121212121212';
+        RAISE EXCEPTION 'corporate-action append-only update was accepted';
+    EXCEPTION WHEN SQLSTATE '55000' THEN
+        NULL;
+    END;
+END;
+$$;
+
 DO $$
 DECLARE
     before_close integer;
@@ -250,7 +364,7 @@ SQL
 printf '%s\n' 'checking transactional rollback'
 rollback_count=$(docker compose exec -T postgres sh -c \
 	'psql -v ON_ERROR_STOP=1 -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' \
-	sh "SELECT count(*) FROM security_identifier_versions WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';")
+	sh "SELECT (SELECT count(*) FROM security_identifier_versions WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') + (SELECT count(*) FROM corporate_action_versions WHERE id = '12121212-1212-4212-8212-121212121212');")
 if [[ "$rollback_count" != "0" ]]; then
 	printf 'fixture rows survived rollback: %s\n' "$rollback_count" >&2
 	exit 1
@@ -260,7 +374,7 @@ printf '%s\n' 'checking fresh-image migration wiring'
 docker compose build postgres >/dev/null
 fresh_image=$(docker image inspect --format '{{.Id}}' invs-postgres:latest)
 docker run --rm --entrypoint sh "$fresh_image" \
-	-c 'test -r /docker-entrypoint-initdb.d/000006_historical_truth.sql'
+	-c 'test -r /docker-entrypoint-initdb.d/000006_historical_truth.sql && test -r /docker-entrypoint-initdb.d/000007_corporate_actions.sql'
 
 fresh_volume="invs-historical-truth-test-$PPID-$$"
 fresh_container="invs-historical-truth-test-$PPID-$$"
@@ -283,8 +397,8 @@ fresh_table_count=
 for attempt in $(seq 1 120); do
 	fresh_table_count=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 		-U historical_truth_test -d historical_truth_test -Atc \
-		"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'));" 2>/dev/null | tr -d '[:space:]' || true)
-	if [[ "$fresh_table_count" == "5" ]]; then
+		"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'), to_regclass('public.corporate_action_versions'));" 2>/dev/null | tr -d '[:space:]' || true)
+	if [[ "$fresh_table_count" == "6" ]]; then
 		break
 	fi
 	if [[ "$attempt" == 120 ]]; then
@@ -294,17 +408,20 @@ for attempt in $(seq 1 120); do
 	fi
 	sleep 1
 done
-if [[ "$fresh_table_count" != "5" ]]; then
-	printf 'fresh initialization created %s historical tables, want 5\n' "$fresh_table_count" >&2
+if [[ "$fresh_table_count" != "6" ]]; then
+	printf 'fresh initialization created %s historical tables, want 6\n' "$fresh_table_count" >&2
 	exit 1
 fi
 
 docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test \
+	< migrations/000007_corporate_actions.down.sql >/dev/null
+docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test \
 	< migrations/000006_historical_truth.down.sql >/dev/null
 after_down_count=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test -Atc \
-	"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'));" | tr -d '[:space:]')
+	"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'), to_regclass('public.corporate_action_versions'));" | tr -d '[:space:]')
 if [[ "$after_down_count" != "0" ]]; then
 	printf 'migration rollback left %s historical tables, want 0\n' "$after_down_count" >&2
 	exit 1
@@ -313,11 +430,14 @@ fi
 docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test \
 	< migrations/000006_historical_truth.up.sql >/dev/null
+docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test \
+	< migrations/000007_corporate_actions.up.sql >/dev/null
 after_up_count=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test -Atc \
-	"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'));" | tr -d '[:space:]')
-if [[ "$after_up_count" != "5" ]]; then
-	printf 'migration re-apply created %s historical tables, want 5\n' "$after_up_count" >&2
+	"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'), to_regclass('public.corporate_action_versions'));" | tr -d '[:space:]')
+if [[ "$after_up_count" != "6" ]]; then
+	printf 'migration re-apply created %s historical tables, want 6\n' "$after_up_count" >&2
 	exit 1
 fi
 

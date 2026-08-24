@@ -8,3 +8,4 @@ COPY --chmod=0444 migrations/000003_observed_precision.up.sql /docker-entrypoint
 COPY --chmod=0444 migrations/000004_run_inputs.up.sql /docker-entrypoint-initdb.d/000004_run_inputs.sql
 COPY --chmod=0444 migrations/000005_nullable_macro_snapshot_value.up.sql /docker-entrypoint-initdb.d/000005_nullable_macro_snapshot_value.sql
 COPY --chmod=0444 migrations/000006_historical_truth.up.sql /docker-entrypoint-initdb.d/000006_historical_truth.sql
+COPY --chmod=0444 migrations/000007_corporate_actions.up.sql /docker-entrypoint-initdb.d/000007_corporate_actions.sql
