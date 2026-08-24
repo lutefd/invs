@@ -43,7 +43,7 @@ func assertMicrosecondUTC(t *testing.T, name string, got time.Time) {
 }
 
 func TestCollectCompanyNormalizesAndDeduplicates(t *testing.T) {
-	sub := []byte(`{"cik":"0000000001","sic":"3571","name":"Example Corp","stateOfIncorporation":"DE","sicDescription":"Widgets","filings":{"recent":{"accessionNumber":["0001","0001"],"filingDate":["2024-02-02","2024-02-02"],"acceptanceDateTime":["2024-02-02T21:03:04.000Z","2024-02-02T21:03:04.000Z"],"form":["10-K","10-K"],"primaryDocument":["x.htm","x.htm"]}}}`)
+	sub := []byte(`{"cik":"0000000001","sic":"3571","name":"Example Corp","stateOfIncorporation":"DE","sicDescription":"Widgets","filings":{"recent":{"accessionNumber":["0001","0001"],"filingDate":["2024-02-02","2024-02-02"],"reportDate":["2023-12-31","2023-12-31"],"acceptanceDateTime":["2024-02-02T21:03:04.000Z","2024-02-02T21:03:04.000Z"],"form":["10-K","10-K"],"primaryDocument":["x.htm","x.htm"]}}}`)
 	facts := []byte(`{"cik":1,"facts":{"us-gaap":{"Revenue":{"label":"Revenue","units":{"USD":[{"start":"2023-01-01","end":"2023-12-31","val":123.5,"accn":"0001","fy":2023,"fp":"FY","form":"10-K","filed":"2024-02-02"},{"start":"2023-01-01","end":"2023-12-31","val":123.5,"accn":"0001","fy":2023,"fp":"FY","form":"10-K","filed":"2024-02-02"}]}}}}}`)
 	c := NewClient(fakeGetter{responses: map[string][]byte{"submissions/CIK0000000001.json": sub, "companyfacts/CIK0000000001.json": facts}})
 	c.now = func() time.Time { return time.Date(2024, 2, 3, 12, 0, 0, 0, time.UTC) }
@@ -53,6 +53,20 @@ func TestCollectCompanyNormalizesAndDeduplicates(t *testing.T) {
 	}
 	if len(r.Filings) != 1 || len(r.Facts) != 1 || r.RecordsReceived != 4 {
 		t.Fatalf("unexpected result: %+v", r)
+	}
+	filing := r.Filings[0]
+	if filing.SourceDocumentID != "0001" || filing.FormType != "10-K" || filing.DocumentURL != "https://www.sec.gov/Archives/edgar/data/1/0001/x.htm" || filing.ID == "" {
+		t.Fatalf("filing identity=%+v", filing)
+	}
+	if filing.PeriodEnd == nil || !filing.PeriodEnd.Equal(time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC)) || filing.Temporal.ObservedPrecision != "date" {
+		t.Fatalf("filing reporting period=%+v", filing)
+	}
+	wantAccepted := time.Date(2024, 2, 2, 21, 3, 4, 0, time.UTC)
+	if !filing.Temporal.PublishedAt.Equal(wantAccepted) || !filing.Temporal.AvailableAt.Equal(wantAccepted) || filing.Temporal.PublishedPrecision != "second" {
+		t.Fatalf("filing publication=%+v", filing.Temporal)
+	}
+	if filing.RawPayloadHash != sha256Hex(sub) || filing.Provenance.RawRecordLocator != "filings/recent/accessionNumber/0" || filing.Provenance.NormalizerVersion != "sec-submissions-v1" {
+		t.Fatalf("filing provenance=%+v", filing)
 	}
 	f := r.Facts[0]
 	if f.Temporal.ObservedPrecision != "date" || f.Temporal.PublishedPrecision != "second" || !f.Temporal.AvailableAt.Equal(time.Date(2024, 2, 2, 21, 3, 4, 0, time.UTC)) {
@@ -132,6 +146,14 @@ func TestSubmissionsRejectsCIKMismatch(t *testing.T) {
 	b := []byte(`{"cik":"0000000002","name":"Wrong","filings":{"recent":{}}}`)
 	if _, _, _, _, err := parseSubmissions(b, "issuer", 1, time.Now()); err == nil {
 		t.Fatal("CIK mismatch accepted")
+	}
+}
+
+func TestSubmissionsRejectsFilingWithoutExactAcceptanceOrSafePrimaryDocument(t *testing.T) {
+	body := []byte(`{"cik":"0000000001","name":"Example Corp","filings":{"recent":{"accessionNumber":["0001","0002"],"filingDate":["2024-02-02","2024-02-02"],"reportDate":["2023-12-31","2023-12-31"],"acceptanceDateTime":["","2024-02-02T21:03:04.000Z"],"form":["10-K","10-Q"],"primaryDocument":["x.htm","../unsafe.htm"]}}}`)
+	_, filings, received, rejected, err := parseSubmissions(body, "issuer", 1, time.Date(2024, 2, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil || received != 2 || rejected != 2 || len(filings) != 0 {
+		t.Fatalf("filings=%+v received=%d rejected=%d err=%v", filings, received, rejected, err)
 	}
 }
 

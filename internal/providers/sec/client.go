@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/luisdourado/invs/internal/model"
 	"github.com/luisdourado/invs/internal/providers"
 )
@@ -134,8 +135,10 @@ func (n *flexibleNumber) UnmarshalJSON(b []byte) error {
 }
 
 type recentFilings struct {
-	AccessionNumber, FilingDate, AcceptanceDateTime, Form, PrimaryDocument []string
+	AccessionNumber, FilingDate, ReportDate, AcceptanceDateTime, Form, PrimaryDocument []string
 }
+
+var filingNamespace = uuid.MustParse("b0df6c63-295d-5828-b4fe-8f69cdf12af1")
 
 func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) (model.Issuer, []model.Filing, int, int, error) {
 	ingested = ingested.UTC().Truncate(time.Microsecond)
@@ -159,8 +162,10 @@ func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) 
 	rejected := 0
 	seen := make(map[string]struct{}, received)
 	filings := make([]model.Filing, 0, received)
+	rawHash := digest(b)
 	for i, accession := range r.AccessionNumber {
-		if accession == "" || i >= len(r.FilingDate) || i >= len(r.Form) {
+		accession = strings.TrimSpace(accession)
+		if !validAccession(accession) || i >= len(r.FilingDate) || i >= len(r.Form) || i >= len(r.AcceptanceDateTime) || i >= len(r.PrimaryDocument) {
 			rejected++
 			continue
 		}
@@ -172,22 +177,81 @@ func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) 
 		if _, exists := seen[accession]; exists {
 			continue
 		}
-		seen[accession] = struct{}{}
-		var accepted *time.Time
-		if i < len(r.AcceptanceDateTime) && r.AcceptanceDateTime[i] != "" {
-			if at, err := time.Parse("2006-01-02T15:04:05.000Z", r.AcceptanceDateTime[i]); err == nil {
-				at = at.UTC()
-				accepted = &at
+		acceptedAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(r.AcceptanceDateTime[i]))
+		if err != nil || acceptedAt.Location() != time.UTC {
+			rejected++
+			continue
+		}
+		acceptedAt = acceptedAt.UTC().Truncate(time.Microsecond)
+		if acceptedAt.After(ingested) || filed.After(acceptedAt) {
+			rejected++
+			continue
+		}
+		primary := strings.TrimSpace(r.PrimaryDocument[i])
+		form := strings.TrimSpace(r.Form[i])
+		if form == "" || primary == "" || primary == "." || primary == ".." || strings.ContainsAny(primary, "/\\\x00") {
+			rejected++
+			continue
+		}
+		var periodEnd *time.Time
+		observedPrecision := model.PrecisionUnknown
+		if i < len(r.ReportDate) && strings.TrimSpace(r.ReportDate[i]) != "" {
+			reportDate, reportErr := time.Parse(time.DateOnly, strings.TrimSpace(r.ReportDate[i]))
+			if reportErr != nil || reportDate.After(filed) {
+				rejected++
+				continue
 			}
+			reportDate = reportDate.UTC()
+			periodEnd = &reportDate
+			observedPrecision = model.PrecisionDate
 		}
-		primary := ""
-		if i < len(r.PrimaryDocument) {
-			primary = r.PrimaryDocument[i]
+		publishedPrecision := model.PrecisionUnknown
+		if acceptedAt.Nanosecond() == 0 {
+			publishedPrecision = model.PrecisionSecond
 		}
-		filings = append(filings, model.Filing{Source: "sec", IssuerID: issuerID, AccessionNumber: accession, Form: r.Form[i], PrimaryDocument: primary, FiledDate: filed.UTC(), AcceptedAt: accepted, IngestedAt: ingested})
+		archiveAccession := strings.ReplaceAll(accession, "-", "")
+		documentURL := fmt.Sprintf("https://www.sec.gov/Archives/edgar/data/%d/%s/%s", cik, archiveAccession, primary)
+		filing := model.Filing{
+			ID:     uuid.NewSHA1(filingNamespace, []byte(issuerID+"\x00"+accession)).String(),
+			Source: "sec", IssuerID: issuerID, SourceDocumentID: accession,
+			DocumentURL: documentURL, AccessionNumber: accession, FormType: form,
+			PrimaryDocument: primary, FilingDate: filed.UTC(), PeriodEnd: periodEnd,
+			Temporal: model.Temporal{
+				ObservedPrecision: observedPrecision, PublishedAt: acceptedAt,
+				PublishedPrecision: publishedPrecision, AvailableAt: acceptedAt, IngestedAt: ingested,
+			},
+			RawPayloadHash: rawHash,
+			Provenance: model.Provenance{
+				RawPayloadHash: rawHash, RawRecordLocator: fmt.Sprintf("filings/recent/accessionNumber/%d", i),
+				IngestedAt: ingested, NormalizerVersion: "sec-submissions-v1",
+			},
+			// Preserve the compatibility fields for company-fact publication timing.
+			Form: form, FiledDate: filed.UTC(), AcceptedAt: &acceptedAt, IngestedAt: ingested,
+		}
+		if periodEnd != nil {
+			filing.Temporal.ObservedAt = *periodEnd
+		}
+		if err := filing.Validate(); err != nil {
+			rejected++
+			continue
+		}
+		seen[accession] = struct{}{}
+		filings = append(filings, filing)
 	}
 	sort.Slice(filings, func(i, j int) bool { return filings[i].AccessionNumber < filings[j].AccessionNumber })
 	return issuer, filings, received, rejected, nil
+}
+
+func validAccession(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r != '-' && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return strings.Trim(value, "-") != ""
 }
 
 type companyFacts struct {
