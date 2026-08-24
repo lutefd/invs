@@ -30,6 +30,7 @@ var (
 	marketCalendarRowPattern    = regexp.MustCompile(`(?is)<tr\b[^>]*>(.*?)</tr>`)
 	marketCalendarCellPattern   = regexp.MustCompile(`(?is)<td\b[^>]*>(.*?)</td>`)
 	marketCalendarTagPattern    = regexp.MustCompile(`(?is)<[^>]*>`)
+	marketCalendarStartPattern  = regexp.MustCompile(`(?i)trading and registration will start at\s+(\d{1,2}):(\d{2})\s*([ap])\.?m\.?`)
 )
 
 var marketCalendarMonths = map[string]time.Month{
@@ -76,6 +77,7 @@ type MarketCalendarEvent struct {
 	Status            string
 	IsClosed          bool
 	IsSpecialHours    bool
+	SpecialOpenLocal  string
 	ListedDescription string
 	RawRecordLocator  string
 }
@@ -232,12 +234,17 @@ func parseMarketCalendar(body []byte, year int) ([]MarketCalendarEvent, MarketCa
 			if len(cells) >= 4 {
 				description = cleanMarketCalendarHTML(cells[3][1])
 			}
+			specialOpen := ""
+			if early {
+				specialOpen = parseMarketCalendarStart(description)
+			}
 			events = append(events, MarketCalendarEvent{
 				Date:              date,
 				Event:             eventName,
 				Status:            status,
 				IsClosed:          closed,
 				IsSpecialHours:    early,
+				SpecialOpenLocal:  specialOpen,
 				ListedDescription: description,
 				RawRecordLocator:  fmt.Sprintf("market_calendar/year=%d/month=%s/day=%02d/row=%d", year, monthName, day, rowNumber),
 			})
@@ -253,6 +260,24 @@ func parseMarketCalendar(body []byte, year int) ([]MarketCalendarEvent, MarketCa
 		return events[i].Event < events[j].Event
 	})
 	return events, stats, nil
+}
+
+func parseMarketCalendarStart(description string) string {
+	match := marketCalendarStartPattern.FindStringSubmatch(description)
+	if len(match) != 4 {
+		return ""
+	}
+	hour, err := strconv.Atoi(match[1])
+	if err != nil || hour < 1 || hour > 12 {
+		return ""
+	}
+	if strings.EqualFold(match[3], "p") && hour != 12 {
+		hour += 12
+	}
+	if strings.EqualFold(match[3], "a") && hour == 12 {
+		hour = 0
+	}
+	return fmt.Sprintf("%02d:%s", hour, match[2])
 }
 
 func cleanMarketCalendarHTML(value string) string {

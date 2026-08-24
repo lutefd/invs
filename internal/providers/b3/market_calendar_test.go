@@ -71,7 +71,7 @@ func TestCollectMarketCalendarRetainsRawAndParsesListedEvents(t *testing.T) {
 	if result.Events[1].Date.Format(time.DateOnly) != "2026-02-16" || !result.Events[1].IsClosed {
 		t.Fatalf("second event = %+v", result.Events[1])
 	}
-	if result.Events[2].Date.Format(time.DateOnly) != "2026-02-18" || result.Events[2].IsClosed || !result.Events[2].IsSpecialHours || result.Events[2].Status != "special_hours" || !strings.Contains(result.Events[2].ListedDescription, "1:00 p.m.") {
+	if result.Events[2].Date.Format(time.DateOnly) != "2026-02-18" || result.Events[2].IsClosed || !result.Events[2].IsSpecialHours || result.Events[2].Status != "special_hours" || result.Events[2].SpecialOpenLocal != "13:00" || !strings.Contains(result.Events[2].ListedDescription, "1:00 p.m.") {
 		t.Fatalf("special-hours event = %+v", result.Events[2])
 	}
 }
