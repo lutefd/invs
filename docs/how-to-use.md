@@ -150,7 +150,10 @@ make ingest SOURCE=prices RUN_KEY=yahoo-aapl-2026-08-12
 Symbols are URL-escaped by the adapter, including symbols such as `^BVSP` and
 `BRK/B`. Yahoo's current download response is stored with the collector receipt
 time as conservative availability evidence; the system does not infer the
-historical public knowledge time of an old download.
+historical public knowledge time of an old download. Yahoo chart OHLC and volume are
+`split_adjusted`, not raw corporate-action inputs. Legacy Yahoo manifests carrying
+the former `raw` label fail closed and must be archived and reingested; never rewrite
+the immutable manifest in place.
 
 ### SEC company metadata and facts
 
@@ -368,6 +371,61 @@ an unpinned download, or an inferred weekday calendar. Select the manifest with
 `available_at <= decision_at`, use its exact `calendar_version` for session
 resolution, and carry the resulting pin into feature publication. See the
 [historical calendar acceptance report](acceptance/2026-08-24-historical-calendar-publication.md).
+
+### Corporate actions and adjusted-price artifacts
+
+Exact historical actions are disabled by default. Configure every SEC or B3
+resource with its exact URL, lowercase SHA-256, content type, declared availability
+policy, and source-located action transcription under `providers.sec_action_history`
+or `providers.b3_action_replay`. Then collect with an independent run-key scope:
+
+```sh
+make ingest SOURCE=sec-actions RUN_KEY=sec-actions-<bounded-slice>
+make ingest SOURCE=b3-action-replay RUN_KEY=b3-action-replay-<bounded-slice>
+```
+
+SEC action versions become knowable at the exact configured EDGAR acceptance time.
+B3 public sample versions become knowable only at local receipt. Unknown B3 action
+states remain `unsupported`; do not map a source code to `active` without admitted
+source semantics.
+
+Export one resolver-backed action snapshot to a new host file. Obtain the explicit
+source UUID from `data_sources`; do not select a source implicitly by name inside
+research code.
+
+```sh
+mkdir -p data/action-snapshots
+make action-snapshot \
+  DATA_SOURCE_ID=<action-source-uuid> \
+  SECURITY_ID=<security-uuid> \
+  DECISION_AT=2020-09-02T22:00:00Z \
+  ACTIONS_FILE=data/action-snapshots/aapl-2020-09-02.json
+```
+
+The target refuses to overwrite an existing snapshot. It includes the exact source,
+security, decision time, and latest knowable revision of every event family;
+cancellations are omitted while unsupported latest states remain present to block
+downstream adjustment.
+
+Publish only from a manifest whose rows are truly `price_basis=raw`. Host `data/`
+is mounted at `/data` in the research container, so command inputs use container
+paths:
+
+```sh
+make adjust \
+  RAW_PRICE_MANIFEST=/data/normalized/prices/source=<raw-source>/security_id=<security-uuid>/manifest.json \
+  ACTIONS_FILE=/data/action-snapshots/aapl-2020-09-02.json \
+  DECISION_AT=2020-09-02T22:00:00Z
+
+make adjust-validate \
+  ADJUSTMENT_MANIFEST=/data/adjusted/prices/artifact_id=<artifact-uuid>/manifest.json
+```
+
+`backward_split_dividend_1_0_0` accepts splits, reverse splits, and cash dividends.
+It pins the raw manifest and part, the ordered canonical action snapshot, and every
+output part. Other action types, unsupported states, missing economics, currency
+mismatches, future knowledge, and legacy Yahoo `raw` rows produce no artifact. See
+the [corporate-action acceptance report](acceptance/2026-08-24-corporate-action-publication.md).
 
 ### CVM IPE filings and CAD
 

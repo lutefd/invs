@@ -73,18 +73,21 @@ The following baseline limitations drive the version order:
   live-accepted. ADRs, synthetic fixtures, and the durable metadata publication/
   resolution boundary now exist. Bounded source-backed INSM/PETZ3 identifier,
   listing, membership, and PETZ3 delisting revisions are live-accepted without
-  backward leakage. Corporate actions remain outstanding. Exact official XNAS/BVMF
-  artifacts now close the bounded historical calendar/decision-clock gate, while
-  broader date coverage still requires separately admitted evidence. The canonical
-  BVMF/XNYS current/reference publisher remains available only from receipt time.
+  backward leakage. A bounded exact SEC split, B3 installation-replay revision
+  family, as-of action snapshot, and immutable adjustment artifact now close the
+  corporate-action mechanism gate. Exact official XNAS/BVMF artifacts close the
+  bounded historical calendar/decision-clock gate, while broader date coverage still
+  requires separately admitted evidence. The canonical BVMF/XNYS current/reference
+  publisher remains available only from receipt time.
 - A bounded official B3 InstrumentsConsolidated path is implemented and live-accepted
   for exact current/reference Brazil identity/listing snapshots. It retains ISIN and
   source trading intervals but does not provide broad historical lifecycle coverage.
   Separate B3 notice adapters supply the accepted bounded Ibovespa membership chain
   and PETZ3 trading-cessation correction. A separate B3 listed-company
   corporate-action adapter now retains source-native evidence, but the endpoint does
-  not expose public publication or correction-revision semantics, so canonical
-  adjustments remain unadmitted. The
+  not expose public publication or correction-revision semantics. The admitted B3
+  UP2DATA sample path is therefore installation-replay only and its unknown state
+  blocks adjustment. The
   bounded Yahoo `.SA` check supports a candidate price bridge but failed the
   security-master evidence gate; its separate terms/price-bridge review remains
   outstanding.
@@ -110,13 +113,18 @@ identity/listing path. Separate official B3 portfolio and Plantao notices supply
 accepted Ibovespa membership add/remove chain plus a PETZ3 trading-cessation
 correction with exact publication time. The
 listed-company endpoint supplies raw-first corporate-action evidence, but not enough
-publication/revision metadata for canonical adjustment publication. Yahoo remains
-separate price-bridge discovery.
+publication/revision metadata for canonical adjustment publication. The separate
+UP2DATA sample revision path is admitted only from installation receipt and blocks
+on unknown action states. Yahoo remains separate price-bridge discovery and its
+chart prices are explicitly split-adjusted.
 
 The [B3 bounded source-admission report](acceptance/2026-08-22-b3-instruments-security-master.md)
 records the implementation, raw fixture, live hash, exact mappings, and conservative
 availability policy. The [B3 corporate-action evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md)
 records the separate source-native endpoint and its canonical-publication block.
+The later [corporate-action publication report](acceptance/2026-08-24-corporate-action-publication.md)
+records the exact SEC action, bounded B3 installation replay, unsupported-state
+block, and reproducible adjustment artifact.
 The [exchange-calendar publication report](acceptance/2026-08-23-exchange-calendar-publication.md)
 records the bounded BVMF/XNYS current/reference publication. The later
 [historical calendar report](acceptance/2026-08-24-historical-calendar-publication.md)

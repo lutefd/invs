@@ -73,8 +73,10 @@ follow-up historical identity slice publishes source-backed INSM/PETZ3
 identifier/listing intervals and a PETZ3 trading-cessation correction with exact
 knowledge-time resolution. The historical calendar follow-up now admits exact
 Nasdaq/B3 artifacts, publication/correction chronology, decision-time selection,
-and feature-artifact clock pins. The next v0.2 unit is corporate actions and
-reproducible adjustments.
+and feature-artifact clock pins. The corporate-action follow-up now publishes one
+exact SEC split, retains a B3 sample revision family only from installation receipt,
+blocks its unsupported latest state, and emits immutable adjustment artifacts from
+resolver-backed snapshots. The next v0.2 unit is FX.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -98,13 +100,15 @@ or complete market-history coverage. See the
 [B3 acceptance report](acceptance/2026-08-22-b3-instruments-security-master.md) and
 [historical identity/listing publication report](acceptance/2026-08-23-historical-identity-listing-publication.md).
 The separate B3 listed-company endpoint now has a source-native corporate-action
-evidence adapter and live acceptance, but no canonical action publication: the
-endpoint does not expose a provider event ID, earliest public publication time,
-or correction revision. The public UP2DATA sample now has a separate
-transport-agnostic lifecycle parser with event/control IDs, source dates,
-action state, and correction fields, but no product transport or production
-access dependency was added. See the [listed-company evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md)
-and [UP2DATA sample report](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
+evidence adapter and live acceptance, but that endpoint remains raw-only because it
+does not expose a provider event ID, earliest public publication time, or correction
+revision. The public UP2DATA sample has a separate transport-agnostic lifecycle
+parser and bounded canonical installation replay with event/control IDs, source
+dates, action states, and corrections. Unknown states remain unsupported; no product
+transport or production access dependency was added. See the
+[listed-company evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md),
+[UP2DATA sample report](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md),
+and [corporate-action publication report](acceptance/2026-08-24-corporate-action-publication.md).
 The official B3 and NYSE calendar/hour pages now have raw-first adapters and a
 canonical calendar compiler/publisher. A live bounded acceptance published one
 append-only manifest plus an explicit row for every covered date: five BVMF sessions
@@ -131,7 +135,7 @@ to close the v0.2 calendar gate. See the
 - B3 live source evidence: [bounded InstrumentsConsolidated acceptance](acceptance/2026-08-22-b3-instruments-security-master.md)
 - Latest B3 listed-company corporate-action boundary: `0ad46c8` (`feat(provider): add bounded B3 corporate-action evidence`)
 - Latest B3 UP2DATA lifecycle parser boundary: `8b9916f` (`feat(provider): parse B3 UP2DATA corporate-action lifecycle`)
-- B3 UP2DATA sample acceptance: [source-native lifecycle evidence](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md); product access and canonical publication remain blocked
+- B3 UP2DATA sample acceptance: [source-native lifecycle evidence](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md); production access remains blocked, while the later bounded path publishes only installation-replay revisions with unsupported states
 - Latest B3 market-calendar evidence boundary: `6f61a84` (`feat(provider): parse B3 market-calendar evidence`)
 - Latest exchange-calendar provider boundary: `acd8eec` (`feat(provider): parse official exchange calendars`)
 - Latest exchange-calendar publication boundary: `77fee79` (`feat(data): publish versioned exchange calendars`)
@@ -140,6 +144,13 @@ to close the v0.2 calendar gate. See the
 - Latest calendar-pin research boundary: `d7f4e18` (`feat(research): pin calendar decision clocks`)
 - Latest Nasdaq historical-hours admission fix: `6193dd0` (`fix(provider): admit Nasdaq historical session hours`)
 - Historical calendar acceptance: [bounded XNAS/BVMF artifact chronology and decision clocks](acceptance/2026-08-24-historical-calendar-publication.md)
+- Latest corporate-action schema/publication boundary: `8a318f0` (`feat(data): publish corporate action versions`)
+- Latest adjustment-artifact boundary: `7655c74` (`feat(research): publish deterministic price adjustments`)
+- Latest exact-action provider/evidence boundaries: `33d8658` and `435dc51`
+- Latest price-basis safety boundaries: `4a3af81` and `e3ccbee`
+- Latest supported action-snapshot boundary: `9c8ff81` (`feat(research): export as-of action snapshots`)
+- Latest canonical action-hash boundary: `4751235` (`fix(research): canonicalize action record hashes`)
+- Corporate-action acceptance: [bounded SEC publication, B3 installation replay, and immutable adjustments](acceptance/2026-08-24-corporate-action-publication.md)
 - Latest index-membership provider boundary: `629e82b` (`feat(provider): parse official index membership notices`)
 - Latest index-membership publication boundary: `376d0e0` (`feat(data): publish historical universe memberships`)
 - Latest mixed-universe identity boundary: `9f488a9` (`fix(metadata): support issuers without SEC identifiers`)
@@ -870,6 +881,13 @@ The v0.2 contract/fixture slice at `4d483ac` passed `make test`: Go tests and ve
 18 JSON Schema documents, and 58 Python tests including the exact-boundary identity,
 membership, calendar, and decision-clock fixtures.
 
+The corporate-action boundary through `4751235` passed `make test` with 69 Python
+tests, `make historical-truth-db-test`, a clean isolated PostgreSQL publication,
+exact-key replays, supported as-of snapshot export, immutable adjustment replay, and
+an explicit unsupported-action no-output check. Evidence is retained at
+`/home/luis/invs-acceptance/2026-08-24-corporate-actions` and summarized in the
+[acceptance report](acceptance/2026-08-24-corporate-action-publication.md).
+
 The retained post-metadata v0 r3 acceptance at
 `/home/luis/invs-acceptance/2026-08-12-v0-r3` recorded:
 
@@ -907,17 +925,21 @@ The following are not accidental omissions:
   security-master evidence gate; broad B3 lifecycle and long-history coverage remain
   pending, while one bounded official PETZ3 identity/listing/membership chain is
   accepted. B3
-  listed-company corporate-action evidence is now
-  retained source-natively, but its missing publication/revision semantics keep
-  canonical adjustment publication blocked.
+  listed-company corporate-action evidence is retained source-natively, but its
+  missing publication/revision semantics keep that endpoint raw-only. The B3
+  UP2DATA sample revisions are canonical only for installation replay; their unknown
+  action state remains unsupported and blocks adjustment.
 - No canonical CVM CAD dataset or CAD snapshot table.
 - No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.
-- No canonical corporate-action collector or adjustment publication despite the
-  schema boundary existing; B3 listed-company evidence and the UP2DATA sample
-  parser remain source-native only. Exchange calendars now have both bounded
+- Corporate-action publication and adjustment artifacts are accepted for one exact
+  SEC split plus a B3 installation-replay revision family. This is not a broad action
+  archive or production B3 delivery claim. Exchange calendars now have both bounded
   BVMF/XNYS current/reference publication and accepted exact-artifact XNAS/BVMF
   historical chronology; dates outside those explicit versions remain unavailable.
+- Yahoo chart OHLC and volume are `split_adjusted`. Legacy immutable Yahoo manifests
+  carrying the former `raw` label must be archived and reingested; normalization and
+  adjustment now fail closed instead of mixing or double-adjusting them.
 - Current security-to-issuer mappings are current YAML configuration, not historical
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
@@ -934,12 +956,8 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Publish canonical corporate actions and reproducible adjustment artifacts. For
-   B3, obtain authorized UP2DATA Corporate Action access (or a public versioned
-   alternative), then define delivery availability, revision semantics, and the
-   corresponding point-in-time bias audit.
-2. Add versioned FX observations and the canonical USD/BRL conversion policy, then
-   publish canonical SEC filing metadata.
+1. Add versioned FX observations and the canonical USD/BRL conversion policy.
+2. Publish canonical SEC filing metadata.
 3. Complete the remaining B3-backed price bridge and integrate the accepted
    identity/listing/membership/calendar chains into the bounded US/Brazil bias audit.
    Revisit Yahoo `.SA` only after its terms, fixture, coverage, and availability

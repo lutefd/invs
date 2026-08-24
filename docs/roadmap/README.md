@@ -76,7 +76,9 @@ an event ID nor public-availability/correction-revision semantics. See the
 The official UP2DATA sample now also has a transport-agnostic
 `CorporateActionLifeCycleFileV2` parser in `8b9916f` with source event/control
 IDs, date fields, action state, and correction fields. It is sample-layout evidence only;
-UP2DATA product access and canonical publication remain unaccepted. See the
+UP2DATA product access remains unaccepted. The later bounded corporate-action
+admission publishes its sample revisions only for installation replay and leaves
+unknown states unsupported. See the
 [UP2DATA sample report](../acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
 The B3 2026 market-calendar evidence parser in `6f61a84` now feeds official B3
 hours alongside new NYSE calendar/hours parsing (`acd8eec`) and deterministic
@@ -88,13 +90,16 @@ eligible only from receipt time, not historically admitted calendars. See the
 [exchange-calendar publication report](../acceptance/2026-08-23-exchange-calendar-publication.md).
 The exact-artifact historical follow-up is accepted in the
 [historical calendar and decision-clock report](../acceptance/2026-08-24-historical-calendar-publication.md).
+The bounded corporate-action and adjustment follow-up is accepted in the
+[corporate-action publication report](../acceptance/2026-08-24-corporate-action-publication.md).
+It publishes an exact SEC split, retains B3 sample revisions only from installation
+receipt, blocks the unsupported B3 state, and keeps Yahoo split-adjusted prices out
+of the raw adjustment path.
 The next unaccepted cohesive units are:
 
-1. publish corporate actions and reproducible adjustments; for B3 specifically,
-   resolve authorized UP2DATA access or a public versioned alternative before adding
-   a production corporate-action transport;
-2. add versioned FX observations and the canonical USD/BRL conversion policy;
-3. publish canonical SEC filing metadata, then complete the Brazil price bridge and
+1. add versioned FX observations and the canonical USD/BRL conversion policy;
+2. publish canonical SEC filing metadata;
+3. complete the Brazil price bridge and
    bounded US/Brazil point-in-time bias audits. Revisit Yahoo `.SA` only after its
    separate source, terms, fixture, coverage, and availability checks pass.
 

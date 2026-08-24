@@ -128,7 +128,8 @@ snapshot data.
 Fresh PostgreSQL volumes apply the forward migrations in order: `000001_core_metadata`,
 `000002_latest_observation_snapshots`, `000003_observed_precision`,
 `000004_run_inputs`, `000005_nullable_macro_snapshot_value`, and
-`000006_historical_truth`. Existing initialized volumes use `make migrate`, which
+`000006_historical_truth`, `000007_corporate_actions`, and
+`000008_price_basis`. Existing initialized volumes use `make migrate`, which
 conditionally applies missing changes in order; its schema checks make rerunning the
 command idempotent. `000001` is the base schema created during volume initialization.
 
@@ -150,7 +151,8 @@ convenience mode:
   FRED and BCB projections are current-vintage latest rows. ALFRED's authoritative
   history remains in manifest-backed Parquet while PostgreSQL exposes only its latest
   operational projection. Yahoo backfills likewise provide only the provider data
-  returned and collected at ingestion time.
+  returned and collected at ingestion time; chart OHLC and volume are classified as
+  `split_adjusted`, not raw corporate-action inputs.
 
 Macro latest-row selection uses the same total order as PostgreSQL finalization:
 `observed_at DESC`, `revision DESC`, `available_at DESC`, `ingested_at DESC`, then
