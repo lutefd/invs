@@ -21,6 +21,8 @@ from uuid import UUID
 import duckdb
 import yaml
 
+from .fx import fx_as_of as select_fx_as_of
+
 
 class DatasetSchemaError(ValueError):
     """Raised when a committed manifest or listed Parquet part is invalid."""
@@ -139,6 +141,7 @@ _PARTITION_KEYS: Final[dict[str, str]] = {
     "fundamentals": "issuer_id",
     "macroeconomics": "series_id",
     "filings": "issuer_id",
+    "fx": "pair",
 }
 
 _PRICE_FIELDS = (
@@ -266,6 +269,29 @@ _FILING_FIELDS = (
     _Field("normalizer_version", "VARCHAR"),
 )
 
+_FX_FIELDS = (
+    _Field("schema_version", "VARCHAR"),
+    _Field("id", "VARCHAR"),
+    _Field("source", "VARCHAR"),
+    _Field("base_currency", "VARCHAR"),
+    _Field("quote_currency", "VARCHAR"),
+    _Field("rate_kind", "VARCHAR"),
+    _Field("fixing_timezone", "VARCHAR"),
+    _Field("buy_rate", "VARCHAR"),
+    _Field("sell_rate", "VARCHAR"),
+    _Field("fixing_at", "TIMESTAMPTZ"),
+    _Field("published_at", "TIMESTAMPTZ"),
+    _Field("available_at", "TIMESTAMPTZ"),
+    _Field("recorded_at", "TIMESTAMPTZ"),
+    _Field("revision", "INTEGER"),
+    _Field("source_record_id", "VARCHAR"),
+    _Field("raw_payload_hash", "VARCHAR"),
+    _Field("data_source_id", "VARCHAR"),
+    _Field("ingestion_run_id", "VARCHAR"),
+    _Field("raw_record_locator", "VARCHAR"),
+    _Field("normalizer_version", "VARCHAR"),
+)
+
 _DATASETS: Final[dict[str, _Dataset]] = {
     "prices": _Dataset(
         "prices/**/manifest.json",
@@ -280,6 +306,9 @@ _DATASETS: Final[dict[str, _Dataset]] = {
         "macroeconomics/**/manifest.json", _MACRO_FIELDS, (("value", False, True),)
     ),
     "filings": _Dataset("filings/**/manifest.json", _FILING_FIELDS, ()),
+    "fx": _Dataset(
+        "fx/**/manifest.json", _FX_FIELDS, (("buy_rate", False, False), ("sell_rate", False, False))
+    ),
 }
 
 _FILING_NULLABLE_STRING_FIELDS: Final[frozenset[str]] = frozenset(
@@ -884,6 +913,50 @@ class ResearchCatalog:
         """
         return self.connection.execute(sql, parameters).fetchdf()
 
+    def fx_as_of(
+        self,
+        *,
+        pair: str,
+        fixing_date: str,
+        decision_at: str,
+    ) -> dict[str, Any]:
+        """Return one exact PTAX fixing known at ``decision_at``.
+
+        The fixing date is mandatory and selection never carries a preceding
+        business-day rate forward. The returned canonical record includes its
+        verified manifest/part lineage for downstream artifact construction.
+        """
+        rows = self.connection.execute(
+            """
+            SELECT *
+            FROM _fx_lineage
+            WHERE base_currency || '-' || quote_currency = $pair
+              AND available_at <= CAST($decision_at AS TIMESTAMPTZ)
+            ORDER BY fixing_at, revision, source_record_id, manifest_path, part_path
+            """,
+            {"pair": pair, "decision_at": decision_at},
+        ).fetchdf().to_dict("records")
+        selected = select_fx_as_of(
+            rows,
+            pair=pair,
+            fixing_date=fixing_date,
+            decision_at=decision_at,
+        )
+        matching = [
+            row
+            for row in rows
+            if row["id"] == selected["id"]
+            and row["source_record_id"] == selected["source_record_id"]
+        ]
+        if len(matching) != 1:
+            raise DatasetSchemaError("selected FX row does not have unique manifest lineage")
+        return {
+            **selected,
+            "manifest_path": matching[0]["manifest_path"],
+            "part_path": matching[0]["part_path"],
+            "part_sha256": matching[0]["part_sha256"],
+        }
+
     def _register_dataset(self, name: str, dataset: _Dataset) -> None:
         absolute_pattern = self.normalized_root / dataset.pattern
         manifest_paths = sorted(
@@ -945,18 +1018,21 @@ class ResearchCatalog:
                 f"{name} Parquet requires canonical schema_version {_SCHEMA_VERSION}; "
                 f"found {found or 'no rows'}. Normalized Parquet migration required."
             )
-        invalid_observed_precision = self.connection.execute(
-            f"SELECT count(*) FROM {_quote_identifier(physical_view)} "
-            "WHERE observed_precision IS NULL OR observed_precision NOT IN ("
-            + ", ".join(_quote_literal(value) for value in _OBSERVED_PRECISIONS)
-            + ")"
-        ).fetchone()[0]
-        if invalid_observed_precision:
-            raise DatasetSchemaError(
-                f"{name} Parquet contains {invalid_observed_precision} invalid "
-                "observed_precision value(s); allowed values are date, second, unknown."
-            )
+        if any(field.name == "observed_precision" for field in dataset.fields):
+            invalid_observed_precision = self.connection.execute(
+                f"SELECT count(*) FROM {_quote_identifier(physical_view)} "
+                "WHERE observed_precision IS NULL OR observed_precision NOT IN ("
+                + ", ".join(_quote_literal(value) for value in _OBSERVED_PRECISIONS)
+                + ")"
+            ).fetchone()[0]
+            if invalid_observed_precision:
+                raise DatasetSchemaError(
+                    f"{name} Parquet contains {invalid_observed_precision} invalid "
+                    "observed_precision value(s); allowed values are date, second, unknown."
+                )
         self._validate_decimal_strings(name, physical_view, dataset)
+        if name == "fx":
+            self._validate_fx_contract(physical_view)
         projections = self._canonical_projections(name, dataset.fields)
         self.connection.execute(
             f"CREATE OR REPLACE VIEW {_quote_identifier(canonical_view)} AS SELECT "
@@ -1124,7 +1200,7 @@ class ResearchCatalog:
         unsigned_pattern = r"^(0|[1-9][0-9]*)(\.[0-9]+)?$"
         for field, integer_only, optional in dataset.decimal_fields:
             pattern = r"^(0|[1-9][0-9]*)$" if integer_only else (
-                signed_pattern if name != "prices" else unsigned_pattern
+                unsigned_pattern if name in {"prices", "fx"} else signed_pattern
             )
             presence = f"has_{field}" if optional else None
             predicate = f"{_quote_identifier(presence)} AND " if presence is not None else ""
@@ -1138,6 +1214,29 @@ class ResearchCatalog:
                     f"{name} Parquet contains {invalid} invalid canonical decimal "
                     f"value(s) in {field}."
                 )
+
+    def _validate_fx_contract(self, physical_view: str) -> None:
+        invalid = self.connection.execute(
+            f"""
+            SELECT count(*) FROM {_quote_identifier(physical_view)}
+            WHERE source != 'bcb_ptax'
+               OR base_currency != 'USD'
+               OR quote_currency != 'BRL'
+               OR rate_kind != 'ptax_closing'
+               OR fixing_timezone != 'America/Sao_Paulo'
+               OR revision != 0
+               OR CAST(buy_rate AS DECIMAL(38, 18)) <= 0
+               OR CAST(sell_rate AS DECIMAL(38, 18)) <= 0
+               OR CAST(buy_rate AS DECIMAL(38, 18)) > CAST(sell_rate AS DECIMAL(38, 18))
+               OR fixing_at != published_at
+               OR published_at != available_at
+               OR recorded_at < available_at
+            """
+        ).fetchone()[0]
+        if invalid:
+            raise DatasetSchemaError(
+                f"fx Parquet contains {invalid} row(s) outside the admitted PTAX contract."
+            )
 
     @staticmethod
     def _canonical_projections(name: str, fields: tuple[_Field, ...]) -> list[str]:
@@ -1160,6 +1259,7 @@ class ResearchCatalog:
                 "published_at": "has_published_at",
                 "effective_at": "has_effective_at",
             },
+            "fx": {},
         }[name]
         projections = []
         for field in fields:
@@ -1221,6 +1321,23 @@ class ResearchCatalog:
                     published_at, has_published_at, published_precision,
                     available_at, effective_at, has_effective_at, ingested_at,
                     raw_payload_hash, data_source_id, ingestion_run_id,
+                    raw_record_locator, normalizer_version
+                FROM {canonical}
+            """
+        elif name == "fx":
+            sql = f"""
+                SELECT
+                    schema_version, id, source, base_currency, quote_currency,
+                    base_currency || '-' || quote_currency AS pair,
+                    rate_kind, fixing_timezone,
+                    buy_rate AS buy_rate_text,
+                    TRY_CAST(buy_rate AS {_DECIMAL_TYPE}) AS buy_rate_decimal,
+                    TRY_CAST(buy_rate AS DOUBLE) AS buy_rate,
+                    sell_rate AS sell_rate_text,
+                    TRY_CAST(sell_rate AS {_DECIMAL_TYPE}) AS sell_rate_decimal,
+                    TRY_CAST(sell_rate AS DOUBLE) AS sell_rate,
+                    fixing_at, published_at, available_at, recorded_at, revision,
+                    source_record_id, raw_payload_hash, data_source_id, ingestion_run_id,
                     raw_record_locator, normalizer_version
                 FROM {canonical}
             """

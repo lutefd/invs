@@ -379,7 +379,13 @@ def test_fresh_data_root_registers_typed_empty_views(tmp_path: Path) -> None:
     catalog = ResearchCatalog(tmp_path).register()
     mapping = SecurityMapping("missing", "missing")
 
-    assert catalog.missing() == ("prices", "fundamentals", "macroeconomics", "filings")
+    assert catalog.missing() == (
+        "prices",
+        "fundamentals",
+        "macroeconomics",
+        "filings",
+        "fx",
+    )
     assert catalog.connection.execute("select count(*) from prices_canonical").fetchone() == (0,)
     assert catalog.connection.execute("select count(*) from filings_canonical").fetchone() == (0,)
     assert catalog.research_snapshot(
@@ -525,7 +531,13 @@ def test_legacy_data_parquet_is_ignored_without_a_manifest(tmp_path: Path) -> No
 
     catalog = ResearchCatalog(tmp_path).register()
 
-    assert catalog.missing() == ("prices", "fundamentals", "macroeconomics", "filings")
+    assert catalog.missing() == (
+        "prices",
+        "fundamentals",
+        "macroeconomics",
+        "filings",
+        "fx",
+    )
     assert catalog.connection.execute("SELECT count(*) FROM prices_canonical").fetchone() == (0,)
 
 
@@ -595,7 +607,7 @@ def test_canonical_v1_preserves_strings_provenance_and_adds_numeric_views(
     assert numeric[2] == pytest.approx(100.12345678901235)
     assert numeric[3] == "1000.25"
     assert str(numeric[4]) == "1000.250000000000000000"
-    assert [item.file_count for item in catalog.status()] == [1, 1, 1, 0]
+    assert [item.file_count for item in catalog.status()] == [1, 1, 1, 0, 0]
 
 
 def test_new_observed_precision_is_preserved_in_canonical_and_research_views(
@@ -1102,7 +1114,7 @@ def test_filings_register_exact_physical_contract_and_metadata(tmp_path: Path) -
         "zip=2026/member=ipe.csv/row=7",
     )
     assert canonical[12] is not None
-    assert catalog.status()[-1].row_count == 1
+    assert {item.name: item for item in catalog.status()}["filings"].row_count == 1
     assert manifest_path.exists()
 
 
