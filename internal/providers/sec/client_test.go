@@ -58,7 +58,7 @@ func TestCollectCompanyNormalizesAndDeduplicates(t *testing.T) {
 	if filing.SourceDocumentID != "0001" || filing.FormType != "10-K" || filing.DocumentURL != "https://www.sec.gov/Archives/edgar/data/1/0001/x.htm" || filing.ID == "" {
 		t.Fatalf("filing identity=%+v", filing)
 	}
-	if filing.PeriodEnd == nil || !filing.PeriodEnd.Equal(time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC)) || filing.Temporal.ObservedPrecision != "date" {
+	if filing.PeriodEnd == nil || !filing.PeriodEnd.Equal(time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC)) || !filing.Temporal.ObservedAt.IsZero() || filing.Temporal.ObservedPrecision != "unknown" {
 		t.Fatalf("filing reporting period=%+v", filing)
 	}
 	wantAccepted := time.Date(2024, 2, 2, 21, 3, 4, 0, time.UTC)
@@ -167,6 +167,21 @@ func TestSECPrimaryDocumentAllowsSafeRelativeSubpathsOnly(t *testing.T) {
 		if validPrimaryDocument(value) {
 			t.Fatalf("unsafe primary document %q accepted", value)
 		}
+	}
+}
+
+func TestSECFilingDatesDoNotOverrideAcceptanceAvailability(t *testing.T) {
+	body := []byte(`{"cik":"0000000001","name":"Example Corp","filings":{"recent":{"accessionNumber":["0001308179-26-000008"],"filingDate":["2026-01-08"],"reportDate":["2026-02-24"],"acceptanceDateTime":["2026-01-07T21:31:36.000Z"],"form":["DEF 14A"],"primaryDocument":["proxy.htm"]}}}`)
+	_, filings, received, rejected, err := parseSubmissions(body, "issuer", 1, time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil || received != 1 || rejected != 0 || len(filings) != 1 {
+		t.Fatalf("filings=%+v received=%d rejected=%d err=%v", filings, received, rejected, err)
+	}
+	filing := filings[0]
+	if filing.PeriodEnd == nil || filing.PeriodEnd.Format(time.DateOnly) != "2026-02-24" {
+		t.Fatalf("source report date was not preserved: %+v", filing)
+	}
+	if !filing.Temporal.ObservedAt.IsZero() || !filing.Temporal.AvailableAt.Equal(time.Date(2026, 1, 7, 21, 31, 36, 0, time.UTC)) {
+		t.Fatalf("source dates changed availability semantics: %+v", filing.Temporal)
 	}
 }
 

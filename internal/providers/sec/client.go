@@ -183,7 +183,7 @@ func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) 
 			continue
 		}
 		acceptedAt = acceptedAt.UTC().Truncate(time.Microsecond)
-		if acceptedAt.After(ingested) || filed.After(acceptedAt) {
+		if acceptedAt.After(ingested) {
 			rejected++
 			continue
 		}
@@ -194,16 +194,14 @@ func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) 
 			continue
 		}
 		var periodEnd *time.Time
-		observedPrecision := model.PrecisionUnknown
 		if i < len(r.ReportDate) && strings.TrimSpace(r.ReportDate[i]) != "" {
 			reportDate, reportErr := time.Parse(time.DateOnly, strings.TrimSpace(r.ReportDate[i]))
-			if reportErr != nil || reportDate.After(filed) {
+			if reportErr != nil {
 				rejected++
 				continue
 			}
 			reportDate = reportDate.UTC()
 			periodEnd = &reportDate
-			observedPrecision = model.PrecisionDate
 		}
 		publishedPrecision := model.PrecisionUnknown
 		if acceptedAt.Nanosecond() == 0 {
@@ -217,7 +215,7 @@ func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) 
 			DocumentURL: documentURL, AccessionNumber: accession, FormType: form,
 			PrimaryDocument: primary, FilingDate: filed.UTC(), PeriodEnd: periodEnd,
 			Temporal: model.Temporal{
-				ObservedPrecision: observedPrecision, PublishedAt: acceptedAt,
+				ObservedPrecision: model.PrecisionUnknown, PublishedAt: acceptedAt,
 				PublishedPrecision: publishedPrecision, AvailableAt: acceptedAt, IngestedAt: ingested,
 			},
 			RawPayloadHash: rawHash,
@@ -227,9 +225,6 @@ func parseSubmissions(b []byte, issuerID string, cik int64, ingested time.Time) 
 			},
 			// Preserve the compatibility fields for company-fact publication timing.
 			Form: form, FiledDate: filed.UTC(), AcceptedAt: &acceptedAt, IngestedAt: ingested,
-		}
-		if periodEnd != nil {
-			filing.Temporal.ObservedAt = *periodEnd
 		}
 		if err := filing.Validate(); err != nil {
 			rejected++
