@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate adjust adjust-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate action-snapshot adjust adjust-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -110,6 +110,20 @@ feature-validate: config
 	@test -n "$(FEATURE_MANIFEST)" || (echo "FEATURE_MANIFEST is required" >&2; exit 2)
 	@$(COMPOSE) run --rm --no-deps jupyter python -m research.feature_cli validate \
 		--manifest "$(FEATURE_MANIFEST)"
+
+action-snapshot: config
+	@test -n "$(DATA_SOURCE_ID)" || (echo "DATA_SOURCE_ID is required" >&2; exit 2)
+	@test -n "$(SECURITY_ID)" || (echo "SECURITY_ID is required" >&2; exit 2)
+	@test -n "$(DECISION_AT)" || (echo "DECISION_AT is required" >&2; exit 2)
+	@test -n "$(ACTIONS_FILE)" || (echo "ACTIONS_FILE is required" >&2; exit 2)
+	@test ! -e "$(ACTIONS_FILE)" || (echo "refusing to overwrite ACTIONS_FILE" >&2; exit 2)
+	@umask 077; temporary="$(ACTIONS_FILE).tmp"; \
+		$(COMPOSE) run --rm --no-deps --entrypoint invs-action-snapshot collector \
+		$(if $(ACTION_DATABASE_URL),--database-url "$(ACTION_DATABASE_URL)",) \
+		--data-source-id "$(DATA_SOURCE_ID)" \
+		--security-id "$(SECURITY_ID)" \
+		--decision-at "$(DECISION_AT)" > "$$temporary" && \
+		mv "$$temporary" "$(ACTIONS_FILE)" || { status=$$?; rm -f "$$temporary"; exit $$status; }
 
 adjust: config
 	@test -n "$(RAW_PRICE_MANIFEST)" || (echo "RAW_PRICE_MANIFEST is required" >&2; exit 2)
