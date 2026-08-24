@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate adjust adjust-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -106,6 +106,21 @@ feature-validate: config
 	@test -n "$(FEATURE_MANIFEST)" || (echo "FEATURE_MANIFEST is required" >&2; exit 2)
 	@$(COMPOSE) run --rm --no-deps jupyter python -m research.feature_cli validate \
 		--manifest "$(FEATURE_MANIFEST)"
+
+adjust: config
+	@test -n "$(RAW_PRICE_MANIFEST)" || (echo "RAW_PRICE_MANIFEST is required" >&2; exit 2)
+	@test -n "$(ACTIONS_FILE)" || (echo "ACTIONS_FILE is required" >&2; exit 2)
+	@test -n "$(DECISION_AT)" || (echo "DECISION_AT is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps jupyter python -m research.adjustment_cli publish \
+		--raw-manifest "$(RAW_PRICE_MANIFEST)" \
+		--actions "$(ACTIONS_FILE)" \
+		--decision-at "$(DECISION_AT)" \
+		--adjustments-root /data/adjusted/prices
+
+adjust-validate: config
+	@test -n "$(ADJUSTMENT_MANIFEST)" || (echo "ADJUSTMENT_MANIFEST is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps jupyter python -m research.adjustment_cli validate \
+		--manifest "$(ADJUSTMENT_MANIFEST)"
 
 test: config
 	@go test ./...

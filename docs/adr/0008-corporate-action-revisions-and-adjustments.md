@@ -116,8 +116,10 @@ price_factor = (P - D) / P
 
 The policy rejects `P <= 0`, `D >= P`, absent prior closes, and currency mismatch.
 Cash dividends do not change volume. Actions are applied in descending observed-date
-order with arbitrary-precision decimal arithmetic; canonical output decimals never
-pass through binary floating point.
+order with exact rational arithmetic; canonical output decimals never pass through
+binary floating point. Terminating base-10 results are emitted exactly.
+Non-terminating rational results are rounded to 50 significant decimal digits with
+round-half-even, making repeating dividend factors portable and byte-reproducible.
 
 An action contributes only when both `available_at <= decision_at` and its effect is
 no later than the decision. A future or not-yet-knowable action cannot change bars in
@@ -134,7 +136,8 @@ schema_version, artifact_id, policy_version, security_id, decision_at,
 raw_price_manifest_path, raw_price_manifest_sha256,
 raw_price_part_sha256, raw_price_basis,
 corporate_action_snapshot_sha256,
-selected action ids, revisions, record hashes, and availability times,
+selected action ids, revisions, canonical record hashes, observation/effect times,
+and availability times,
 output part path, output part sha256, row count, and created_at
 ```
 
