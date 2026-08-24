@@ -117,6 +117,57 @@ func TestValidateB3ProviderRequiresExplicitUniverseMapping(t *testing.T) {
 	}
 }
 
+func TestValidateIndexMembershipProvidersRequireAdmittedNoticesAndScopedMappings(t *testing.T) {
+	nasdaq := validConfig()
+	nasdaq.Providers.Prices.Enabled = false
+	nasdaq.Providers.FRED.Enabled = false
+	nasdaq.Providers.NasdaqMembership = IndexMembershipProvider{
+		Enabled: true, UniverseID: "nasdaq_100", Tickers: []string{"AAPL"},
+		Notices: []string{"https://www.globenewswire.com/news-release/2025/12/13/example.html"},
+	}
+	if err := nasdaq.Validate(); err != nil {
+		t.Fatalf("valid Nasdaq membership provider: %v", err)
+	}
+
+	b3 := validConfig()
+	b3.Providers.Prices.Enabled = false
+	b3.Providers.FRED.Enabled = false
+	b3.Universe[0].CountryCode = "BR"
+	b3.Universe[0].Ticker = "PETZ3"
+	b3.Universe[0].Exchange = "B3"
+	b3.Universe[0].MIC = "BVMF"
+	b3.Universe[0].Currency = "BRL"
+	b3.Providers.B3Membership = IndexMembershipProvider{
+		Enabled: true, UniverseID: "ibovespa", Tickers: []string{"PETZ3"},
+		Notices: []string{"https://www.b3.com.br/pt_br/noticias/example.htm"},
+	}
+	if err := b3.Validate(); err != nil {
+		t.Fatalf("valid B3 membership provider: %v", err)
+	}
+
+	cases := map[string]func(*Config){
+		"untrusted notice": func(candidate *Config) {
+			candidate.Providers.NasdaqMembership.Notices[0] = "https://example.com/release"
+		},
+		"unknown ticker":   func(candidate *Config) { candidate.Providers.NasdaqMembership.Tickers = []string{"INSM"} },
+		"invalid universe": func(candidate *Config) { candidate.Providers.NasdaqMembership.UniverseID = "Nasdaq 100" },
+		"duplicate notice": func(candidate *Config) {
+			candidate.Providers.NasdaqMembership.Notices = append(candidate.Providers.NasdaqMembership.Notices, candidate.Providers.NasdaqMembership.Notices[0])
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			candidate := nasdaq
+			candidate.Providers.NasdaqMembership.Tickers = append([]string(nil), nasdaq.Providers.NasdaqMembership.Tickers...)
+			candidate.Providers.NasdaqMembership.Notices = append([]string(nil), nasdaq.Providers.NasdaqMembership.Notices...)
+			mutate(&candidate)
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid membership provider accepted")
+			}
+		})
+	}
+}
+
 func TestValidateExchangeCalendarProviders(t *testing.T) {
 	c := validConfig()
 	c.Providers.NYSE = CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-01-01", CoverageEnd: "2026-12-31"}

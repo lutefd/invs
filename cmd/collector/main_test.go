@@ -447,8 +447,21 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	if calendarInputs.Source != "nyse" || calendarInputs.Provider.Kind != "market_calendar" || calendarInputs.Provider.CalendarYear != 2026 || calendarInputs.Provider.CalendarMIC != "XNYS" || calendarInputs.Provider.CalendarCoverageStart != "2026-01-01" || calendarInputs.Provider.Vintage != "current_reference_receipt_time" {
 		t.Fatalf("calendar run inputs = %+v", calendarInputs)
 	}
+	membershipInputs := membershipRunInputs("nasdaq", config.IndexMembershipProvider{
+		UniverseID: "nasdaq_100", Tickers: []string{"INSM"},
+		Notices: []string{"https://www.globenewswire.com/news-release/2026/remove", "https://www.globenewswire.com/news-release/2025/add"},
+	}, []config.Security{{SecurityID: "security-insm", Ticker: "INSM", MIC: "XNAS"}})
+	if membershipInputs.Source != "nasdaq" || membershipInputs.Provider.Kind != "universe_membership" || membershipInputs.Provider.MembershipUniverseID != "nasdaq_100" || membershipInputs.Provider.Vintage != "historical_source_publication" {
+		t.Fatalf("membership run inputs = %+v", membershipInputs)
+	}
+	if got := membershipInputs.Provider.MembershipNotices; !reflect.DeepEqual(got, []string{"https://www.globenewswire.com/news-release/2025/add", "https://www.globenewswire.com/news-release/2026/remove"}) {
+		t.Fatalf("membership notices were not sorted: %+v", got)
+	}
+	if got := membershipInputs.Provider.MembershipSecurities[0]; got.SecurityID != "security-insm" || got.Ticker != "INSM" || got.MIC != "XNAS" {
+		t.Fatalf("membership security input = %+v", got)
+	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs} {
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs, membershipInputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -456,6 +469,34 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		if got.RunInputs.CanonicalJSONSHA256 == "" {
 			t.Fatalf("%s run input hash is empty", inputs.Source)
 		}
+	}
+}
+
+func TestMembershipHistoricalTruthBatchPublishesSourceChronology(t *testing.T) {
+	addAvailable := time.Date(2025, 12, 13, 1, 0, 0, 0, time.UTC)
+	removeAvailable := time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC)
+	evidence := []membershipEvidenceEvent{
+		{Ticker: "INSM", Member: false, EffectiveAt: time.Date(2026, 6, 22, 13, 30, 0, 0, time.UTC), AnnouncedAt: removeAvailable, AvailableAt: removeAvailable, RecordedAt: removeAvailable, RawRecordLocator: "nasdaq-100/removal/ticker=INSM", RawPayloadHash: strings.Repeat("b", 64)},
+		{Ticker: "INSM", Member: true, EffectiveAt: time.Date(2025, 12, 22, 14, 30, 0, 0, time.UTC), AnnouncedAt: addAvailable, AvailableAt: addAvailable, RecordedAt: addAvailable, RawRecordLocator: "nasdaq-100/addition/ticker=INSM", RawPayloadHash: strings.Repeat("a", 64)},
+	}
+	provider := config.IndexMembershipProvider{UniverseID: "nasdaq_100", Tickers: []string{"INSM"}}
+	universe := []config.Security{{SecurityID: testSecurityID, Ticker: "INSM"}}
+	batch, ignored, err := membershipHistoricalTruthBatch(testRun(), "nasdaq", provider, universe, evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ignored != 0 || len(batch.Memberships) != 2 {
+		t.Fatalf("ignored/batch = %d/%+v", ignored, batch)
+	}
+	if !batch.Memberships[0].Member || batch.Memberships[0].Revision != 0 || batch.Memberships[1].Member || batch.Memberships[1].Revision != 1 {
+		t.Fatalf("membership revisions = %+v", batch.Memberships)
+	}
+	if !batch.Memberships[0].AvailableAt.Equal(addAvailable) || !batch.Memberships[1].AvailableAt.Equal(removeAvailable) {
+		t.Fatalf("membership availability = %+v", batch.Memberships)
+	}
+	bad := append([]membershipEvidenceEvent(nil), evidence[:1]...)
+	if _, _, err := membershipHistoricalTruthBatch(testRun(), "nasdaq", provider, universe, bad); err == nil || !strings.Contains(err.Error(), "begins with a removal") {
+		t.Fatalf("removal-only chronology accepted: %v", err)
 	}
 }
 
@@ -770,6 +811,56 @@ func TestCollectorNYSECalendarPublishesHolidayAndEarlyClose(t *testing.T) {
 	}
 	if published.Sessions[0].SessionStatus != "closed" || published.Sessions[1].SessionStatus != "open" || !published.Sessions[1].IsEarlyClose || published.Sessions[1].CloseAt == nil || published.Sessions[1].CloseAt.Format(time.RFC3339) != "2026-11-27T18:00:00Z" {
 		t.Fatalf("NYSE sessions = %+v", published.Sessions)
+	}
+}
+
+func TestCollectorNasdaqMembershipPublishesAddRemoveChronology(t *testing.T) {
+	added := []byte(`<html><body><p>December 12, 2025 20:00 ET | Source: Nasdaq, Inc.</p><p>NEW YORK, Dec. 12, 2025 (GLOBE NEWSWIRE) -- effective prior to market open on Monday, December 22, 2025.</p><p>The following two companies will be added to the Index: Insmed Incorporated (Nasdaq: INSM), Western Digital Corp. (Nasdaq: WDC).</p><p>As a result of the reconstitution, the following one companies will be removed from the Index: Biogen Inc. (Nasdaq: BIIB).</p><p>For information about the companies.</p></body></html>`)
+	removed := []byte(`<html><body><p>June 11, 2026 20:00 ET | Source: Nasdaq, Inc.</p><p>NEW YORK, June 11, 2026 (GLOBE NEWSWIRE) -- effective prior to market open on Monday, June 22, 2026.</p><p>The following one companies will be added to the Index: Astera Labs, Inc. (Nasdaq: ALAB).</p><p>The following one companies will be removed from the Index: Insmed Incorporated (Nasdaq: INSM).</p><p>For additional information.</p></body></html>`)
+	addURL := "https://www.globenewswire.com/news-release/2025/12/13/add.html"
+	removeURL := "https://www.globenewswire.com/news-release/2026/06/12/remove.html"
+	raw := &orderingRawStore{}
+	var published metadata.HistoricalTruthBatch
+	var started metadata.RunInputs
+	app := &app{
+		cfg: config.Config{
+			Providers: config.Providers{NasdaqMembership: config.IndexMembershipProvider{
+				Enabled: true, UniverseID: "nasdaq_100", Tickers: []string{"INSM"}, Notices: []string{addURL, removeURL},
+			}},
+			Universe: []config.Security{{SecurityID: testSecurityID, Ticker: "INSM", MIC: "XNAS"}},
+		},
+		raw: raw,
+		http: collectorHTTPFake{responses: map[string][]byte{
+			"/2025/12/13/": added,
+			"/2026/06/12/": removed,
+		}},
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: testRun(), onStartInputs: func(inputs metadata.RunInputs) {
+			started = inputs
+		}, onHistorical: func(batch metadata.HistoricalTruthBatch) {
+			published = batch
+		}},
+		batchKey: "nasdaq-membership-test",
+		now:      func() time.Time { return time.Date(2026, 8, 24, 1, 2, 3, 123456789, time.UTC) },
+	}
+	if err := app.run(context.Background(), "nasdaq-membership"); err != nil {
+		t.Fatal(err)
+	}
+	if started.Source != "nasdaq" || started.Provider.MembershipUniverseID != "nasdaq_100" {
+		t.Fatalf("run inputs = %+v", started)
+	}
+	if len(raw.events) != 2 || len(published.Memberships) != 2 {
+		t.Fatalf("raw/published = %v/%+v", raw.events, published)
+	}
+	if !published.Memberships[0].Member || published.Memberships[1].Member || published.Memberships[0].Revision != 0 || published.Memberships[1].Revision != 1 {
+		t.Fatalf("published chronology = %+v", published.Memberships)
+	}
+	if published.Memberships[0].SecurityID != testSecurityID || published.Memberships[0].RawPayloadHash != hashPayload(added) || published.Memberships[1].RawPayloadHash != hashPayload(removed) {
+		t.Fatalf("membership lineage = %+v", published.Memberships)
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 2 || manifest.Entries[0].Attributes["universe_id"] != "nasdaq_100" {
+		t.Fatalf("membership raw manifest = %+v", manifest.Entries)
 	}
 }
 

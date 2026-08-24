@@ -199,12 +199,25 @@ func TestCatalogIncludesB3SecurityMasterSource(t *testing.T) {
 		if candidate.kind != "security_master" {
 			t.Fatalf("B3 source kind = %q, want security_master", candidate.kind)
 		}
-		if candidate.baseURL != "https://arquivos.b3.com.br/tabelas/" {
+		if candidate.baseURL != "https://www.b3.com.br/" {
 			t.Fatalf("B3 base URL = %q", candidate.baseURL)
 		}
 		return
 	}
 	t.Fatal("B3 source is missing from catalog")
+}
+
+func TestCatalogIncludesNasdaqMembershipSource(t *testing.T) {
+	for _, candidate := range sources {
+		if candidate.code != "nasdaq" {
+			continue
+		}
+		if candidate.kind != "universe_membership" || candidate.baseURL != "https://www.globenewswire.com/" {
+			t.Fatalf("Nasdaq source = %+v", candidate)
+		}
+		return
+	}
+	t.Fatal("Nasdaq membership source is missing from catalog")
 }
 
 func TestCatalogIncludesNYSECalendarSource(t *testing.T) {

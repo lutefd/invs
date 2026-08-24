@@ -32,6 +32,7 @@ import (
 	"github.com/luisdourado/invs/internal/providers/bcb"
 	"github.com/luisdourado/invs/internal/providers/cvm"
 	"github.com/luisdourado/invs/internal/providers/fred"
+	"github.com/luisdourado/invs/internal/providers/nasdaq"
 	"github.com/luisdourado/invs/internal/providers/nyse"
 	"github.com/luisdourado/invs/internal/providers/sec"
 	"github.com/luisdourado/invs/internal/providers/yahoo"
@@ -118,6 +119,19 @@ type calendarEvidenceResource struct {
 	Metadata      map[string]string `json:"metadata"`
 }
 
+type membershipEvidenceEvent struct {
+	Ticker           string
+	Member           bool
+	EffectiveAt      time.Time
+	AnnouncedAt      time.Time
+	AvailableAt      time.Time
+	RawRecordLocator string
+	RawPayloadHash   string
+	RecordedAt       time.Time
+}
+
+type membershipNoticeCollector func(context.Context, string) ([]providers.RawResource, []membershipEvidenceEvent, error)
+
 func canonicalTime(t time.Time) time.Time {
 	return t.UTC().Truncate(time.Microsecond)
 }
@@ -131,7 +145,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, b3-calendar, nyse, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, b3-calendar, b3-membership, nasdaq-membership, nyse, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -259,7 +273,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-calendar": true, "nyse": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-calendar": true, "b3-membership": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -286,6 +300,12 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "nyse" && !a.cfg.Providers.NYSE.Enabled {
 		return errors.New("NYSE calendar provider is disabled")
+	}
+	if source == "b3-membership" && !a.cfg.Providers.B3Membership.Enabled {
+		return errors.New("B3 membership provider is disabled")
+	}
+	if source == "nasdaq-membership" && !a.cfg.Providers.NasdaqMembership.Enabled {
+		return errors.New("Nasdaq membership provider is disabled")
 	}
 	if source == "cvm" && !a.cfg.Providers.CVM.Enabled {
 		return errors.New("CVM provider is disabled")
@@ -328,6 +348,16 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "nyse") && a.cfg.Providers.NYSE.Enabled {
 		if err := a.collectNYSECalendar(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "b3-membership") && a.cfg.Providers.B3Membership.Enabled {
+		if err := a.collectB3Membership(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "nasdaq-membership") && a.cfg.Providers.NasdaqMembership.Enabled {
+		if err := a.collectNasdaqMembership(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -1092,6 +1122,188 @@ func (a *app) publishCalendar(ctx context.Context, batch metadata.HistoricalTrut
 	return nil
 }
 
+func (a *app) collectNasdaqMembership(ctx context.Context) error {
+	client := nasdaq.NewClient(a.http)
+	collect := func(ctx context.Context, noticeURL string) ([]providers.RawResource, []membershipEvidenceEvent, error) {
+		result, err := client.CollectMembership(ctx, nasdaq.MembershipRequest{URL: noticeURL})
+		events := make([]membershipEvidenceEvent, 0, len(result.Events))
+		for _, event := range result.Events {
+			events = append(events, membershipEvidenceEvent{
+				Ticker: event.Ticker, Member: event.Member, EffectiveAt: event.EffectiveAt,
+				AnnouncedAt: event.AnnouncedAt, AvailableAt: event.AvailableAt,
+				RawRecordLocator: event.RawRecordLocator,
+			})
+		}
+		return result.Resources, events, err
+	}
+	return a.collectIndexMembership(ctx, "nasdaq", "nasdaq-membership", a.cfg.Providers.NasdaqMembership, collect)
+}
+
+func (a *app) collectB3Membership(ctx context.Context) error {
+	client := b3.NewClient(a.http)
+	collect := func(ctx context.Context, noticeURL string) ([]providers.RawResource, []membershipEvidenceEvent, error) {
+		result, err := client.CollectIndexMembership(ctx, b3.IndexMembershipRequest{URL: noticeURL})
+		events := make([]membershipEvidenceEvent, 0, len(result.Events))
+		for _, event := range result.Events {
+			events = append(events, membershipEvidenceEvent{
+				Ticker: event.Ticker, Member: event.Member, EffectiveAt: event.EffectiveAt,
+				AnnouncedAt: event.AnnouncedAt, AvailableAt: event.AvailableAt,
+				RawRecordLocator: event.RawRecordLocator,
+			})
+		}
+		return result.Resources, events, err
+	}
+	return a.collectIndexMembership(ctx, "b3", "b3-membership", a.cfg.Providers.B3Membership, collect)
+}
+
+func (a *app) collectIndexMembership(ctx context.Context, source, runKey string, provider config.IndexMembershipProvider, collect membershipNoticeCollector) error {
+	m := metrics{
+		Source: source, RunKey: runKey, StartedAt: a.nowUTC(),
+		Cursor: map[string]any{
+			"provider": source, "kind": "universe_membership", "universe_id": provider.UniverseID,
+			"notice_count": len(provider.Notices), "historical_fitness": "source_publication_time",
+		},
+	}
+	run, skip, err := a.start(ctx, &m, membershipRunInputs(source, provider, a.cfg.Universe))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+	var collectErrs []error
+	var evidence []membershipEvidenceEvent
+	for index, noticeURL := range provider.Notices {
+		resources, events, collectErr := collect(ctx, noticeURL)
+		if len(resources) != 1 {
+			collectErrs = append(collectErrs, fmt.Errorf("%s membership notice %d returned %d resources, want 1", source, index, len(resources)))
+		} else {
+			resource := resources[0]
+			fetchedAt := resourceFetchedAt(resource, m.StartedAt)
+			key := rawKey(source, "membership", fmt.Sprintf("%s-%03d", provider.UniverseID, index), resource.Bytes, fetchedAt, "html")
+			attributes := map[string]string{
+				"kind": resource.Kind, "universe_id": provider.UniverseID,
+				"notice_index": strconv.Itoa(index), "url": resource.URL,
+				"parser_version": resource.ParserVersion,
+			}
+			logicalKey := fmt.Sprintf("%s/index-membership/universe=%s/notice=%03d", source, provider.UniverseID, index)
+			storedHash, storeErr := a.storeRaw(ctx, &m, key, resource.Bytes, storage.RawMetadata{
+				Source: source, ContentType: resource.ContentType, FetchedAt: fetchedAt, Attributes: attributes,
+			}, logicalKey, source+"/index-membership", resource.SHA256)
+			if storeErr != nil {
+				collectErrs = append(collectErrs, fmt.Errorf("%s membership raw notice %d: %w", source, index, storeErr))
+			} else {
+				for eventIndex := range events {
+					events[eventIndex].RawPayloadHash = storedHash
+					events[eventIndex].RecordedAt = events[eventIndex].AvailableAt
+				}
+				evidence = append(evidence, events...)
+			}
+		}
+		if collectErr != nil {
+			collectErrs = append(collectErrs, collectErr)
+		}
+		m.Received += len(events)
+	}
+	if collectErr := errors.Join(collectErrs...); collectErr != nil {
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	batch, ignored, err := membershipHistoricalTruthBatch(run, source, provider, a.cfg.Universe, evidence)
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	publisher, ok := a.metadata.(historicalTruthPublisher)
+	if !ok {
+		err = errors.New("canonical membership publication requires a historical-truth metadata repository")
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	if err = publisher.PublishHistoricalTruth(ctx, batch); err != nil {
+		err = fmt.Errorf("membership historical truth publication: %w", err)
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	m.OutputRows = len(batch.Memberships)
+	m.Cursor["status"] = "canonical_published"
+	m.Cursor["membership_rows"] = len(batch.Memberships)
+	m.Cursor["unconfigured_events_ignored"] = ignored
+	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+func membershipHistoricalTruthBatch(run metadata.Run, source string, provider config.IndexMembershipProvider, universe []config.Security, evidence []membershipEvidenceEvent) (metadata.HistoricalTruthBatch, int, error) {
+	allowed := make(map[string]struct{}, len(provider.Tickers))
+	for _, ticker := range provider.Tickers {
+		allowed[ticker] = struct{}{}
+	}
+	securityByTicker := make(map[string]config.Security, len(provider.Tickers))
+	for _, security := range universe {
+		if _, requested := allowed[security.Ticker]; !requested {
+			continue
+		}
+		if _, duplicate := securityByTicker[security.Ticker]; duplicate {
+			return metadata.HistoricalTruthBatch{}, 0, fmt.Errorf("%s membership ticker %s has ambiguous configured security mappings", source, security.Ticker)
+		}
+		securityByTicker[security.Ticker] = security
+	}
+	byTicker := make(map[string][]membershipEvidenceEvent, len(provider.Tickers))
+	ignored := 0
+	for _, event := range evidence {
+		if _, requested := allowed[event.Ticker]; !requested {
+			ignored++
+			continue
+		}
+		byTicker[event.Ticker] = append(byTicker[event.Ticker], event)
+	}
+	batch := metadata.HistoricalTruthBatch{}
+	for _, ticker := range provider.Tickers {
+		security, exists := securityByTicker[ticker]
+		if !exists {
+			return metadata.HistoricalTruthBatch{}, ignored, fmt.Errorf("%s membership ticker %s has no configured security mapping", source, ticker)
+		}
+		events := byTicker[ticker]
+		if len(events) == 0 {
+			return metadata.HistoricalTruthBatch{}, ignored, fmt.Errorf("%s membership ticker %s has no source event", source, ticker)
+		}
+		sort.Slice(events, func(i, j int) bool {
+			if !events[i].EffectiveAt.Equal(events[j].EffectiveAt) {
+				return events[i].EffectiveAt.Before(events[j].EffectiveAt)
+			}
+			return events[i].AvailableAt.Before(events[j].AvailableAt)
+		})
+		if !events[0].Member {
+			return metadata.HistoricalTruthBatch{}, ignored, fmt.Errorf("%s membership ticker %s begins with a removal", source, ticker)
+		}
+		for revision, event := range events {
+			if revision > 0 {
+				previous := events[revision-1]
+				if previous.Member == event.Member {
+					return metadata.HistoricalTruthBatch{}, ignored, fmt.Errorf("%s membership ticker %s repeats member=%t without a transition", source, ticker, event.Member)
+				}
+				if !event.EffectiveAt.After(previous.EffectiveAt) || !event.AvailableAt.After(previous.AvailableAt) {
+					return metadata.HistoricalTruthBatch{}, ignored, fmt.Errorf("%s membership ticker %s events are not strictly chronological", source, ticker)
+				}
+			}
+			if event.RawPayloadHash == "" || event.RawRecordLocator == "" || event.AvailableAt.IsZero() || event.EffectiveAt.IsZero() {
+				return metadata.HistoricalTruthBatch{}, ignored, fmt.Errorf("%s membership ticker %s has incomplete source evidence", source, ticker)
+			}
+			sourceReference := source + "/" + event.RawRecordLocator
+			id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
+				"membership", run.DataSourceID, provider.UniverseID, security.SecurityID,
+				event.EffectiveAt.UTC().Format(time.RFC3339Nano), strconv.FormatBool(event.Member),
+			}, "/"))).String()
+			announcedAt := canonicalTime(event.AnnouncedAt)
+			batch.Memberships = append(batch.Memberships, metadata.UniverseMembership{
+				SchemaVersion: metadata.HistoricalSchemaVersion, ID: id,
+				UniverseID: provider.UniverseID, SecurityID: security.SecurityID,
+				Member: event.Member, ValidFrom: canonicalTime(event.EffectiveAt),
+				AnnouncedAt: &announcedAt, AvailableAt: canonicalTime(event.AvailableAt),
+				SourceReference: sourceReference, RecordedAt: canonicalTime(event.RecordedAt),
+				DataSourceID: run.DataSourceID, RawPayloadHash: event.RawPayloadHash,
+				Revision: revision,
+			})
+		}
+	}
+	return batch, ignored, nil
+}
+
 func (a *app) storeCalendarResources(ctx context.Context, m *metrics, source string, year int, resources []providers.RawResource) error {
 	for _, resource := range resources {
 		attributes := make(map[string]string, len(resource.ParserMetadata)+3)
@@ -1723,6 +1935,33 @@ func calendarRunInputs(source, mic string, provider config.CalendarProvider) met
 			CalendarMIC: mic, CalendarCoverageStart: strings.TrimSpace(provider.CoverageStart),
 			CalendarCoverageEnd: strings.TrimSpace(provider.CoverageEnd), Format: "html",
 			Vintage: "current_reference_receipt_time",
+		},
+	}
+}
+
+func membershipRunInputs(source string, provider config.IndexMembershipProvider, universe []config.Security) metadata.RunInputs {
+	tickers := append([]string(nil), provider.Tickers...)
+	notices := append([]string(nil), provider.Notices...)
+	sort.Strings(tickers)
+	sort.Strings(notices)
+	byTicker := make(map[string]config.Security, len(universe))
+	for _, security := range universe {
+		byTicker[security.Ticker] = security
+	}
+	configured := make([]metadata.MembershipSecurityInput, 0, len(tickers))
+	for _, ticker := range tickers {
+		security := byTicker[ticker]
+		configured = append(configured, metadata.MembershipSecurityInput{
+			SecurityID: security.SecurityID, Ticker: ticker, MIC: security.MIC,
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        source,
+		Provider: metadata.ProviderInputs{
+			Name: source, Kind: "universe_membership", ConfiguredUniverseCount: len(configured),
+			MembershipUniverseID: provider.UniverseID, MembershipNotices: notices,
+			MembershipSecurities: configured, Format: "html", Vintage: "historical_source_publication",
 		},
 	}
 }

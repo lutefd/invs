@@ -53,6 +53,16 @@ providers:
     year: 2026
     coverage_start: 2026-01-01
     coverage_end: 2026-12-31
+  nasdaq_membership:
+    enabled: false
+    universe_id: nasdaq_100
+    tickers: []
+    notices: []
+  b3_membership:
+    enabled: false
+    universe_id: ibovespa
+    tickers: []
+    notices: []
   cvm:
     enabled: false
     cad: true

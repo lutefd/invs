@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -60,14 +61,16 @@ func (h *HTTP) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type Providers struct {
-	SEC    EnabledProvider  `yaml:"sec"`
-	Prices PriceProvider    `yaml:"prices"`
-	FRED   FREDProvider     `yaml:"fred"`
-	ALFRED ALFREDProvider   `yaml:"alfred"`
-	BCB    BCBProvider      `yaml:"bcb"`
-	B3     B3Provider       `yaml:"b3"`
-	NYSE   CalendarProvider `yaml:"nyse"`
-	CVM    CVMProvider      `yaml:"cvm"`
+	SEC              EnabledProvider         `yaml:"sec"`
+	Prices           PriceProvider           `yaml:"prices"`
+	FRED             FREDProvider            `yaml:"fred"`
+	ALFRED           ALFREDProvider          `yaml:"alfred"`
+	BCB              BCBProvider             `yaml:"bcb"`
+	B3               B3Provider              `yaml:"b3"`
+	B3Membership     IndexMembershipProvider `yaml:"b3_membership"`
+	NasdaqMembership IndexMembershipProvider `yaml:"nasdaq_membership"`
+	NYSE             CalendarProvider        `yaml:"nyse"`
+	CVM              CVMProvider             `yaml:"cvm"`
 }
 
 type EnabledProvider struct {
@@ -120,6 +123,12 @@ type CalendarProvider struct {
 	Year          int    `yaml:"year"`
 	CoverageStart string `yaml:"coverage_start"`
 	CoverageEnd   string `yaml:"coverage_end"`
+}
+type IndexMembershipProvider struct {
+	Enabled    bool     `yaml:"enabled"`
+	UniverseID string   `yaml:"universe_id"`
+	Tickers    []string `yaml:"tickers"`
+	Notices    []string `yaml:"notices"`
 }
 type CVMProvider struct {
 	Enabled bool         `yaml:"enabled"`
@@ -377,6 +386,12 @@ func (c Config) Validate() error {
 	if c.Providers.NYSE.Enabled {
 		errs = append(errs, validateCalendarProvider("providers.nyse", c.Providers.NYSE)...)
 	}
+	if c.Providers.NasdaqMembership.Enabled {
+		errs = append(errs, validateIndexMembershipProvider("providers.nasdaq_membership", c.Providers.NasdaqMembership, c.Universe, "US", "XNAS", "USD", "www.globenewswire.com", "/news-release/")...)
+	}
+	if c.Providers.B3Membership.Enabled {
+		errs = append(errs, validateIndexMembershipProvider("providers.b3_membership", c.Providers.B3Membership, c.Universe, "BR", "BVMF", "BRL", "www.b3.com.br", "/pt_br/noticias/")...)
+	}
 	if c.Providers.CVM.Enabled {
 		if !c.Providers.CVM.CAD && len(c.Providers.CVM.IPE.Years) == 0 {
 			errs = append(errs, errors.New("enabled CVM provider requires cad or at least one IPE year"))
@@ -393,7 +408,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -454,6 +469,55 @@ func (c Config) Validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func validateIndexMembershipProvider(prefix string, provider IndexMembershipProvider, universe []Security, country, mic, currency, host, pathPrefix string) []error {
+	var errs []error
+	if !validType(provider.UniverseID) {
+		errs = append(errs, fmt.Errorf("%s.universe_id must be lowercase snake_case", prefix))
+	}
+	if len(provider.Tickers) == 0 {
+		errs = append(errs, fmt.Errorf("%s requires at least one ticker", prefix))
+	}
+	seenTickers := make(map[string]struct{}, len(provider.Tickers))
+	for index, value := range provider.Tickers {
+		itemPrefix := fmt.Sprintf("%s.tickers[%d]", prefix, index)
+		if value != strings.TrimSpace(value) || value != strings.ToUpper(value) || !validB3Ticker(value) {
+			errs = append(errs, fmt.Errorf("%s must be an uppercase canonical ticker", itemPrefix))
+			continue
+		}
+		if _, duplicate := seenTickers[value]; duplicate {
+			errs = append(errs, fmt.Errorf("%s duplicates %q", itemPrefix, value))
+			continue
+		}
+		seenTickers[value] = struct{}{}
+		matches := 0
+		for _, security := range universe {
+			if security.Ticker == value && security.CountryCode == country && security.MIC == mic && security.Currency == currency {
+				matches++
+			}
+		}
+		if matches != 1 {
+			errs = append(errs, fmt.Errorf("%s must match exactly one %s/%s/%s universe security", itemPrefix, country, mic, currency))
+		}
+	}
+	if len(provider.Notices) == 0 {
+		errs = append(errs, fmt.Errorf("%s requires at least one notice URL", prefix))
+	}
+	seenNotices := make(map[string]struct{}, len(provider.Notices))
+	for index, value := range provider.Notices {
+		itemPrefix := fmt.Sprintf("%s.notices[%d]", prefix, index)
+		parsed, err := url.Parse(value)
+		if err != nil || parsed.Scheme != "https" || parsed.Host != host || !strings.HasPrefix(parsed.Path, pathPrefix) || parsed.RawQuery != "" || parsed.Fragment != "" {
+			errs = append(errs, fmt.Errorf("%s must use the admitted HTTPS %s%s source boundary", itemPrefix, host, pathPrefix))
+			continue
+		}
+		if _, duplicate := seenNotices[value]; duplicate {
+			errs = append(errs, fmt.Errorf("%s duplicates %q", itemPrefix, value))
+		}
+		seenNotices[value] = struct{}{}
+	}
+	return errs
 }
 
 func validateCalendarProvider(prefix string, provider CalendarProvider) []error {
