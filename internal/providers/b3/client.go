@@ -41,6 +41,7 @@ type Client struct {
 	http                   Getter
 	apiBaseURL             string
 	listedCompaniesBaseURL string
+	marketCalendarBaseURL  string
 	now                    func() time.Time
 }
 
