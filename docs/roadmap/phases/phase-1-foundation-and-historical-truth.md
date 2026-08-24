@@ -46,8 +46,10 @@ gates pass.
   (`31378be` and the bounded ALFRED acceptance report).
 - [x] Historical identifiers and universe membership preserve removed/delisted names
   (`6331d64`, `030b506`, `54c0369`, `19d8115`, and the bounded identity report).
-- [ ] US and Brazil session/calendar behavior is explicit.
-- [ ] Split/dividend adjustment and FX calculations reproduce from pinned inputs.
+- [x] US and Brazil session/calendar behavior is explicit for the admitted bounded
+  XNAS/BVMF artifact versions and decision clocks.
+- [x] Split/dividend adjustment and FX calculations reproduce from pinned inputs
+  (corporate-action and PTAX acceptance reports).
 - [ ] Every dataset reachable by later backtests has a historical-fitness label.
 - [ ] Bounded US and Brazil point-in-time bias audits pass.
 

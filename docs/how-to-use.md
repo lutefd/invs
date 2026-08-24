@@ -291,6 +291,8 @@ manifest-backed Parquet under
 buy and sell rates, the exact source bulletin timestamp, and the later local receipt.
 A changed rate at the same source key blocks publication because the source does not
 expose enough correction chronology to infer a revision safely.
+The retained live proof, exact hashes, decision boundary, and pinned calculations are
+in the [PTAX FX acceptance report](acceptance/2026-08-24-ptax-fx.md).
 
 ### B3 public instrument identity/listing snapshot
 

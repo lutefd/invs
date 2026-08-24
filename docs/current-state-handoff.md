@@ -76,7 +76,10 @@ Nasdaq/B3 artifacts, publication/correction chronology, decision-time selection,
 and feature-artifact clock pins. The corporate-action follow-up now publishes one
 exact SEC split, retains a B3 sample revision family only from installation receipt,
 blocks its unsupported latest state, and emits immutable adjustment artifacts from
-resolver-backed snapshots. The next v0.2 unit is FX.
+resolver-backed snapshots. The PTAX follow-up now collects exact BCB closing
+bulletins, publishes canonical USD/BRL history, selects an explicit fixing date at
+the source timestamp, and emits sell-side direct/inverse conversions with complete
+input pins. The next v0.2 unit is canonical SEC filing metadata.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -151,6 +154,9 @@ to close the v0.2 calendar gate. See the
 - Latest supported action-snapshot boundary: `9c8ff81` (`feat(research): export as-of action snapshots`)
 - Latest canonical action-hash boundary: `4751235` (`fix(research): canonicalize action record hashes`)
 - Corporate-action acceptance: [bounded SEC publication, B3 installation replay, and immutable adjustments](acceptance/2026-08-24-corporate-action-publication.md)
+- Latest PTAX provider/publication boundaries: `486d12d`, `8759780`, and `8b97a59`
+- Latest pinned FX research boundary: `cbc0563` (`feat(research): publish pinned PTAX conversions`)
+- PTAX acceptance: [bounded official USD/BRL bulletins and pinned conversions](acceptance/2026-08-24-ptax-fx.md)
 - Latest index-membership provider boundary: `629e82b` (`feat(provider): parse official index membership notices`)
 - Latest index-membership publication boundary: `376d0e0` (`feat(data): publish historical universe memberships`)
 - Latest mixed-universe identity boundary: `9f488a9` (`fix(metadata): support issuers without SEC identifiers`)
@@ -937,6 +943,11 @@ The following are not accidental omissions:
   archive or production B3 delivery claim. Exchange calendars now have both bounded
   BVMF/XNYS current/reference publication and accepted exact-artifact XNAS/BVMF
   historical chronology; dates outside those explicit versions remain unavailable.
+- BCB PTAX closing USD/BRL is accepted as the first canonical FX dataset. Five live
+  Aug 10-14 bulletins, exact before/at availability selection, content-addressed
+  Parquet, exact-key replay, and pinned direct/inverse sell-side conversions are
+  retained in the [PTAX acceptance report](acceptance/2026-08-24-ptax-fx.md). This
+  does not admit other pairs, carry-forward, midpoint, or triangulation.
 - Yahoo chart OHLC and volume are `split_adjusted`. Legacy immutable Yahoo manifests
   carrying the former `raw` label must be archived and reingested; normalization and
   adjustment now fail closed instead of mixing or double-adjusting them.
@@ -956,9 +967,8 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d`; the nearest cohesive v0.2 units are:
 
-1. Add versioned FX observations and the canonical USD/BRL conversion policy.
-2. Publish canonical SEC filing metadata.
-3. Complete the remaining B3-backed price bridge and integrate the accepted
+1. Publish canonical SEC filing metadata.
+2. Complete the remaining B3-backed price bridge and integrate the accepted
    identity/listing/membership/calendar chains into the bounded US/Brazil bias audit.
    Revisit Yahoo `.SA` only after its terms, fixture, coverage, and availability
    checks pass. Do not start strategy or execution work by treating current-vintage

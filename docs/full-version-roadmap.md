@@ -563,6 +563,10 @@ invariants.
 
 ### 5. FX and multi-currency valuation
 
+Bounded v0.2 status: accepted for official BCB PTAX closing USD/BRL at `cbc0563`;
+see [the PTAX FX publication report](acceptance/2026-08-24-ptax-fx.md). Other pairs,
+carry-forward, midpoint, and triangulation remain outside the admitted policy.
+
 - Add daily FX observations for USD/BRL and the currencies required by the first
   global universe.
 - Store quoted pair orientation, fixing/observation time, publication/availability,

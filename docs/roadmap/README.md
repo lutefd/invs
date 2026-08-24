@@ -95,11 +95,15 @@ The bounded corporate-action and adjustment follow-up is accepted in the
 It publishes an exact SEC split, retains B3 sample revisions only from installation
 receipt, blocks the unsupported B3 state, and keeps Yahoo split-adjusted prices out
 of the raw adjustment path.
+The bounded PTAX follow-up is accepted in the
+[PTAX FX publication report](../acceptance/2026-08-24-ptax-fx.md). It retains five
+official closing bulletins, publishes canonical USD/BRL Parquet, proves exact
+before/at availability selection, and reproduces sell-side direct/inverse conversion
+from a complete observation pin.
 The next unaccepted cohesive units are:
 
-1. add versioned FX observations and the canonical USD/BRL conversion policy;
-2. publish canonical SEC filing metadata;
-3. complete the Brazil price bridge and
+1. publish canonical SEC filing metadata;
+2. complete the Brazil price bridge and
    bounded US/Brazil point-in-time bias audits. Revisit Yahoo `.SA` only after its
    separate source, terms, fixture, coverage, and availability checks pass.
 
