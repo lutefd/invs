@@ -61,17 +61,19 @@ func (h *HTTP) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type Providers struct {
-	SEC              EnabledProvider         `yaml:"sec"`
-	Prices           PriceProvider           `yaml:"prices"`
-	FRED             FREDProvider            `yaml:"fred"`
-	ALFRED           ALFREDProvider          `yaml:"alfred"`
-	BCB              BCBProvider             `yaml:"bcb"`
-	B3               B3Provider              `yaml:"b3"`
-	B3Membership     IndexMembershipProvider `yaml:"b3_membership"`
-	B3ListingHistory ListingHistoryProvider  `yaml:"b3_listing_history"`
-	NasdaqMembership IndexMembershipProvider `yaml:"nasdaq_membership"`
-	NYSE             CalendarProvider        `yaml:"nyse"`
-	CVM              CVMProvider             `yaml:"cvm"`
+	SEC                   EnabledProvider            `yaml:"sec"`
+	Prices                PriceProvider              `yaml:"prices"`
+	FRED                  FREDProvider               `yaml:"fred"`
+	ALFRED                ALFREDProvider             `yaml:"alfred"`
+	BCB                   BCBProvider                `yaml:"bcb"`
+	B3                    B3Provider                 `yaml:"b3"`
+	B3Membership          IndexMembershipProvider    `yaml:"b3_membership"`
+	B3ListingHistory      ListingHistoryProvider     `yaml:"b3_listing_history"`
+	NasdaqMembership      IndexMembershipProvider    `yaml:"nasdaq_membership"`
+	NasdaqCalendarHistory HistoricalCalendarProvider `yaml:"nasdaq_calendar_history"`
+	B3CalendarHistory     HistoricalCalendarProvider `yaml:"b3_calendar_history"`
+	NYSE                  CalendarProvider           `yaml:"nyse"`
+	CVM                   CVMProvider                `yaml:"cvm"`
 }
 
 type EnabledProvider struct {
@@ -124,6 +126,35 @@ type CalendarProvider struct {
 	Year          int    `yaml:"year"`
 	CoverageStart string `yaml:"coverage_start"`
 	CoverageEnd   string `yaml:"coverage_end"`
+}
+type HistoricalCalendarProvider struct {
+	Enabled           bool                        `yaml:"enabled"`
+	Year              int                         `yaml:"year"`
+	CoverageStart     string                      `yaml:"coverage_start"`
+	CoverageEnd       string                      `yaml:"coverage_end"`
+	RegularOpenLocal  string                      `yaml:"regular_open_local"`
+	RegularCloseLocal string                      `yaml:"regular_close_local"`
+	Versions          []HistoricalCalendarVersion `yaml:"versions"`
+}
+type HistoricalCalendarVersion struct {
+	AvailableAt string                       `yaml:"available_at"`
+	Revision    int                          `yaml:"revision"`
+	Resources   []HistoricalCalendarResource `yaml:"resources"`
+	Events      []HistoricalCalendarEvent    `yaml:"events"`
+}
+type HistoricalCalendarResource struct {
+	Kind        string `yaml:"kind"`
+	URL         string `yaml:"url"`
+	SHA256      string `yaml:"sha256"`
+	ContentType string `yaml:"content_type"`
+}
+type HistoricalCalendarEvent struct {
+	Date          string `yaml:"date"`
+	Status        string `yaml:"status"`
+	OpenLocal     string `yaml:"open_local"`
+	CloseLocal    string `yaml:"close_local"`
+	ResourceKind  string `yaml:"resource_kind"`
+	SourceLocator string `yaml:"source_locator"`
 }
 type IndexMembershipProvider struct {
 	Enabled    bool     `yaml:"enabled"`
@@ -412,6 +443,19 @@ func (c Config) Validate() error {
 	if c.Providers.NasdaqMembership.Enabled {
 		errs = append(errs, validateIndexMembershipProvider("providers.nasdaq_membership", c.Providers.NasdaqMembership, c.Universe, "US", "NASDAQ", "XNAS", "USD", "www.globenewswire.com", "/news-release/")...)
 	}
+	if c.Providers.NasdaqCalendarHistory.Enabled {
+		errs = append(errs, validateHistoricalCalendarProvider(
+			"providers.nasdaq_calendar_history", c.Providers.NasdaqCalendarHistory,
+			[]string{"www.nasdaqtrader.com", "nasdaqtrader.com"},
+			[]string{"/content/technicalsupport/", "/TraderNews.aspx"},
+		)...)
+	}
+	if c.Providers.B3CalendarHistory.Enabled {
+		errs = append(errs, validateHistoricalCalendarProvider(
+			"providers.b3_calendar_history", c.Providers.B3CalendarHistory,
+			[]string{"www.b3.com.br", "b3.com.br"}, []string{"/data/files/"},
+		)...)
+	}
 	if c.Providers.B3Membership.Enabled {
 		errs = append(errs, validateIndexMembershipProvider("providers.b3_membership", c.Providers.B3Membership, c.Universe, "BR", "B3", "BVMF", "BRL", "www.b3.com.br", "/pt_br/noticias/")...)
 	}
@@ -434,7 +478,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NasdaqCalendarHistory.Enabled && !c.Providers.B3CalendarHistory.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -632,6 +676,167 @@ func validateCalendarProvider(prefix string, provider CalendarProvider) []error 
 		}
 	}
 	return errs
+}
+
+func validateHistoricalCalendarProvider(prefix string, provider HistoricalCalendarProvider, allowedHosts, pathPrefixes []string) []error {
+	var errs []error
+	base := CalendarProvider{
+		Enabled: provider.Enabled, Year: provider.Year,
+		CoverageStart: provider.CoverageStart, CoverageEnd: provider.CoverageEnd,
+	}
+	errs = append(errs, validateCalendarProvider(prefix, base)...)
+	if !validLocalClock(provider.RegularOpenLocal) || !validLocalClock(provider.RegularCloseLocal) || provider.RegularOpenLocal >= provider.RegularCloseLocal {
+		errs = append(errs, fmt.Errorf("%s regular local hours must be canonical increasing HH:MM values", prefix))
+	}
+	if len(provider.Versions) == 0 {
+		errs = append(errs, fmt.Errorf("%s requires at least one version", prefix))
+		return errs
+	}
+	coverageStart, startErr := requiredISODate(provider.CoverageStart)
+	coverageEnd, endErr := requiredISODate(provider.CoverageEnd)
+	var previousAvailability time.Time
+	for versionIndex, version := range provider.Versions {
+		versionPrefix := fmt.Sprintf("%s.versions[%d]", prefix, versionIndex)
+		if version.Revision != versionIndex {
+			errs = append(errs, fmt.Errorf("%s.revision must equal its zero-based version index", versionPrefix))
+		}
+		availableAt, availableErr := canonicalUTCTimestamp(version.AvailableAt)
+		if availableErr != nil {
+			errs = append(errs, fmt.Errorf("%s.available_at must be a canonical UTC RFC 3339 timestamp", versionPrefix))
+		} else if !previousAvailability.IsZero() && !availableAt.After(previousAvailability) {
+			errs = append(errs, fmt.Errorf("%s.available_at must be later than the prior version", versionPrefix))
+		}
+		if availableErr == nil {
+			previousAvailability = availableAt
+		}
+		if len(version.Resources) == 0 {
+			errs = append(errs, fmt.Errorf("%s requires at least one resource", versionPrefix))
+		}
+		resourceKinds := make(map[string]struct{}, len(version.Resources))
+		resourceURLs := make(map[string]struct{}, len(version.Resources))
+		for resourceIndex, resource := range version.Resources {
+			resourcePrefix := fmt.Sprintf("%s.resources[%d]", versionPrefix, resourceIndex)
+			if !validSourceIdentifier(resource.Kind) {
+				errs = append(errs, fmt.Errorf("%s.kind must be a canonical source identifier", resourcePrefix))
+			}
+			if _, duplicate := resourceKinds[resource.Kind]; duplicate {
+				errs = append(errs, fmt.Errorf("%s.kind duplicates %q", resourcePrefix, resource.Kind))
+			}
+			resourceKinds[resource.Kind] = struct{}{}
+			parsed, parseErr := url.Parse(resource.URL)
+			if parseErr != nil || !admittedHistoricalCalendarURL(parsed, allowedHosts, pathPrefixes) {
+				errs = append(errs, fmt.Errorf("%s.url must be an admitted official HTTPS artifact", resourcePrefix))
+			}
+			if _, duplicate := resourceURLs[resource.URL]; duplicate {
+				errs = append(errs, fmt.Errorf("%s.url duplicates %q", resourcePrefix, resource.URL))
+			}
+			resourceURLs[resource.URL] = struct{}{}
+			if !validSHA256(resource.SHA256) {
+				errs = append(errs, fmt.Errorf("%s.sha256 must be a lowercase SHA-256", resourcePrefix))
+			}
+			if resource.ContentType != "application/pdf" && resource.ContentType != "text/html; charset=utf-8" {
+				errs = append(errs, fmt.Errorf("%s.content_type must be application/pdf or text/html; charset=utf-8", resourcePrefix))
+			}
+		}
+		seenDates := make(map[string]struct{}, len(version.Events))
+		for eventIndex, event := range version.Events {
+			eventPrefix := fmt.Sprintf("%s.events[%d]", versionPrefix, eventIndex)
+			date, dateErr := requiredISODate(event.Date)
+			if dateErr != nil {
+				errs = append(errs, fmt.Errorf("%s.date must be an ISO date", eventPrefix))
+			} else if startErr == nil && endErr == nil && (date.Before(coverageStart) || date.After(coverageEnd)) {
+				errs = append(errs, fmt.Errorf("%s.date is outside configured coverage", eventPrefix))
+			}
+			if _, duplicate := seenDates[event.Date]; duplicate {
+				errs = append(errs, fmt.Errorf("%s.date duplicates %q", eventPrefix, event.Date))
+			}
+			seenDates[event.Date] = struct{}{}
+			if event.Status != "closed" && event.Status != "open" {
+				errs = append(errs, fmt.Errorf("%s.status must be closed or open", eventPrefix))
+			}
+			if event.Status == "closed" && (event.OpenLocal != "" || event.CloseLocal != "") {
+				errs = append(errs, fmt.Errorf("%s closed event cannot declare hours", eventPrefix))
+			}
+			if event.Status == "open" {
+				if event.OpenLocal == "" && event.CloseLocal == "" {
+					errs = append(errs, fmt.Errorf("%s open event must override at least one session boundary", eventPrefix))
+				}
+				if event.OpenLocal != "" && !validLocalClock(event.OpenLocal) {
+					errs = append(errs, fmt.Errorf("%s.open_local must be canonical HH:MM", eventPrefix))
+				}
+				if event.CloseLocal != "" && !validLocalClock(event.CloseLocal) {
+					errs = append(errs, fmt.Errorf("%s.close_local must be canonical HH:MM", eventPrefix))
+				}
+			}
+			if _, exists := resourceKinds[event.ResourceKind]; !exists {
+				errs = append(errs, fmt.Errorf("%s.resource_kind must name a version resource", eventPrefix))
+			}
+			if strings.TrimSpace(event.SourceLocator) == "" || event.SourceLocator != strings.TrimSpace(event.SourceLocator) {
+				errs = append(errs, fmt.Errorf("%s.source_locator is required and canonical", eventPrefix))
+			}
+		}
+	}
+	return errs
+}
+
+func canonicalUTCTimestamp(value string) (time.Time, error) {
+	if !strings.HasSuffix(value, "Z") {
+		return time.Time{}, errors.New("timestamp must end in Z")
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil || parsed.UTC().Format(time.RFC3339) != value {
+		return time.Time{}, errors.New("timestamp must be canonical UTC RFC 3339")
+	}
+	return parsed.UTC(), nil
+}
+
+func validLocalClock(value string) bool {
+	if len(value) != 5 || value[2] != ':' {
+		return false
+	}
+	_, err := time.Parse("15:04", value)
+	return err == nil
+}
+
+func validSHA256(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, char := range value {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
+func containsString(values []string, candidate string) bool {
+	for _, value := range values {
+		if value == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+func admittedHistoricalCalendarURL(parsed *url.URL, allowedHosts, pathPrefixes []string) bool {
+	if parsed == nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Fragment != "" || parsed.Port() != "" || !containsString(allowedHosts, parsed.Host) || !hasPathPrefix(parsed.EscapedPath(), pathPrefixes) {
+		return false
+	}
+	if parsed.Path != "/TraderNews.aspx" {
+		return parsed.RawQuery == ""
+	}
+	query := parsed.Query()
+	return len(query) == 1 && len(query["id"]) == 1 && strings.TrimSpace(query.Get("id")) != "" && parsed.RawQuery == query.Encode()
+}
+
+func hasPathPrefix(path string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func validBCBCode(value string) bool {

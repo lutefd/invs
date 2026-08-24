@@ -260,6 +260,108 @@ func TestValidateExchangeCalendarProviders(t *testing.T) {
 	}
 }
 
+func validHistoricalCalendarProvider() HistoricalCalendarProvider {
+	return HistoricalCalendarProvider{
+		Enabled: true, Year: 2025, CoverageStart: "2025-12-24", CoverageEnd: "2025-12-25",
+		RegularOpenLocal: "09:30", RegularCloseLocal: "16:00",
+		Versions: []HistoricalCalendarVersion{{
+			AvailableAt: "2024-12-13T05:00:00Z", Revision: 0,
+			Resources: []HistoricalCalendarResource{{
+				Kind: "annual_calendar", URL: "https://www.nasdaqtrader.com/content/technicalsupport/2025tradingcalendar.pdf",
+				SHA256: strings.Repeat("a", 64), ContentType: "application/pdf",
+			}},
+			Events: []HistoricalCalendarEvent{
+				{Date: "2025-12-24", Status: "open", CloseLocal: "13:00", ResourceKind: "annual_calendar", SourceLocator: "calendar/date=2025-12-24"},
+				{Date: "2025-12-25", Status: "closed", ResourceKind: "annual_calendar", SourceLocator: "calendar/date=2025-12-25"},
+			},
+		}},
+	}
+}
+
+func TestValidateHistoricalCalendarArtifacts(t *testing.T) {
+	c := validConfig()
+	c.Providers.NasdaqCalendarHistory = validHistoricalCalendarProvider()
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valid historical calendar: %v", err)
+	}
+
+	b3 := validConfig()
+	b3Provider := validHistoricalCalendarProvider()
+	b3Provider.Year = 2026
+	b3Provider.CoverageStart, b3Provider.CoverageEnd = "2026-02-16", "2026-02-18"
+	b3Provider.Versions[0].Resources[0].URL = "https://www.b3.com.br/data/files/AA/calendar.pdf"
+	b3Provider.Versions[0].Events = []HistoricalCalendarEvent{{
+		Date: "2026-02-18", Status: "open", OpenLocal: "13:00", CloseLocal: "18:00",
+		ResourceKind: "annual_calendar", SourceLocator: "circular/ash-wednesday",
+	}}
+	b3.Providers.B3CalendarHistory = b3Provider
+	if err := b3.Validate(); err != nil {
+		t.Fatalf("valid B3 historical calendar: %v", err)
+	}
+
+	for name, mutate := range map[string]func(*HistoricalCalendarProvider){
+		"untrusted URL": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Resources[0].URL = "https://example.com/calendar.pdf"
+		},
+		"official URL with port": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Resources[0].URL = "https://www.nasdaqtrader.com:8443/content/technicalsupport/2025tradingcalendar.pdf"
+		},
+		"official URL with fragment": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Resources[0].URL = "https://www.nasdaqtrader.com/content/technicalsupport/2025tradingcalendar.pdf#page=1"
+		},
+		"artifact URL with query": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Resources[0].URL = "https://www.nasdaqtrader.com/content/technicalsupport/2025tradingcalendar.pdf?draft=true"
+		},
+		"wrong hash": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Resources[0].SHA256 = "ABC"
+		},
+		"wrong content type": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Resources[0].ContentType = "application/octet-stream"
+		},
+		"noncanonical availability": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].AvailableAt = "2024-12-13T00:00:00-05:00"
+		},
+		"revision gap": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Revision = 1
+		},
+		"event outside coverage": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Events[0].Date = "2025-12-23"
+		},
+		"unknown event resource": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Events[0].ResourceKind = "notice"
+		},
+		"closed event with hours": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Events[1].OpenLocal = "09:30"
+		},
+		"open event without override": func(provider *HistoricalCalendarProvider) {
+			provider.Versions[0].Events[0].CloseLocal = ""
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := validConfig()
+			provider := validHistoricalCalendarProvider()
+			mutate(&provider)
+			candidate.Providers.NasdaqCalendarHistory = provider
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid historical calendar configuration accepted")
+			}
+		})
+	}
+}
+
+func TestValidateHistoricalCalendarAdmitsCanonicalNasdaqNoticeURL(t *testing.T) {
+	c := validConfig()
+	provider := validHistoricalCalendarProvider()
+	provider.Versions[0].Resources = append(provider.Versions[0].Resources, HistoricalCalendarResource{
+		Kind: "publication_notice", URL: "https://nasdaqtrader.com/TraderNews.aspx?id=ETA2024-84",
+		SHA256: strings.Repeat("b", 64), ContentType: "text/html; charset=utf-8",
+	})
+	c.Providers.NasdaqCalendarHistory = provider
+	if err := c.Validate(); err != nil {
+		t.Fatalf("canonical Nasdaq notice URL: %v", err)
+	}
+}
+
 func TestValidateALFREDProviderRequirements(t *testing.T) {
 	c := validConfig()
 	c.FREDAPIKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

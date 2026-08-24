@@ -58,11 +58,29 @@ providers:
     universe_id: nasdaq_100
     tickers: []
     notices: []
+  nasdaq_calendar_history:
+    enabled: false
+    year: 2025
+    coverage_start: 2025-12-24
+    coverage_end: 2025-12-26
+    regular_open_local: "09:30"
+    regular_close_local: "16:00"
+    # Enabled historical calendars require exact official artifact hashes,
+    # declared availability timestamps, and explicit exception transcriptions.
+    versions: []
   b3_membership:
     enabled: false
     universe_id: ibovespa
     tickers: []
     notices: []
+  b3_calendar_history:
+    enabled: false
+    year: 2026
+    coverage_start: 2026-02-16
+    coverage_end: 2026-02-18
+    regular_open_local: "10:00"
+    regular_close_local: "17:00"
+    versions: []
   b3_listing_history:
     enabled: false
     notices: []
