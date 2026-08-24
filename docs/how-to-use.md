@@ -110,6 +110,9 @@ make ingest SOURCE=sec
 make ingest SOURCE=fred
 make ingest SOURCE=alfred
 make ingest SOURCE=bcb
+make ingest SOURCE=b3
+make ingest SOURCE=b3-calendar
+make ingest SOURCE=nyse
 make ingest SOURCE=cvm
 make ingest SOURCE=all
 ```
@@ -300,6 +303,54 @@ listing dates, delistings, or corporate actions. See the [B3 acceptance report](
 ```sh
 make ingest SOURCE=b3 RUN_KEY=b3-instruments-2026-08-21
 ```
+
+### Versioned B3 and NYSE calendars
+
+Calendar collection publishes an append-only manifest plus one explicit session
+row for every local date in the requested coverage. Closed weekends and holidays
+are rows, not gaps. Configure a deliberately bounded B3 interval and an explicit
+NYSE year:
+
+```yaml
+providers:
+  b3:
+    enabled: true
+    report_date: 2026-08-21
+    tickers: [PETR4]
+    calendar:
+      enabled: true
+      year: 2026
+      coverage_start: 2026-08-24
+      coverage_end: 2026-08-28
+  nyse:
+    enabled: true
+    year: 2026
+    coverage_start: 2026-01-01
+    coverage_end: 2026-12-31
+```
+
+Run B3 instrument and calendar collection together, the B3 calendar alone, or the
+NYSE calendar alone:
+
+```sh
+make ingest SOURCE=b3 RUN_KEY=b3-snapshot-and-calendar-2026-08-24
+make ingest SOURCE=b3-calendar RUN_KEY=b3-calendar-2026-08-24
+make ingest SOURCE=nyse RUN_KEY=nyse-calendar-2026
+```
+
+`SOURCE=b3-calendar` uses the `b3` data source but an independent calendar run-key
+scope, so it cannot collide with a B3 instrument run using the same operator key.
+Exact-key retries return the successful existing run.
+
+The compiler uses `America/Sao_Paulo` for BVMF and `America/New_York` for XNYS,
+applies source-declared closures and special hours, and fingerprints the complete
+covered row set. The official HTML pages are current/reference evidence without an
+exposed historical publication or correction sequence. Every resulting version is
+therefore eligible only at its local raw receipt time; do not use it to simulate an
+earlier decision. Keep B3 coverage narrow unless retained official evidence supports
+the regular-hours effective interval. See the
+[exchange-calendar publication report](acceptance/2026-08-23-exchange-calendar-publication.md)
+for the accepted boundary.
 
 ### CVM IPE filings and CAD
 

@@ -96,11 +96,16 @@ transport-agnostic lifecycle parser with event/control IDs, source dates,
 action state, and correction fields, but no product transport or production
 access dependency was added. See the [listed-company evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md)
 and [UP2DATA sample report](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
-The official B3 2026 market-calendar page now also has a raw-first,
-explicit-year evidence parser and live acceptance. It retains only listed-market
-closure and special-hours notices; regular hours, weekend policy, availability,
-revision semantics, and canonical `TradingSession` publication remain gated. See
-the [B3 market-calendar evidence report](acceptance/2026-08-23-b3-market-calendar-evidence.md).
+The official B3 and NYSE calendar/hour pages now have raw-first adapters and a
+canonical calendar compiler/publisher. A live bounded acceptance published one
+append-only manifest plus an explicit row for every covered date: five BVMF sessions
+for 2026-08-24 through 2026-08-28 and all 365 XNYS dates for 2026. Pinned
+after-close lookups crossed a normal BVMF close and the XNYS Thanksgiving closure.
+This remains current/reference evidence available only from local receipt time;
+neither source exposes the historical publication/correction chronology required
+to close the v0.2 calendar gate. See the
+[source evidence report](acceptance/2026-08-23-b3-market-calendar-evidence.md) and
+[canonical publication report](acceptance/2026-08-23-exchange-calendar-publication.md).
 
 ## Current continuation boundary
 
@@ -119,7 +124,9 @@ the [B3 market-calendar evidence report](acceptance/2026-08-23-b3-market-calenda
 - Latest B3 UP2DATA lifecycle parser boundary: `8b9916f` (`feat(provider): parse B3 UP2DATA corporate-action lifecycle`)
 - B3 UP2DATA sample acceptance: [source-native lifecycle evidence](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md); product access and canonical publication remain blocked
 - Latest B3 market-calendar evidence boundary: `6f61a84` (`feat(provider): parse B3 market-calendar evidence`)
-- B3 market-calendar acceptance: [source-native listed-market evidence](acceptance/2026-08-23-b3-market-calendar-evidence.md); canonical session publication remains blocked
+- Latest exchange-calendar provider boundary: `acd8eec` (`feat(provider): parse official exchange calendars`)
+- Latest exchange-calendar publication boundary: `77fee79` (`feat(data): publish versioned exchange calendars`)
+- Exchange-calendar acceptance: [bounded BVMF/XNYS canonical publication](acceptance/2026-08-23-exchange-calendar-publication.md); historical publication/revision chronology remains blocked
 - ALFRED credentials remain environment-only; do not put them in YAML, run metadata,
   raw attributes, logs, or acceptance artifacts.
 - The older `742e5ae` implementation point below remains useful as the exact original
@@ -875,8 +882,10 @@ The following are not accidental omissions:
 - No canonical SEC filing metadata dataset, despite SEC acceptance-time parsing.
 - No fundamental or filing latest-only dashboard projection.
 - No canonical corporate-action collector or adjustment publication despite the
-  schema boundary existing; B3 listed-company evidence, the UP2DATA sample
-  parser, and B3 market-calendar evidence remain source-native only.
+  schema boundary existing; B3 listed-company evidence and the UP2DATA sample
+  parser remain source-native only. Exchange calendars now have bounded canonical
+  BVMF/XNYS publication, but the accepted versions are current/reference evidence
+  available only from receipt time, not historical calendar admission.
 - Current security-to-issuer mappings are current YAML configuration, not historical
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
@@ -897,10 +906,11 @@ Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
    authorized UP2DATA Corporate Action access (or a public versioned alternative),
    then define delivery availability, revision semantics, and the corresponding
    point-in-time bias audit.
-2. Combine B3's listed-market notices with official regular/special hours, define
-   weekend, availability, and revision semantics, then admit and publish bounded
-   US/Brazil calendar inputs and connect the pinned decision-clock semantics to
-   the research selection path.
+2. Obtain official archived/versioned US and Brazil calendar artifacts (or another
+   admitted source) that establish publication, effective, and correction chronology.
+   Broaden BVMF coverage only with defensible historical hours intervals, then pass
+   bounded availability audits and pin the accepted calendar/decision-clock policy
+   into research artifact manifests.
 3. Complete the admitted B3-backed Brazil path with lifecycle/membership and
    corporate-action evidence; revisit Yahoo `.SA` only as a price bridge after its
    terms, fixture, coverage, and availability checks pass. Do not start strategy or

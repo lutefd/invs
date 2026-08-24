@@ -72,8 +72,10 @@ The following baseline limitations drive the version order:
 - The bounded ALFRED CPIAUCSL ingestion work package and exact-boundary selection are
   live-accepted. ADRs, synthetic fixtures, and the durable metadata publication/
   resolution boundary now exist; corporate actions, admitted historical universe
-  membership, exchange calendars, and full historical source-backed identifier
-  evidence remain outstanding.
+  membership, historically admitted exchange calendars, and full historical
+  source-backed identifier evidence remain outstanding. A bounded canonical
+  BVMF/XNYS calendar publisher is live-accepted for current/reference evidence only;
+  its historical publication/correction chronology remains unproven.
 - A bounded official B3 InstrumentsConsolidated path is implemented and live-accepted
   for exact current/reference Brazil identity/listing snapshots. It retains ISIN and
   source trading intervals but does not provide long historical lifecycle or
@@ -111,6 +113,9 @@ The [B3 bounded source-admission report](acceptance/2026-08-22-b3-instruments-se
 records the implementation, raw fixture, live hash, exact mappings, and conservative
 availability policy. The [B3 corporate-action evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md)
 records the separate source-native endpoint and its canonical-publication block.
+The [exchange-calendar publication report](acceptance/2026-08-23-exchange-calendar-publication.md)
+records the bounded BVMF/XNYS canonical publication and its still-open historical
+availability boundary.
 This is not full historical-fitness acceptance: the v0.2 work must still capture
 lifecycle/membership coverage and prove that the resulting Brazil slice is fit for
 its intended research use. A paid B3 or replacement provider may be reconsidered
@@ -1869,8 +1874,10 @@ v0.1 is accepted. The next narrow queue is the v0.2 historical-truth boundary:
 
 1. Integrate an admitted security-master source with the durable historical metadata
    boundary and capture raw/source-backed evidence for one bounded US and Brazil slice.
-2. Admit and publish versioned US/Brazil exchange calendars, then connect the pinned
-   decision-clock behavior to the research selection path.
+2. Add publication/effective/correction chronology to the bounded canonical
+   US/Brazil calendars, broaden BVMF hours coverage only with defensible historical
+   evidence, then pass availability audits and pin the calendar/decision-clock
+   policy into research artifacts.
 3. Revisit Yahoo `.SA` only as a separate price bridge after its terms, fixture,
    coverage, and availability checks pass.
 

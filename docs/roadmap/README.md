@@ -74,22 +74,24 @@ The official UP2DATA sample now also has a transport-agnostic
 IDs, date fields, action state, and correction fields. It is sample-layout evidence only;
 UP2DATA product access and canonical publication remain unaccepted. See the
 [UP2DATA sample report](../acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
-The B3 2026 market-calendar page now also has a raw-first, explicit-year parser
-in `6f61a84`. Its live acceptance retains 15 listed-market events, including 14
-closures and one special-hours notice, while leaving regular hours, weekend
-policy, availability/revision semantics, and canonical `TradingSession`
-publication unaccepted. See the
-[B3 market-calendar evidence report](../acceptance/2026-08-23-b3-market-calendar-evidence.md).
+The B3 2026 market-calendar evidence parser in `6f61a84` now feeds official B3
+hours alongside new NYSE calendar/hours parsing (`acd8eec`) and deterministic
+canonical publication (`77fee79`). Live acceptance published five bounded BVMF
+sessions and all 365 XNYS dates for 2026, then proved pinned after-close
+next-session selection across an XNYS holiday. These are current/reference versions
+eligible only from receipt time, not historically admitted calendars. See the
+[B3 source report](../acceptance/2026-08-23-b3-market-calendar-evidence.md) and
+[exchange-calendar publication report](../acceptance/2026-08-23-exchange-calendar-publication.md).
 The next unaccepted cohesive units are:
 
 1. extend the B3 snapshot path and add a bounded US source with historical
    lifecycle, revision, universe-membership, and admissible corporate-action
    evidence; for B3 specifically, resolve authorized UP2DATA access or a public
    versioned alternative before adding a production corporate-action transport;
-2. complete the B3 calendar gate by combining listed-market notices with official
-   regular/special hours and explicit weekend, availability, and revision policy,
-   then admit and publish explicit US and Brazil exchange calendars with the
-   pinned decision-clock behavior;
+2. obtain official archived/versioned US and Brazil calendar evidence (or another
+   admitted source) with publication, effective, and correction chronology; broaden
+   BVMF hours coverage only on that evidence, then pass historical availability
+   audits and pin the calendar/decision-clock policy into research artifacts;
 3. revisit Yahoo `.SA` only as a price bridge after its source, terms, fixture,
    coverage, and availability checks pass.
 
