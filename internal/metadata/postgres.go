@@ -56,6 +56,7 @@ type ProviderInputs struct {
 	MembershipUniverseID    string                    `json:"membership_universe_id,omitempty"`
 	MembershipNotices       []string                  `json:"membership_notices,omitempty"`
 	MembershipSecurities    []MembershipSecurityInput `json:"membership_securities,omitempty"`
+	ListingHistoryNotices   []ListingHistoryInput     `json:"listing_history_notices,omitempty"`
 	Format                  string                    `json:"format,omitempty"`
 	Vintage                 string                    `json:"vintage,omitempty"`
 	PageSize                int                       `json:"page_size,omitempty"`
@@ -111,6 +112,14 @@ type MembershipSecurityInput struct {
 	SecurityID string `json:"security_id"`
 	Ticker     string `json:"ticker"`
 	MIC        string `json:"mic"`
+}
+
+type ListingHistoryInput struct {
+	SecurityID  string `json:"security_id"`
+	Ticker      string `json:"ticker"`
+	TradingName string `json:"trading_name"`
+	ValidFrom   string `json:"valid_from"`
+	NoticeURL   string `json:"notice_url"`
 }
 
 type canonicalRunInputs struct {
@@ -367,7 +376,7 @@ func (r *Repository) SyncCatalog(ctx context.Context, cfg config.Config) error {
 	}
 	defer tx.Rollback(ctx)
 	for _, s := range sources {
-		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled, "alfred": cfg.Providers.ALFRED.Enabled, "bcb": cfg.Providers.BCB.Enabled, "b3": cfg.Providers.B3.Enabled || cfg.Providers.B3Membership.Enabled, "nasdaq": cfg.Providers.NasdaqMembership.Enabled, "nyse": cfg.Providers.NYSE.Enabled, "cvm": cfg.Providers.CVM.Enabled}[s.code]
+		enabled := map[string]bool{"sec": cfg.Providers.SEC.Enabled, "yahoo": cfg.Providers.Prices.Enabled, "fred": cfg.Providers.FRED.Enabled, "alfred": cfg.Providers.ALFRED.Enabled, "bcb": cfg.Providers.BCB.Enabled, "b3": cfg.Providers.B3.Enabled || cfg.Providers.B3Membership.Enabled || cfg.Providers.B3ListingHistory.Enabled, "nasdaq": cfg.Providers.NasdaqMembership.Enabled, "nyse": cfg.Providers.NYSE.Enabled, "cvm": cfg.Providers.CVM.Enabled}[s.code]
 		_, err = tx.Exec(ctx, `INSERT INTO data_sources(code,name,source_kind,base_url,enabled) VALUES($1,$2,$3,$4,$5) ON CONFLICT(code) DO UPDATE SET name=excluded.name,source_kind=excluded.source_kind,base_url=excluded.base_url,enabled=excluded.enabled,updated_at=now()`, s.code, s.name, s.kind, s.baseURL, enabled)
 		if err != nil {
 			return fmt.Errorf("upsert data source %s: %w", s.code, err)

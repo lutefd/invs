@@ -68,6 +68,7 @@ type Providers struct {
 	BCB              BCBProvider             `yaml:"bcb"`
 	B3               B3Provider              `yaml:"b3"`
 	B3Membership     IndexMembershipProvider `yaml:"b3_membership"`
+	B3ListingHistory ListingHistoryProvider  `yaml:"b3_listing_history"`
 	NasdaqMembership IndexMembershipProvider `yaml:"nasdaq_membership"`
 	NYSE             CalendarProvider        `yaml:"nyse"`
 	CVM              CVMProvider             `yaml:"cvm"`
@@ -129,6 +130,16 @@ type IndexMembershipProvider struct {
 	UniverseID string   `yaml:"universe_id"`
 	Tickers    []string `yaml:"tickers"`
 	Notices    []string `yaml:"notices"`
+}
+type ListingHistoryProvider struct {
+	Enabled bool                   `yaml:"enabled"`
+	Notices []ListingHistoryNotice `yaml:"notices"`
+}
+type ListingHistoryNotice struct {
+	URL         string `yaml:"url"`
+	TradingName string `yaml:"trading_name"`
+	Ticker      string `yaml:"ticker"`
+	ValidFrom   string `yaml:"valid_from"`
 }
 type CVMProvider struct {
 	Enabled bool         `yaml:"enabled"`
@@ -404,6 +415,9 @@ func (c Config) Validate() error {
 	if c.Providers.B3Membership.Enabled {
 		errs = append(errs, validateIndexMembershipProvider("providers.b3_membership", c.Providers.B3Membership, c.Universe, "BR", "B3", "BVMF", "BRL", "www.b3.com.br", "/pt_br/noticias/")...)
 	}
+	if c.Providers.B3ListingHistory.Enabled {
+		errs = append(errs, validateB3ListingHistory(c.Providers.B3ListingHistory, c.Providers.B3Membership, c.Universe)...)
+	}
 	if c.Providers.CVM.Enabled {
 		if !c.Providers.CVM.CAD && len(c.Providers.CVM.IPE.Years) == 0 {
 			errs = append(errs, errors.New("enabled CVM provider requires cad or at least one IPE year"))
@@ -420,7 +434,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}
@@ -528,6 +542,66 @@ func validateIndexMembershipProvider(prefix string, provider IndexMembershipProv
 			errs = append(errs, fmt.Errorf("%s duplicates %q", itemPrefix, value))
 		}
 		seenNotices[value] = struct{}{}
+	}
+	return errs
+}
+
+func validateB3ListingHistory(provider ListingHistoryProvider, membership IndexMembershipProvider, universe []Security) []error {
+	const prefix = "providers.b3_listing_history"
+	var errs []error
+	if !membership.Enabled {
+		errs = append(errs, errors.New("providers.b3_listing_history requires providers.b3_membership"))
+	}
+	if len(provider.Notices) == 0 {
+		errs = append(errs, errors.New("providers.b3_listing_history requires at least one notice"))
+	}
+	membershipTickers := make(map[string]struct{}, len(membership.Tickers))
+	for _, ticker := range membership.Tickers {
+		membershipTickers[ticker] = struct{}{}
+	}
+	seenTickers := make(map[string]struct{}, len(provider.Notices))
+	seenURLs := make(map[string]struct{}, len(provider.Notices))
+	for index, notice := range provider.Notices {
+		itemPrefix := fmt.Sprintf("%s.notices[%d]", prefix, index)
+		if notice.TradingName != strings.TrimSpace(notice.TradingName) || notice.TradingName != strings.ToUpper(notice.TradingName) || !validB3Ticker(notice.TradingName) {
+			errs = append(errs, fmt.Errorf("%s.trading_name must be an uppercase canonical B3 trading name", itemPrefix))
+		}
+		if notice.Ticker != strings.TrimSpace(notice.Ticker) || notice.Ticker != strings.ToUpper(notice.Ticker) || !validB3Ticker(notice.Ticker) {
+			errs = append(errs, fmt.Errorf("%s.ticker must be an uppercase canonical B3 ticker", itemPrefix))
+		}
+		if _, exists := membershipTickers[notice.Ticker]; !exists {
+			errs = append(errs, fmt.Errorf("%s.ticker must be configured in providers.b3_membership", itemPrefix))
+		}
+		if _, duplicate := seenTickers[notice.Ticker]; duplicate {
+			errs = append(errs, fmt.Errorf("%s.ticker duplicates %q", itemPrefix, notice.Ticker))
+		}
+		seenTickers[notice.Ticker] = struct{}{}
+		validFrom, validFromErr := time.Parse(time.RFC3339, notice.ValidFrom)
+		if validFromErr != nil || notice.ValidFrom != validFrom.UTC().Format(time.RFC3339) {
+			errs = append(errs, fmt.Errorf("%s.valid_from must be a canonical UTC RFC 3339 timestamp", itemPrefix))
+		}
+		parsed, parseErr := url.Parse(notice.URL)
+		if parseErr != nil || parsed.Scheme != "https" || parsed.Host != "sistemasweb.b3.com.br" || parsed.Path != "/PlantaoNoticias/Noticias/Detail" || parsed.Fragment != "" {
+			errs = append(errs, fmt.Errorf("%s.url must use the admitted B3 Plantao detail source", itemPrefix))
+		} else {
+			query := parsed.Query()
+			if len(query) != 3 || len(query["agencia"]) != 1 || len(query["dataNoticia"]) != 1 || len(query["idNoticia"]) != 1 {
+				errs = append(errs, fmt.Errorf("%s.url requires exactly agencia, dataNoticia, and idNoticia", itemPrefix))
+			}
+		}
+		if _, duplicate := seenURLs[notice.URL]; duplicate {
+			errs = append(errs, fmt.Errorf("%s.url duplicates %q", itemPrefix, notice.URL))
+		}
+		seenURLs[notice.URL] = struct{}{}
+		matches := 0
+		for _, security := range universe {
+			if security.Ticker == notice.Ticker && security.CountryCode == "BR" && security.Exchange == "B3" && security.MIC == "BVMF" && security.Currency == "BRL" && security.PrimaryListing {
+				matches++
+			}
+		}
+		if matches != 1 {
+			errs = append(errs, fmt.Errorf("%s.ticker must match exactly one primary BR/B3/BVMF/BRL universe security", itemPrefix))
+		}
 	}
 	return errs
 }

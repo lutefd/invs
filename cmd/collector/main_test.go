@@ -294,6 +294,7 @@ type collectorMetadataFake struct {
 	onStartInputs func(metadata.RunInputs)
 	onFinish      func(time.Time)
 	onHistorical  func(metadata.HistoricalTruthBatch)
+	identityBase  bool
 	finalizeError error
 }
 
@@ -466,8 +467,20 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	if got := membershipInputs.Provider.MembershipSecurities[0]; got.SecurityID != "security-insm" || got.Ticker != "INSM" || got.MIC != "XNAS" {
 		t.Fatalf("membership security input = %+v", got)
 	}
+	listingHistoryInputs := listingHistoryRunInputs(config.ListingHistoryProvider{
+		Notices: []config.ListingHistoryNotice{{
+			URL:         "https://sistemasweb.b3.com.br/PlantaoNoticias/Noticias/Detail?agencia=18&dataNoticia=2026-01-02+19%3A43%3A10&idNoticia=3192104",
+			TradingName: "PETZ", Ticker: "PETZ3", ValidFrom: "2021-09-06T03:00:00Z",
+		}},
+	}, []config.Security{{SecurityID: "security-petz", Ticker: "PETZ3"}})
+	if listingHistoryInputs.Source != "b3" || listingHistoryInputs.Provider.Kind != "security_listing_lifecycle" || listingHistoryInputs.Provider.Vintage != "historical_source_publication" || len(listingHistoryInputs.Provider.ListingHistoryNotices) != 1 {
+		t.Fatalf("listing-history run inputs = %+v", listingHistoryInputs)
+	}
+	if got := listingHistoryInputs.Provider.ListingHistoryNotices[0]; got.SecurityID != "security-petz" || got.Ticker != "PETZ3" || got.TradingName != "PETZ" || got.ValidFrom != "2021-09-06T03:00:00Z" {
+		t.Fatalf("listing-history notice input = %+v", got)
+	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs, membershipInputs} {
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, b3Inputs, calendarInputs, membershipInputs, listingHistoryInputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -632,6 +645,10 @@ func (f collectorMetadataFake) PublishHistoricalTruth(_ context.Context, batch m
 		f.onHistorical(batch)
 	}
 	return nil
+}
+
+func (f collectorMetadataFake) HistoricalIdentityBaseExists(context.Context, string, string, string, string, time.Time) (bool, error) {
+	return f.identityBase, nil
 }
 
 func assertMicrosecondUTC(t *testing.T, name string, got time.Time) {
@@ -879,6 +896,79 @@ func TestCollectorNasdaqMembershipPublishesAddRemoveChronology(t *testing.T) {
 	manifest := decodeTestManifest(t, raw.manifestPayload)
 	if len(manifest.Entries) != 2 || manifest.Entries[0].Attributes["universe_id"] != "nasdaq_100" {
 		t.Fatalf("membership raw manifest = %+v", manifest.Entries)
+	}
+}
+
+func TestCollectorB3ListingHistoryPublishesIntervalCorrections(t *testing.T) {
+	body := []byte(`<!doctype html><html><body><h1>PETZ (PETZ-NM) - Fato Relevante - 02/01/26 (N)</h1><p>Alteracao no valor por acao da parcela em dinheiro.</p><p>A partir de 05/01/2026, as acoes da companhia deixam de ser negociadas em razao de sua incorporacao pela Cobasi Investimentos S.A.</p></body></html>`)
+	noticeURL := "https://sistemasweb.b3.com.br/PlantaoNoticias/Noticias/Detail?agencia=18&dataNoticia=2026-01-02+19%3A43%3A10&idNoticia=3192104"
+	raw := &orderingRawStore{}
+	var published metadata.HistoricalTruthBatch
+	var started metadata.RunInputs
+	app := &app{
+		cfg: config.Config{
+			Providers: config.Providers{B3ListingHistory: config.ListingHistoryProvider{
+				Enabled: true, Notices: []config.ListingHistoryNotice{{
+					URL: noticeURL, TradingName: "PETZ", Ticker: "PETZ3", ValidFrom: "2021-09-06T03:00:00Z",
+				}},
+			}},
+			Universe: []config.Security{{
+				IssuerID: testIssuerID, SecurityID: testSecurityID, Ticker: "PETZ3",
+				Exchange: "B3", MIC: "BVMF", Currency: "BRL", PrimaryListing: true,
+			}},
+		},
+		raw: raw, http: collectorHTTPFake{payload: body},
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{
+			run: testRun(), identityBase: true,
+			onStartInputs: func(inputs metadata.RunInputs) { started = inputs },
+			onHistorical:  func(batch metadata.HistoricalTruthBatch) { published = batch },
+		},
+		batchKey: "b3-listing-history-test",
+		now:      func() time.Time { return time.Date(2026, 8, 24, 2, 0, 0, 123456789, time.UTC) },
+	}
+	if err := app.run(context.Background(), "b3-listing-history"); err != nil {
+		t.Fatal(err)
+	}
+	if started.Source != "b3" || started.Provider.Kind != "security_listing_lifecycle" {
+		t.Fatalf("run inputs = %+v", started)
+	}
+	if len(raw.events) != 1 || len(published.Identifiers) != 1 || len(published.Listings) != 1 {
+		t.Fatalf("raw/published = %v/%+v", raw.events, published)
+	}
+	identifier, listing := published.Identifiers[0], published.Listings[0]
+	if identifier.Revision != 1 || identifier.ValidUntil == nil || identifier.ValidUntil.Format(time.RFC3339) != "2026-01-05T03:00:00Z" || identifier.RawPayloadHash != hashPayload(body) {
+		t.Fatalf("identifier correction = %+v", identifier)
+	}
+	if listing.Revision != 1 || listing.ValidUntil == nil || !listing.ValidUntil.Equal(*identifier.ValidUntil) || !listing.RecordedAt.Equal(time.Date(2026, 8, 24, 2, 0, 0, 123456000, time.UTC)) {
+		t.Fatalf("listing correction = %+v", listing)
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 1 || manifest.Entries[0].Attributes["ticker"] != "PETZ3" || manifest.Entries[0].Attributes["trading_name"] != "PETZ" {
+		t.Fatalf("listing-history manifest = %+v", manifest.Entries)
+	}
+}
+
+func TestCollectorB3ListingHistoryRejectsMissingBase(t *testing.T) {
+	body := []byte(`<!doctype html><html><body><h1>PETZ (PETZ-NM) - Fato Relevante - 02/01/26 (N)</h1><p>A partir de 05/01/2026, as acoes da companhia deixam de ser negociadas em razao de sua incorporacao pela Cobasi Investimentos S.A.</p></body></html>`)
+	app := &app{
+		cfg: config.Config{
+			Providers: config.Providers{B3ListingHistory: config.ListingHistoryProvider{
+				Enabled: true, Notices: []config.ListingHistoryNotice{{
+					URL:         "https://sistemasweb.b3.com.br/PlantaoNoticias/Noticias/Detail?agencia=18&dataNoticia=2026-01-02+19%3A43%3A10&idNoticia=3192104",
+					TradingName: "PETZ", Ticker: "PETZ3", ValidFrom: "2021-09-06T03:00:00Z",
+				}},
+			}},
+			Universe: []config.Security{{IssuerID: testIssuerID, SecurityID: testSecurityID, Ticker: "PETZ3", Exchange: "B3", MIC: "BVMF", Currency: "BRL", PrimaryListing: true}},
+		},
+		raw: &orderingRawStore{}, http: collectorHTTPFake{payload: body},
+		log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: testRun(), identityBase: false},
+		batchKey: "b3-listing-history-missing-base-test",
+		now:      func() time.Time { return time.Date(2026, 8, 24, 2, 0, 0, 0, time.UTC) },
+	}
+	if err := app.run(context.Background(), "b3-listing-history"); err == nil || !strings.Contains(err.Error(), "no exact open-ended identifier/listing base") {
+		t.Fatalf("missing base error = %v", err)
 	}
 }
 

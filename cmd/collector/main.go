@@ -64,6 +64,10 @@ type historicalTruthPublisher interface {
 	PublishHistoricalTruth(context.Context, metadata.HistoricalTruthBatch) error
 }
 
+type historicalIdentityBaseChecker interface {
+	HistoricalIdentityBaseExists(context.Context, string, string, string, string, time.Time) (bool, error)
+}
+
 type normalizedStore interface {
 	WritePrices(string, []model.PriceBar) (string, int, error)
 	WriteFundamentals(string, []model.FundamentalObservation) (string, int, error)
@@ -132,6 +136,17 @@ type membershipEvidenceEvent struct {
 
 type membershipNoticeCollector func(context.Context, string) ([]providers.RawResource, []membershipEvidenceEvent, error)
 
+type listingLifecycleEvidence struct {
+	Ticker           string
+	TradingName      string
+	ValidFrom        time.Time
+	ValidUntil       time.Time
+	AvailableAt      time.Time
+	RecordedAt       time.Time
+	RawRecordLocator string
+	RawPayloadHash   string
+}
+
 func canonicalTime(t time.Time) time.Time {
 	return t.UTC().Truncate(time.Microsecond)
 }
@@ -145,7 +160,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, b3-calendar, b3-membership, nasdaq-membership, nyse, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, prices, fred, alfred, bcb, b3, b3-calendar, b3-membership, b3-listing-history, nasdaq-membership, nyse, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -273,7 +288,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-calendar": true, "b3-membership": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "b3": true, "b3-calendar": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -303,6 +318,9 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "b3-membership" && !a.cfg.Providers.B3Membership.Enabled {
 		return errors.New("B3 membership provider is disabled")
+	}
+	if source == "b3-listing-history" && !a.cfg.Providers.B3ListingHistory.Enabled {
+		return errors.New("B3 listing-history provider is disabled")
 	}
 	if source == "nasdaq-membership" && !a.cfg.Providers.NasdaqMembership.Enabled {
 		return errors.New("Nasdaq membership provider is disabled")
@@ -353,6 +371,11 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "b3-membership") && a.cfg.Providers.B3Membership.Enabled {
 		if err := a.collectB3Membership(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "b3-listing-history") && a.cfg.Providers.B3ListingHistory.Enabled {
+		if err := a.collectB3ListingHistory(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -1196,7 +1219,7 @@ func (a *app) collectIndexMembership(ctx context.Context, source, runKey string,
 			} else {
 				for eventIndex := range events {
 					events[eventIndex].RawPayloadHash = storedHash
-					events[eventIndex].RecordedAt = events[eventIndex].AvailableAt
+					events[eventIndex].RecordedAt = m.StartedAt
 				}
 				evidence = append(evidence, events...)
 			}
@@ -1339,6 +1362,164 @@ func membershipHistoricalTruthBatch(run metadata.Run, source string, provider co
 		}
 	}
 	return batch, ignored, nil
+}
+
+func (a *app) collectB3ListingHistory(ctx context.Context) error {
+	provider := a.cfg.Providers.B3ListingHistory
+	m := metrics{
+		Source: "b3", RunKey: "b3-listing-history", StartedAt: a.nowUTC(),
+		Cursor: map[string]any{
+			"provider": "b3", "kind": "security_listing_lifecycle",
+			"notice_count": len(provider.Notices), "historical_fitness": "source_publication_time",
+		},
+	}
+	run, skip, err := a.start(ctx, &m, listingHistoryRunInputs(provider, a.cfg.Universe))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+	client := b3.NewClient(a.http)
+	var collectErrs []error
+	evidence := make([]listingLifecycleEvidence, 0, len(provider.Notices))
+	for index, notice := range provider.Notices {
+		result, collectErr := client.CollectListingLifecycle(ctx, b3.ListingLifecycleRequest{URL: notice.URL})
+		if len(result.Resources) != 1 {
+			collectErrs = append(collectErrs, fmt.Errorf("B3 listing-history notice %d returned %d resources, want 1", index, len(result.Resources)))
+		} else {
+			resource := result.Resources[0]
+			fetchedAt := resourceFetchedAt(resource, m.StartedAt)
+			key := rawKey("b3", "listing-lifecycle", fmt.Sprintf("notice-%03d-%s", index, notice.Ticker), resource.Bytes, fetchedAt, "html")
+			logicalKey := fmt.Sprintf("b3/listing-history/ticker=%s/notice=%03d", notice.Ticker, index)
+			storedHash, storeErr := a.storeRaw(ctx, &m, key, resource.Bytes, storage.RawMetadata{
+				Source: "b3", ContentType: resource.ContentType, FetchedAt: fetchedAt,
+				Attributes: map[string]string{
+					"kind": resource.Kind, "ticker": notice.Ticker, "trading_name": notice.TradingName,
+					"notice_index": strconv.Itoa(index), "url": resource.URL,
+					"parser_version": resource.ParserVersion,
+				},
+			}, logicalKey, "b3/listing-history", resource.SHA256)
+			if storeErr != nil {
+				collectErrs = append(collectErrs, fmt.Errorf("B3 listing-history raw notice %d: %w", index, storeErr))
+			} else if len(result.Events) == 1 {
+				event := result.Events[0]
+				validFrom, parseErr := time.Parse(time.RFC3339, notice.ValidFrom)
+				if parseErr != nil {
+					collectErrs = append(collectErrs, fmt.Errorf("B3 listing-history notice %d valid_from: %w", index, parseErr))
+				} else if event.TradingName != notice.TradingName {
+					collectErrs = append(collectErrs, fmt.Errorf("B3 listing-history notice %d trading name %s does not match configured %s", index, event.TradingName, notice.TradingName))
+				} else {
+					evidence = append(evidence, listingLifecycleEvidence{
+						Ticker: notice.Ticker, TradingName: event.TradingName,
+						ValidFrom: validFrom.UTC(), ValidUntil: event.EffectiveAt,
+						AvailableAt: event.AvailableAt, RecordedAt: m.StartedAt,
+						RawRecordLocator: event.RawRecordLocator, RawPayloadHash: storedHash,
+					})
+				}
+			} else {
+				collectErrs = append(collectErrs, fmt.Errorf("B3 listing-history notice %d returned %d events, want 1", index, len(result.Events)))
+			}
+		}
+		if collectErr != nil {
+			collectErrs = append(collectErrs, collectErr)
+		}
+		m.Received += len(result.Events)
+	}
+	if collectErr := errors.Join(collectErrs...); collectErr != nil {
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	batch, err := listingHistoryBatch(run, a.cfg.Universe, evidence)
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	checker, ok := a.metadata.(historicalIdentityBaseChecker)
+	if !ok {
+		err = errors.New("B3 listing-history publication requires historical identity base checks")
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	for index, identifier := range batch.Identifiers {
+		exists, checkErr := checker.HistoricalIdentityBaseExists(ctx, run.DataSourceID, identifier.SecurityID, identifier.Value, identifier.IdentifierScope, identifier.ValidFrom)
+		if checkErr != nil {
+			err = fmt.Errorf("B3 listing-history base check %d: %w", index, checkErr)
+			return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+		}
+		if !exists {
+			err = fmt.Errorf("B3 listing-history ticker %s has no exact open-ended identifier/listing base", identifier.Value)
+			return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+		}
+	}
+	publisher, ok := a.metadata.(historicalTruthPublisher)
+	if !ok {
+		err = errors.New("canonical B3 listing-history publication requires a historical-truth metadata repository")
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	if err = publisher.PublishHistoricalTruth(ctx, batch); err != nil {
+		err = fmt.Errorf("B3 listing-history publication: %w", err)
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	m.OutputRows = len(batch.Identifiers) + len(batch.Listings)
+	m.Cursor["status"] = "canonical_published"
+	m.Cursor["identifier_corrections"] = len(batch.Identifiers)
+	m.Cursor["listing_corrections"] = len(batch.Listings)
+	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+func listingHistoryBatch(run metadata.Run, universe []config.Security, evidence []listingLifecycleEvidence) (metadata.HistoricalTruthBatch, error) {
+	requested := make(map[string]struct{}, len(evidence))
+	for _, event := range evidence {
+		requested[event.Ticker] = struct{}{}
+	}
+	byTicker := make(map[string]config.Security, len(requested))
+	for _, security := range universe {
+		if _, wanted := requested[security.Ticker]; !wanted {
+			continue
+		}
+		if _, duplicate := byTicker[security.Ticker]; duplicate {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("B3 listing-history ticker %s has ambiguous universe mappings", security.Ticker)
+		}
+		byTicker[security.Ticker] = security
+	}
+	batch := metadata.HistoricalTruthBatch{}
+	for _, event := range evidence {
+		security, exists := byTicker[event.Ticker]
+		if !exists {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("B3 listing-history ticker %s has no universe mapping", event.Ticker)
+		}
+		if event.TradingName == "" || !event.ValidUntil.After(event.ValidFrom) || event.AvailableAt.IsZero() || event.RecordedAt.Before(event.AvailableAt) || event.RawRecordLocator == "" || event.RawPayloadHash == "" {
+			return metadata.HistoricalTruthBatch{}, fmt.Errorf("B3 listing-history ticker %s has incomplete lifecycle evidence", event.Ticker)
+		}
+		validUntil := canonicalTime(event.ValidUntil)
+		sourceReference := "b3/" + event.RawRecordLocator
+		identifierID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
+			"identifier-correction", run.DataSourceID, security.SecurityID, "ticker", event.Ticker,
+			security.MIC, event.ValidFrom.UTC().Format(time.RFC3339Nano), validUntil.Format(time.RFC3339Nano), "1",
+		}, "/"))).String()
+		listingID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
+			"listing-correction", run.DataSourceID, security.SecurityID, security.MIC,
+			event.ValidFrom.UTC().Format(time.RFC3339Nano), validUntil.Format(time.RFC3339Nano), "1",
+		}, "/"))).String()
+		issuerID := security.IssuerID
+		batch.Identifiers = append(batch.Identifiers, metadata.SecurityIdentifierVersion{
+			SchemaVersion: metadata.HistoricalSchemaVersion, ID: identifierID,
+			SecurityID: security.SecurityID, IdentifierType: "ticker", Value: event.Ticker,
+			NormalizedValue: event.Ticker, IdentifierScope: security.MIC,
+			ValidFrom: canonicalTime(event.ValidFrom), ValidUntil: &validUntil,
+			AvailableAt: canonicalTime(event.AvailableAt), SourceReference: sourceReference,
+			RecordedAt: canonicalTime(event.RecordedAt), DataSourceID: run.DataSourceID,
+			RawPayloadHash: event.RawPayloadHash, Revision: 1, IsPrimary: security.PrimaryListing,
+		})
+		batch.Listings = append(batch.Listings, metadata.SecurityListingVersion{
+			SchemaVersion: metadata.HistoricalSchemaVersion, ID: listingID,
+			SecurityID: security.SecurityID, IssuerID: &issuerID,
+			Exchange: security.Exchange, MIC: security.MIC, Currency: security.Currency,
+			PrimaryListing: security.PrimaryListing, ValidFrom: canonicalTime(event.ValidFrom),
+			ValidUntil: &validUntil, AvailableAt: canonicalTime(event.AvailableAt),
+			SourceReference: sourceReference, RecordedAt: canonicalTime(event.RecordedAt),
+			DataSourceID: run.DataSourceID, RawPayloadHash: event.RawPayloadHash, Revision: 1,
+		})
+	}
+	return batch, nil
 }
 
 func (a *app) storeCalendarResources(ctx context.Context, m *metrics, source string, year int, resources []providers.RawResource) error {
@@ -2010,6 +2191,35 @@ func membershipRunInputs(source string, provider config.IndexMembershipProvider,
 			Name: source, Kind: "universe_membership", ConfiguredUniverseCount: len(configured),
 			MembershipUniverseID: provider.UniverseID, MembershipNotices: notices,
 			MembershipSecurities: configured, Format: "html", Vintage: "historical_source_publication",
+		},
+	}
+}
+
+func listingHistoryRunInputs(provider config.ListingHistoryProvider, universe []config.Security) metadata.RunInputs {
+	notices := append([]config.ListingHistoryNotice(nil), provider.Notices...)
+	sort.Slice(notices, func(i, j int) bool {
+		if notices[i].Ticker != notices[j].Ticker {
+			return notices[i].Ticker < notices[j].Ticker
+		}
+		return notices[i].URL < notices[j].URL
+	})
+	byTicker := make(map[string]config.Security, len(universe))
+	for _, security := range universe {
+		byTicker[security.Ticker] = security
+	}
+	inputs := make([]metadata.ListingHistoryInput, 0, len(notices))
+	for _, notice := range notices {
+		inputs = append(inputs, metadata.ListingHistoryInput{
+			SecurityID: byTicker[notice.Ticker].SecurityID, Ticker: notice.Ticker,
+			TradingName: notice.TradingName, ValidFrom: notice.ValidFrom, NoticeURL: notice.URL,
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "b3",
+		Provider: metadata.ProviderInputs{
+			Name: "b3", Kind: "security_listing_lifecycle", ConfiguredUniverseCount: len(inputs),
+			ListingHistoryNotices: inputs, Format: "html", Vintage: "historical_source_publication",
 		},
 	}
 }

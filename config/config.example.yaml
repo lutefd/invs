@@ -63,6 +63,9 @@ providers:
     universe_id: ibovespa
     tickers: []
     notices: []
+  b3_listing_history:
+    enabled: false
+    notices: []
   cvm:
     enabled: false
     cad: true

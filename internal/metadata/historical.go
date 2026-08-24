@@ -192,6 +192,29 @@ SELECT record_hash FROM calendar_manifests WHERE id=$1`
 const selectTradingSessionHashSQL = `
 SELECT record_hash FROM trading_sessions WHERE id=$1`
 
+const historicalIdentityBaseExistsSQL = `
+SELECT EXISTS (
+    SELECT 1
+    FROM security_identifier_versions
+    WHERE data_source_id=$1::uuid
+      AND security_id=$2::uuid
+      AND identifier_type='ticker'
+      AND normalized_value=$3
+      AND identifier_scope=$4
+      AND valid_from=$5::timestamptz
+      AND valid_until IS NULL
+      AND revision=0
+) AND EXISTS (
+    SELECT 1
+    FROM security_listing_versions
+    WHERE data_source_id=$1::uuid
+      AND security_id=$2::uuid
+      AND mic=$4
+      AND valid_from=$5::timestamptz
+      AND valid_until IS NULL
+      AND revision=0
+)`
+
 const resolveSecurityIdentifierSQL = `
 SELECT id::text, schema_version, security_id::text, identifier_type, value,
        normalized_value, identifier_scope, valid_from, valid_until, available_at,
@@ -681,6 +704,20 @@ func utcPointer(value *time.Time) any {
 		return nil
 	}
 	return value.UTC()
+}
+
+// HistoricalIdentityBaseExists proves that a lifecycle correction has the exact
+// open-ended source assertion it intends to supersede.
+func (r *Repository) HistoricalIdentityBaseExists(ctx context.Context, dataSourceID, securityID, ticker, mic string, validFrom time.Time) (bool, error) {
+	if r == nil {
+		return false, errors.New("PostgreSQL metadata repository is required for historical identity checks")
+	}
+	var exists bool
+	err := r.pool.QueryRow(ctx, historicalIdentityBaseExistsSQL,
+		dataSourceID, securityID, strings.ToUpper(strings.TrimSpace(ticker)),
+		strings.ToUpper(strings.TrimSpace(mic)), validFrom.UTC(),
+	).Scan(&exists)
+	return exists, err
 }
 
 func sameRank(availableA time.Time, revisionA int, recordedA time.Time, availableB time.Time, revisionB int, recordedB time.Time) bool {

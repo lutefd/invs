@@ -171,6 +171,55 @@ func TestValidateIndexMembershipProvidersRequireAdmittedNoticesAndScopedMappings
 	}
 }
 
+func TestValidateB3ListingHistoryRequiresMembershipBackedExactMapping(t *testing.T) {
+	c := validConfig()
+	c.Providers.Prices.Enabled = false
+	c.Providers.FRED.Enabled = false
+	c.Universe[0].CountryCode = "BR"
+	c.Universe[0].Ticker = "PETZ3"
+	c.Universe[0].Exchange = "B3"
+	c.Universe[0].MIC = "BVMF"
+	c.Universe[0].Currency = "BRL"
+	c.Universe[0].PrimaryListing = true
+	c.Providers.B3Membership = IndexMembershipProvider{
+		Enabled: true, UniverseID: "ibovespa", Tickers: []string{"PETZ3"},
+		Notices: []string{"https://www.b3.com.br/pt_br/noticias/example.htm"},
+	}
+	c.Providers.B3ListingHistory = ListingHistoryProvider{
+		Enabled: true,
+		Notices: []ListingHistoryNotice{{
+			URL:         "https://sistemasweb.b3.com.br/PlantaoNoticias/Noticias/Detail?agencia=18&dataNoticia=2026-01-02+19%3A43%3A10&idNoticia=3192104",
+			TradingName: "PETZ", Ticker: "PETZ3", ValidFrom: "2021-09-06T03:00:00Z",
+		}},
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valid B3 listing history: %v", err)
+	}
+
+	for name, mutate := range map[string]func(*Config){
+		"membership disabled": func(candidate *Config) { candidate.Providers.B3Membership.Enabled = false },
+		"untrusted URL": func(candidate *Config) {
+			candidate.Providers.B3ListingHistory.Notices[0].URL = "https://example.com/notice"
+		},
+		"unbacked ticker": func(candidate *Config) {
+			candidate.Providers.B3ListingHistory.Notices[0].Ticker = "VALE3"
+		},
+		"noncanonical valid from": func(candidate *Config) {
+			candidate.Providers.B3ListingHistory.Notices[0].ValidFrom = "2021-09-06"
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := c
+			candidate.Providers.B3Membership.Tickers = append([]string(nil), c.Providers.B3Membership.Tickers...)
+			candidate.Providers.B3ListingHistory.Notices = append([]ListingHistoryNotice(nil), c.Providers.B3ListingHistory.Notices...)
+			mutate(&candidate)
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid B3 listing-history configuration accepted")
+			}
+		})
+	}
+}
+
 func TestValidateExchangeCalendarProviders(t *testing.T) {
 	c := validConfig()
 	c.Providers.NYSE = CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-01-01", CoverageEnd: "2026-12-31"}
