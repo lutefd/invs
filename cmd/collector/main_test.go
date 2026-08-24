@@ -504,6 +504,15 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	if got := b3Inputs.Provider.B3Instruments[0]; got.Ticker != "PETR4" || got.ISIN != "BRPETRACNPR6" {
 		t.Fatalf("B3 inputs were not sorted/captured exactly: %+v", b3Inputs.Provider.B3Instruments)
 	}
+	b3PriceProvider := config.B3HistoricalPriceProvider{Year: 2021, Start: "2021-09-06", End: "2021-09-10", Tickers: []string{"PETZ3"}}
+	b3PriceSecurities := b3HistoricalPriceSecurities(b3PriceProvider, []config.Security{{SecurityID: "security-petz", Ticker: "PETZ3", ISIN: "BRPETZACNOR2", Currency: "BRL"}})
+	b3PriceInputs := b3HistoricalPricesRunInputs(b3PriceProvider, b3PriceSecurities)
+	if b3PriceInputs.Source != "b3_cotahist" || b3PriceInputs.Provider.Kind != "market_data" || b3PriceInputs.Provider.B3HistoricalQuoteYear != 2021 || b3PriceInputs.Provider.Vintage != "installation_receipt" || len(b3PriceInputs.Provider.SecurityRequests) != 1 {
+		t.Fatalf("B3 historical price inputs = %+v", b3PriceInputs)
+	}
+	if got := b3PriceInputs.Provider.SecurityRequests[0]; got.SecurityID != "security-petz" || got.VendorSymbol != "PETZ3" || got.Currency != "BRL" || got.Start != "2021-09-06" || got.End != "2021-09-10" || got.Events != "closed_annual_archive" {
+		t.Fatalf("B3 historical price request = %+v", got)
+	}
 	calendarInputs := calendarRunInputs("nyse", "XNYS", config.CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-01-01", CoverageEnd: "2026-12-31"})
 	if calendarInputs.Source != "nyse" || calendarInputs.Provider.Kind != "market_calendar" || calendarInputs.Provider.CalendarYear != 2026 || calendarInputs.Provider.CalendarMIC != "XNYS" || calendarInputs.Provider.CalendarCoverageStart != "2026-01-01" || calendarInputs.Provider.Vintage != "current_reference_receipt_time" {
 		t.Fatalf("calendar run inputs = %+v", calendarInputs)
@@ -567,7 +576,7 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		t.Fatalf("corporate-action run inputs = %+v", actionInputs)
 	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, ptaxInputs, b3Inputs, calendarInputs, historicalCalendarInputs, membershipInputs, listingHistoryInputs, actionInputs} {
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, ptaxInputs, b3Inputs, b3PriceInputs, calendarInputs, historicalCalendarInputs, membershipInputs, listingHistoryInputs, actionInputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -1557,6 +1566,50 @@ func TestCollectorValidatesBCBSourceSelection(t *testing.T) {
 	}
 	if err := app.run(context.Background(), "ptax"); err == nil || !strings.Contains(err.Error(), "PTAX provider is disabled") {
 		t.Fatalf("disabled PTAX error = %v", err)
+	}
+	if err := app.run(context.Background(), "b3-prices"); err == nil || !strings.Contains(err.Error(), "B3 historical prices provider is disabled") {
+		t.Fatalf("disabled B3 historical prices error = %v", err)
+	}
+}
+
+func TestCollectorB3HistoricalPricesRetainsRawOnParseFailure(t *testing.T) {
+	payload := []byte("not a ZIP archive")
+	raw := &orderingRawStore{}
+	run := testRun()
+	var finalized metadata.Metrics
+	app := &app{
+		cfg: config.Config{
+			Providers: config.Providers{B3HistoricalPrices: config.B3HistoricalPriceProvider{
+				Enabled: true, Year: 2021, Start: "2021-09-06", End: "2021-09-10", Tickers: []string{"PETZ3"},
+			}},
+			Universe: []config.Security{{SecurityID: testSecurityID, Ticker: "PETZ3", ISIN: "BRPETZACNOR2", Currency: "BRL"}},
+		},
+		raw: raw, normalized: &orderingNormalizedStore{raw: raw},
+		http: collectorHTTPFake{payload: payload},
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onStartInputs: func(inputs metadata.RunInputs) {
+			if inputs.Source != "b3_cotahist" || inputs.Provider.B3HistoricalQuoteYear != 2021 {
+				t.Errorf("B3 historical price run inputs = %+v", inputs)
+			}
+		}, onFinalize: func(m metadata.Metrics, prices []model.PriceBar, macros []model.EconomicObservation) {
+			finalized = m
+			if len(prices) != 0 || len(macros) != 0 {
+				t.Errorf("failed B3 price run finalized canonical rows")
+			}
+		}},
+		batchKey: "b3-price-raw-first-test",
+		now:      func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) },
+	}
+
+	err := app.run(context.Background(), "b3-prices")
+	if err == nil || !strings.Contains(err.Error(), "open ZIP") {
+		t.Fatalf("error = %v, want ZIP parse failure", err)
+	}
+	if len(raw.payloads) != 1 || !bytes.Equal(raw.payloads[0], payload) {
+		t.Fatalf("downloaded ZIP evidence was not retained: %#v", raw.payloads)
+	}
+	if finalized.RawPayloads != 1 || finalized.Written != 0 || finalized.Err == nil || finalized.RawPayloadManifestHash == "" {
+		t.Fatalf("finalized metrics = %+v", finalized)
 	}
 }
 

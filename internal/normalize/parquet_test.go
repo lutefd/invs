@@ -389,15 +389,24 @@ func TestPriceV1LosslessIdempotentAndQueryable(t *testing.T) {
 
 func TestPriceV1PreservesRawBasisForExplicitRawSource(t *testing.T) {
 	w, _ := NewWriter(t.TempDir())
-	bar := price(time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC))
-	bar.Source = "fixture"
+	observed := time.Date(2021, 9, 8, 0, 0, 0, 0, time.UTC)
+	receipt := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	bar := price(observed)
+	bar.Source = "b3_cotahist"
 	bar.PriceBasis = "raw"
+	bar.Currency = "BRL"
+	bar.Temporal = model.Temporal{
+		ObservedAt: observed, ObservedPrecision: model.PrecisionDate,
+		PublishedPrecision: model.PrecisionUnknown, AvailableAt: receipt, IngestedAt: receipt,
+	}
+	bar.Provenance.IngestedAt = receipt
+	bar.Provenance.NormalizerVersion = "b3-cotahist-v1"
 	path, n, err := w.WritePrices(securityID, []model.PriceBar{bar})
 	if err != nil || n != 1 {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
 	rows := rowsFromManifest[PriceRow](t, path)
-	if len(rows) != 1 || rows[0].PriceBasis != "raw" {
+	if len(rows) != 1 || rows[0].Source != "b3_cotahist" || rows[0].PriceBasis != "raw" || rows[0].ObservedPrecision != "date" || rows[0].HasPublishedAt || rows[0].AvailableAt != receipt.UnixMicro() {
 		t.Fatalf("rows=%+v", rows)
 	}
 }

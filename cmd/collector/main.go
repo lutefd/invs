@@ -201,7 +201,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, sec-actions, prices, fred, alfred, bcb, ptax, b3, b3-action-replay, b3-calendar, b3-calendar-history, b3-membership, b3-listing-history, nasdaq-calendar-history, nasdaq-membership, nyse, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, sec-actions, prices, fred, alfred, bcb, ptax, b3, b3-prices, b3-action-replay, b3-calendar, b3-calendar-history, b3-membership, b3-listing-history, nasdaq-calendar-history, nasdaq-membership, nyse, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -329,7 +329,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "sec-actions": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "ptax": true, "b3": true, "b3-action-replay": true, "b3-calendar": true, "b3-calendar-history": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-calendar-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "sec-actions": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "ptax": true, "b3": true, "b3-prices": true, "b3-action-replay": true, "b3-calendar": true, "b3-calendar-history": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-calendar-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -353,6 +353,9 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "b3" && !a.cfg.Providers.B3.Enabled {
 		return errors.New("B3 provider is disabled")
+	}
+	if source == "b3-prices" && !a.cfg.Providers.B3HistoricalPrices.Enabled {
+		return errors.New("B3 historical prices provider is disabled")
 	}
 	if source == "b3-calendar" && (!a.cfg.Providers.B3.Enabled || !a.cfg.Providers.B3.Calendar.Enabled) {
 		return errors.New("B3 calendar provider is disabled")
@@ -417,6 +420,11 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "b3") && a.cfg.Providers.B3.Enabled {
 		if err := a.collectB3(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "b3-prices") && a.cfg.Providers.B3HistoricalPrices.Enabled {
+		if err := a.collectB3HistoricalPrices(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -625,6 +633,92 @@ func (a *app) collectPrices(ctx context.Context) error {
 	}
 	collectErr := errors.Join(errs...)
 	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, snapshots, nil))
+}
+
+func (a *app) collectB3HistoricalPrices(ctx context.Context) error {
+	provider := a.cfg.Providers.B3HistoricalPrices
+	start, err := time.Parse(time.DateOnly, provider.Start)
+	if err != nil {
+		return fmt.Errorf("b3_historical_prices.start: %w", err)
+	}
+	end, err := time.Parse(time.DateOnly, provider.End)
+	if err != nil {
+		return fmt.Errorf("b3_historical_prices.end: %w", err)
+	}
+	securities := b3HistoricalPriceSecurities(provider, a.cfg.Universe)
+	m := metrics{Source: "b3_cotahist", StartedAt: a.nowUTC(), Cursor: map[string]any{
+		"provider": "b3_cotahist", "kind": "historical_quotes", "year": provider.Year,
+		"historical_fitness": "installation_replay_receipt_time",
+	}}
+	run, skip, runErr := a.start(ctx, &m, b3HistoricalPricesRunInputs(provider, securities))
+	if runErr != nil {
+		return runErr
+	}
+	if skip {
+		return nil
+	}
+	requestSecurities := make([]b3.HistoricalQuoteSecurity, 0, len(securities))
+	for _, security := range securities {
+		requestSecurities = append(requestSecurities, b3.HistoricalQuoteSecurity{
+			SecurityID: security.SecurityID, Ticker: security.Ticker, ISIN: security.ISIN, Currency: security.Currency,
+		})
+	}
+	result, collectErr := b3.NewClient(a.http).CollectHistoricalQuotes(ctx, b3.HistoricalQuotesRequest{
+		Year: provider.Year, Start: start, End: end, Securities: requestSecurities,
+	})
+	m.Received += result.RecordsReceived
+	m.Rejected += result.RecordsRejected
+	m.Cursor["duplicates"] = result.Duplicates
+	var errs []error
+	if collectErr != nil {
+		errs = append(errs, collectErr)
+	}
+	var resource providers.RawResource
+	if len(result.Resources) != 1 {
+		errs = append(errs, fmt.Errorf("B3 historical quotes returned %d downloaded resources, want 1", len(result.Resources)))
+	} else {
+		resource = result.Resources[0]
+		fetchedAt := resourceFetchedAt(resource, m.StartedAt)
+		key := rawKey("marketdata", "b3_cotahist", fmt.Sprintf("year-%d", provider.Year), resource.Bytes, fetchedAt, "zip")
+		_, storeErr := a.storeRaw(ctx, &m, key, resource.Bytes, storage.RawMetadata{
+			Source: "b3_cotahist", ContentType: resource.ContentType, FetchedAt: fetchedAt,
+			Attributes: map[string]string{
+				"year": strconv.Itoa(provider.Year), "start": provider.Start, "end": provider.End,
+				"availability_policy": "installation_receipt", "price_basis": "raw",
+			},
+		}, fmt.Sprintf("b3_cotahist/historical_quotes/year/%d", provider.Year), "b3_cotahist", resource.SHA256)
+		if storeErr != nil {
+			errs = append(errs, storeErr)
+		}
+	}
+	var snapshots []model.PriceBar
+	if collectErr == nil && len(result.Resources) == 1 && len(errs) == 0 {
+		for _, security := range securities {
+			bars := result.Bars[security.SecurityID]
+			if len(bars) == 0 {
+				errs = append(errs, fmt.Errorf("B3 historical quotes security %s has no bounded bars", security.SecurityID))
+				continue
+			}
+			if err := stampPrices(run, resource.SHA256, bars); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			path, rows, writeErr := a.normalized.WritePrices(security.SecurityID, bars)
+			if writeErr != nil {
+				errs = append(errs, writeErr)
+				continue
+			}
+			snapshots = append(snapshots, bars...)
+			m.OutputRows += rows
+			m.Cursor["last_security_id"] = security.SecurityID
+			a.log.Info("normalized dataset", "source", "b3_cotahist", "security_id", security.SecurityID, "path", path, "rows", len(bars), "rows_changed", rows)
+		}
+	}
+	if m.Rejected > 0 {
+		errs = append(errs, fmt.Errorf("%d records rejected", m.Rejected))
+	}
+	finalErr := errors.Join(errs...)
+	return errors.Join(finalErr, a.finish(ctx, run, m, finalErr, snapshots, nil))
 }
 
 func (a *app) collectFRED(ctx context.Context) error {
@@ -2607,6 +2701,39 @@ func pricesRunInputs(universe []config.Security, start, end time.Time) metadata.
 			Kind:                    "market_data",
 			ConfiguredUniverseCount: len(universe),
 			SecurityRequests:        requests,
+		},
+	}
+}
+
+func b3HistoricalPriceSecurities(provider config.B3HistoricalPriceProvider, universe []config.Security) []config.Security {
+	byTicker := make(map[string]config.Security, len(universe))
+	for _, security := range universe {
+		byTicker[strings.TrimSpace(security.Ticker)] = security
+	}
+	tickers := append([]string(nil), provider.Tickers...)
+	sort.Strings(tickers)
+	securities := make([]config.Security, 0, len(tickers))
+	for _, ticker := range tickers {
+		securities = append(securities, byTicker[strings.TrimSpace(ticker)])
+	}
+	return securities
+}
+
+func b3HistoricalPricesRunInputs(provider config.B3HistoricalPriceProvider, securities []config.Security) metadata.RunInputs {
+	requests := make([]metadata.SecurityRequest, 0, len(securities))
+	for _, security := range securities {
+		requests = append(requests, metadata.SecurityRequest{
+			SecurityID: security.SecurityID, VendorSymbol: security.Ticker, Currency: security.Currency,
+			Start: provider.Start, End: provider.End, Interval: "1d", Events: "closed_annual_archive",
+		})
+	}
+	return metadata.RunInputs{
+		SchemaVersion: metadata.RunInputsSchemaVersion,
+		Source:        "b3_cotahist",
+		Provider: metadata.ProviderInputs{
+			Name: "b3_cotahist", Kind: "market_data", ConfiguredUniverseCount: len(requests),
+			SecurityRequests: requests, Format: "cotahist_fixed_width_zip", Vintage: "installation_receipt",
+			B3HistoricalQuoteYear: provider.Year,
 		},
 	}
 }
