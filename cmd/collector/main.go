@@ -526,13 +526,25 @@ func (a *app) collectSEC(ctx context.Context) error {
 			errs = append(errs, err)
 			continue
 		}
-		path, n, err := a.normalized.WriteFundamentals(s.IssuerID, r.Facts)
-		if err != nil {
+		if err := stampFilings(run, rawHashes["submissions"], r.Filings); err != nil {
 			errs = append(errs, err)
+			continue
+		}
+		fundamentalPath, fundamentalRows, fundamentalErr := a.normalized.WriteFundamentals(s.IssuerID, r.Facts)
+		if fundamentalErr != nil {
+			errs = append(errs, fmt.Errorf("SEC issuer %s fundamentals: %w", s.IssuerID, fundamentalErr))
 		} else {
-			m.OutputRows += n
+			m.OutputRows += fundamentalRows
 			m.Cursor["last_issuer_id"] = s.IssuerID
-			a.log.Info("normalized dataset", "source", "sec", "issuer_id", s.IssuerID, "path", path, "rows", len(r.Facts), "legal_name", r.Issuer.LegalName, "filings", len(r.Filings))
+			a.log.Info("normalized dataset", "source", "sec", "dataset", "fundamentals", "issuer_id", s.IssuerID, "path", fundamentalPath, "rows", len(r.Facts), "rows_changed", fundamentalRows, "legal_name", r.Issuer.LegalName)
+		}
+		filingPath, filingRows, filingErr := a.normalized.WriteFilings(s.IssuerID, r.Filings)
+		if filingErr != nil {
+			errs = append(errs, fmt.Errorf("SEC issuer %s filings: %w", s.IssuerID, filingErr))
+		} else {
+			m.OutputRows += filingRows
+			m.Cursor["last_filing_issuer_id"] = s.IssuerID
+			a.log.Info("normalized dataset", "source", "sec", "dataset", "filings", "issuer_id", s.IssuerID, "path", filingPath, "rows", len(r.Filings), "rows_changed", filingRows)
 		}
 	}
 	if m.Rejected > 0 {
@@ -2959,6 +2971,15 @@ func stampEconomics(run metadata.Run, rawHash string, observations []model.Econo
 	for i := range observations {
 		if err := stampProvenance(run, rawHash, &observations[i].RawPayloadHash, &observations[i].Provenance, observations[i].Temporal); err != nil {
 			return fmt.Errorf("economic observation %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func stampFilings(run metadata.Run, rawHash string, filings []model.Filing) error {
+	for i := range filings {
+		if err := stampProvenance(run, rawHash, &filings[i].RawPayloadHash, &filings[i].Provenance, filings[i].Temporal); err != nil {
+			return fmt.Errorf("filing %d: %w", i, err)
 		}
 	}
 	return nil

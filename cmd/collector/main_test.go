@@ -182,45 +182,52 @@ func (s *orderingRawStore) Get(context.Context, string) (io.ReadCloser, storage.
 }
 
 type orderingNormalizedStore struct {
-	raw            *orderingRawStore
-	expectedRun    metadata.Run
-	expectedHash   string
-	expectedSource string
-	locatorPrefix  string
-	zeroRows       bool
-	prices         []model.PriceBar
-	fundamentals   []model.FundamentalObservation
-	economics      []model.EconomicObservation
-	filings        []model.Filing
-	fx             []model.FXObservation
+	raw                      *orderingRawStore
+	expectedRun              metadata.Run
+	expectedHash             string
+	expectedFilingHash       string
+	expectedFilingNormalizer string
+	expectedSource           string
+	locatorPrefix            string
+	filingLocatorPrefix      string
+	zeroRows                 bool
+	prices                   []model.PriceBar
+	fundamentals             []model.FundamentalObservation
+	economics                []model.EconomicObservation
+	filings                  []model.Filing
+	fx                       []model.FXObservation
 }
 
 func (s *orderingNormalizedStore) beforeWrite(kind string) error {
-	if !s.raw.completed || len(s.raw.events) == 0 || s.raw.events[len(s.raw.events)-1] != "raw:put:complete" {
-		return fmt.Errorf("%s canonical writer called before the latest raw Put completed", kind)
+	if !s.raw.completed || len(s.raw.events) == 0 {
+		return fmt.Errorf("%s canonical writer called before raw Put completed", kind)
 	}
 	s.raw.events = append(s.raw.events, "canonical:"+kind+":write")
 	return nil
 }
 
 func (s *orderingNormalizedStore) inspect(source, rawHash, locator string, provenance model.Provenance, temporal model.Temporal) error {
+	return s.inspectExpected(source, rawHash, locator, provenance, temporal, s.expectedHash, s.locatorPrefix, model.NormalizerVersion)
+}
+
+func (s *orderingNormalizedStore) inspectExpected(source, rawHash, locator string, provenance model.Provenance, temporal model.Temporal, expectedHash, locatorPrefix, expectedNormalizer string) error {
 	if source != s.expectedSource {
 		return fmt.Errorf("normalized source %q, want %q", source, s.expectedSource)
 	}
-	if rawHash != s.expectedHash || provenance.RawPayloadHash != s.expectedHash {
-		return fmt.Errorf("normalized raw hashes = %q and %q, want %q", rawHash, provenance.RawPayloadHash, s.expectedHash)
+	if rawHash != expectedHash || provenance.RawPayloadHash != expectedHash {
+		return fmt.Errorf("normalized raw hashes = %q and %q, want %q", rawHash, provenance.RawPayloadHash, expectedHash)
 	}
 	if provenance.DataSourceID != s.expectedRun.DataSourceID || provenance.IngestionRunID != s.expectedRun.ID {
 		return fmt.Errorf("normalized run provenance = data_source_id %q, ingestion_run_id %q; want %q, %q", provenance.DataSourceID, provenance.IngestionRunID, s.expectedRun.DataSourceID, s.expectedRun.ID)
 	}
-	if provenance.RawRecordLocator == "" || !strings.HasPrefix(locator, s.locatorPrefix) {
-		return fmt.Errorf("normalized raw locator %q, want prefix %q", locator, s.locatorPrefix)
+	if provenance.RawRecordLocator == "" || !strings.HasPrefix(locator, locatorPrefix) {
+		return fmt.Errorf("normalized raw locator %q, want prefix %q", locator, locatorPrefix)
 	}
 	if provenance.IngestedAt.IsZero() || !provenance.IngestedAt.Equal(temporal.IngestedAt) {
 		return fmt.Errorf("normalized ingested_at mismatch: provenance=%s temporal=%s", provenance.IngestedAt, temporal.IngestedAt)
 	}
-	if provenance.NormalizerVersion != model.NormalizerVersion {
-		return fmt.Errorf("normalized version %q, want %q", provenance.NormalizerVersion, model.NormalizerVersion)
+	if provenance.NormalizerVersion != expectedNormalizer {
+		return fmt.Errorf("normalized version %q, want %q", provenance.NormalizerVersion, expectedNormalizer)
 	}
 	return nil
 }
@@ -276,8 +283,20 @@ func (s *orderingNormalizedStore) WriteFilings(_ string, observations []model.Fi
 	if err := s.beforeWrite("filings"); err != nil {
 		return "", 0, err
 	}
+	expectedHash := s.expectedHash
+	if s.expectedFilingHash != "" {
+		expectedHash = s.expectedFilingHash
+	}
+	locatorPrefix := s.locatorPrefix
+	if s.filingLocatorPrefix != "" {
+		locatorPrefix = s.filingLocatorPrefix
+	}
+	normalizer := model.NormalizerVersion
+	if s.expectedFilingNormalizer != "" {
+		normalizer = s.expectedFilingNormalizer
+	}
 	for _, observation := range observations {
-		if err := s.inspect(observation.Source, observation.RawPayloadHash, observation.Provenance.RawRecordLocator, observation.Provenance, observation.Temporal); err != nil {
+		if err := s.inspectExpected(observation.Source, observation.RawPayloadHash, observation.Provenance.RawRecordLocator, observation.Provenance, observation.Temporal, expectedHash, locatorPrefix, normalizer); err != nil {
 			return "", 0, err
 		}
 	}
@@ -1192,7 +1211,7 @@ func TestCollectorB3ListingHistoryRejectsMissingBase(t *testing.T) {
 }
 
 func TestCollectorSECStoresRawBeforeNormalizedWrite(t *testing.T) {
-	secSubmissions := []byte(`{"cik":"0000000001","sic":"3571","name":"Example Corp","stateOfIncorporation":"DE","sicDescription":"Widgets","filings":{"recent":{"accessionNumber":["0001"],"filingDate":["2024-02-02"],"acceptanceDateTime":["2024-02-02T21:03:04.000Z"],"form":["10-K"],"primaryDocument":["example.htm"]}}}`)
+	secSubmissions := []byte(`{"cik":"0000000001","sic":"3571","name":"Example Corp","stateOfIncorporation":"DE","sicDescription":"Widgets","filings":{"recent":{"accessionNumber":["0001"],"filingDate":["2024-02-02"],"reportDate":["2023-12-31"],"acceptanceDateTime":["2024-02-02T21:03:04.000Z"],"form":["10-K"],"primaryDocument":["example.htm"]}}}`)
 	secFacts := []byte(`{"cik":1,"facts":{"us-gaap":{"Revenue":{"label":"Revenue","units":{"USD":[{"start":"2023-01-01","end":"2023-12-31","val":123.5,"accn":"0001","fy":2023,"fp":"FY","form":"10-K","filed":"2024-02-02"}]}}}}}`)
 	raw := &orderingRawStore{}
 	run := testRun()
@@ -1203,11 +1222,14 @@ func TestCollectorSECStoresRawBeforeNormalizedWrite(t *testing.T) {
 		},
 		raw: raw,
 		normalized: &orderingNormalizedStore{
-			raw:            raw,
-			expectedRun:    run,
-			expectedHash:   hashPayload(secFacts),
-			expectedSource: "sec",
-			locatorPrefix:  "companyfacts/",
+			raw:                      raw,
+			expectedRun:              run,
+			expectedHash:             hashPayload(secFacts),
+			expectedFilingHash:       hashPayload(secSubmissions),
+			expectedFilingNormalizer: "sec-submissions-v1",
+			expectedSource:           "sec",
+			locatorPrefix:            "companyfacts/",
+			filingLocatorPrefix:      "filings/recent/",
 		},
 		http: collectorHTTPFake{responses: map[string][]byte{
 			"submissions/CIK0000000001.json":  secSubmissions,
@@ -1221,11 +1243,15 @@ func TestCollectorSECStoresRawBeforeNormalizedWrite(t *testing.T) {
 	if err := app.run(context.Background(), "sec"); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "raw:put:complete", "canonical:fundamentals:write"}) {
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "raw:put:complete", "canonical:fundamentals:write", "canonical:filings:write"}) {
 		t.Fatalf("publication order = %v", raw.events)
 	}
 	if got := len(app.normalized.(*orderingNormalizedStore).fundamentals); got != 1 {
 		t.Fatalf("fundamental observations = %d, want 1", got)
+	}
+	filings := app.normalized.(*orderingNormalizedStore).filings
+	if len(filings) != 1 || filings[0].SourceDocumentID != "0001" || filings[0].FormType != "10-K" || filings[0].PeriodEnd == nil {
+		t.Fatalf("canonical SEC filings = %+v", filings)
 	}
 }
 
