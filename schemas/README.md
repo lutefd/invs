@@ -68,6 +68,14 @@ CVM CAD is a current issuer snapshot, not versioned filing history. The collecto
 retains it as raw ingestion-only evidence; it is excluded from historical filing
 claims and must not be joined into an as-of research snapshot.
 
+`fx-observation.schema.json` defines the first canonical FX dataset. The admitted
+source is BCB PTAX closing USD/BRL, with the pair orientation, buy and sell rates,
+source fixing timezone, exact bulletin availability, revision, and local receipt
+recorded explicitly. Its manifest-backed Parquet partition is
+`fx/source=bcb_ptax/pair=USD-BRL/`; runtime validation additionally requires positive
+rates, `buy_rate <= sell_rate`, and equality of fixing, publication, and availability
+timestamps for this source contract.
+
 All timestamps are UTC RFC 3339 values ending in `Z`. Financial decimals are strings
 so Go, Python, JSON, and Parquet conversions do not silently round them.
 

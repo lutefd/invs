@@ -109,6 +109,32 @@ type EconomicRow struct {
 	NormalizerVersion     string `parquet:"normalizer_version"`
 }
 
+// FXRow is the physical v1 representation of one source-issued exchange-rate
+// bulletin. Rates remain exact decimal strings and the pair orientation is
+// stored with every row.
+type FXRow struct {
+	SchemaVersion     string `parquet:"schema_version"`
+	ID                string `parquet:"id"`
+	Source            string `parquet:"source"`
+	BaseCurrency      string `parquet:"base_currency"`
+	QuoteCurrency     string `parquet:"quote_currency"`
+	RateKind          string `parquet:"rate_kind"`
+	FixingTimezone    string `parquet:"fixing_timezone"`
+	BuyRate           string `parquet:"buy_rate"`
+	SellRate          string `parquet:"sell_rate"`
+	FixingAt          int64  `parquet:"fixing_at,timestamp(microsecond:utc)"`
+	PublishedAt       int64  `parquet:"published_at,timestamp(microsecond:utc)"`
+	AvailableAt       int64  `parquet:"available_at,timestamp(microsecond:utc)"`
+	RecordedAt        int64  `parquet:"recorded_at,timestamp(microsecond:utc)"`
+	Revision          int32  `parquet:"revision"`
+	SourceRecordID    string `parquet:"source_record_id"`
+	RawPayloadHash    string `parquet:"raw_payload_hash"`
+	DataSourceID      string `parquet:"data_source_id"`
+	IngestionRunID    string `parquet:"ingestion_run_id"`
+	RawRecordLocator  string `parquet:"raw_record_locator"`
+	NormalizerVersion string `parquet:"normalizer_version"`
+}
+
 // FilingRow is the physical v1 representation of source-document metadata.
 // Presence flags keep nullable temporal fields distinct from the Unix epoch;
 // available_at and ingested_at are always present. Source metadata strings are
@@ -242,6 +268,8 @@ func (w *Writer) ValidateExisting() error {
 			_, readErr = readCommitted[FundamentalRow](dir, partition)
 		case "macroeconomics":
 			_, readErr = readCommitted[EconomicRow](dir, partition)
+		case "fx":
+			_, readErr = readCommitted[FXRow](dir, partition)
 		case "filings":
 			_, readErr = readCommitted[FilingRow](dir, partition)
 		default:
@@ -472,6 +500,60 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 		obs[i].Revision = effectiveRevisions[i]
 	}
 	return path, n, nil
+}
+
+// WriteFX publishes one source/pair partition. The source does not expose
+// correction chronology, so changed canonical data at the same natural key is
+// a blocking conflict instead of an inferred revision.
+func (w *Writer) WriteFX(baseCurrency, quoteCurrency string, obs []model.FXObservation) (string, int, error) {
+	if len(obs) == 0 {
+		return "", 0, nil
+	}
+	source := obs[0].Source
+	if source != "bcb_ptax" {
+		return "", 0, fmt.Errorf("unsupported FX source %q", source)
+	}
+	if !isCurrency(baseCurrency) || !isCurrency(quoteCurrency) || baseCurrency == quoteCurrency {
+		return "", 0, errors.New("invalid FX pair")
+	}
+	pair := baseCurrency + "-" + quoteCurrency
+	dir, err := w.partition("fx", "source="+source, "pair="+pair)
+	if err != nil {
+		return "", 0, err
+	}
+	in := make([]FXRow, 0, len(obs))
+	for _, o := range obs {
+		if o.Source != source || o.BaseCurrency != baseCurrency || o.QuoteCurrency != quoteCurrency {
+			return "", 0, errors.New("FX observation/path identity mismatch")
+		}
+		r, err := fxRow(o)
+		if err != nil {
+			return "", 0, err
+		}
+		in = append(in, r)
+	}
+	partition := map[string]string{"dataset": "fx", "source": source, "pair": pair}
+	existing, err := readCommitted[FXRow](dir, partition)
+	if err != nil {
+		return "", 0, fmt.Errorf("read existing FX: %w", err)
+	}
+	for _, r := range existing {
+		if r.Source != source || r.BaseCurrency != baseCurrency || r.QuoteCurrency != quoteCurrency {
+			return "", 0, fmt.Errorf("read existing FX: %w: partition identity mismatch", ErrMigrationRequired)
+		}
+	}
+	rows, err := merge(existing, in, fxKey, sameFX)
+	if err != nil {
+		return "", 0, err
+	}
+	sort.Slice(rows, func(i, j int) bool { return fxKey(rows[i]) < fxKey(rows[j]) })
+	metadata, err := metadataFromRows(in, func(r FXRow) publicationMetadata {
+		return publicationMetadata{Source: r.Source, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID, NormalizerVersion: r.NormalizerVersion}
+	})
+	if err != nil && !slices.Equal(existing, rows) {
+		return "", 0, err
+	}
+	return publish(w, dir, partition, existing, rows, fxKey, metadata)
 }
 
 func priceRow(o model.PriceBar) (PriceRow, error) {
@@ -711,6 +793,67 @@ func economicRow(o model.EconomicObservation) (EconomicRow, error) {
 			return EconomicRow{}, fmt.Errorf("vintage_at: %w", err)
 		}
 		r.HasVintageAt = true
+	}
+	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
+	return r, nil
+}
+
+func fxRow(o model.FXObservation) (FXRow, error) {
+	if o.Source != "bcb_ptax" || o.RateKind != "ptax_closing" || o.FixingTimezone != "America/Sao_Paulo" {
+		return FXRow{}, errors.New("unsupported FX source contract")
+	}
+	if _, err := uuid.Parse(o.ID); err != nil {
+		return FXRow{}, errors.New("FX observation id must be UUID")
+	}
+	if !isCurrency(o.BaseCurrency) || !isCurrency(o.QuoteCurrency) || o.BaseCurrency == o.QuoteCurrency {
+		return FXRow{}, errors.New("invalid FX pair")
+	}
+	if o.BaseCurrency != "USD" || o.QuoteCurrency != "BRL" {
+		return FXRow{}, errors.New("unsupported FX pair")
+	}
+	if o.Revision != 0 || o.SourceRecordID == "" {
+		return FXRow{}, errors.New("invalid FX source identity or revision")
+	}
+	if err := validateProvenance(o.Provenance, o.RawPayloadHash); err != nil {
+		return FXRow{}, err
+	}
+	if !o.Provenance.IngestedAt.Equal(o.RecordedAt) {
+		return FXRow{}, errors.New("provenance/FX recorded_at mismatch")
+	}
+	buy, err := model.CanonicalDecimal(o.BuyRate, true)
+	if err != nil || buy == "0" {
+		return FXRow{}, errors.New("invalid FX buy rate")
+	}
+	sell, err := model.CanonicalDecimal(o.SellRate, true)
+	if err != nil || sell == "0" {
+		return FXRow{}, errors.New("invalid FX sell rate")
+	}
+	if compareDecimal(buy, sell) > 0 {
+		return FXRow{}, errors.New("FX buy rate exceeds sell rate")
+	}
+	fixing, err := micros(o.FixingAt)
+	if err != nil || o.FixingAt.IsZero() {
+		return FXRow{}, errors.New("invalid FX fixing_at")
+	}
+	published, err := micros(o.PublishedAt)
+	if err != nil || !o.PublishedAt.Equal(o.FixingAt) {
+		return FXRow{}, errors.New("FX published_at must equal fixing_at")
+	}
+	available, err := micros(o.AvailableAt)
+	if err != nil || !o.AvailableAt.Equal(o.PublishedAt) {
+		return FXRow{}, errors.New("FX available_at must equal published_at")
+	}
+	recorded, err := micros(o.RecordedAt)
+	if err != nil || o.RecordedAt.Before(o.AvailableAt) {
+		return FXRow{}, errors.New("invalid FX recorded_at")
+	}
+	r := FXRow{
+		SchemaVersion: model.SchemaVersion, ID: o.ID, Source: o.Source,
+		BaseCurrency: o.BaseCurrency, QuoteCurrency: o.QuoteCurrency,
+		RateKind: o.RateKind, FixingTimezone: o.FixingTimezone,
+		BuyRate: buy, SellRate: sell, FixingAt: fixing, PublishedAt: published,
+		AvailableAt: available, RecordedAt: recorded, Revision: int32(o.Revision),
+		SourceRecordID: o.SourceRecordID,
 	}
 	stamp(&r.RawPayloadHash, &r.DataSourceID, &r.IngestionRunID, &r.RawRecordLocator, &r.NormalizerVersion, o.Provenance, o.RawPayloadHash)
 	return r, nil
@@ -971,6 +1114,9 @@ func economicKey(r EconomicRow) string {
 func filingKey(r FilingRow) string {
 	return strings.Join([]string{r.Source, r.SourceDocumentID}, "\x1f")
 }
+func fxKey(r FXRow) string {
+	return strings.Join([]string{r.Source, r.BaseCurrency, r.QuoteCurrency, r.RateKind, fmt.Sprint(r.FixingAt), fmt.Sprint(r.Revision)}, "\x1f")
+}
 func economicSeriesKey(r EconomicRow) string {
 	return strings.Join([]string{r.Source, r.SeriesID, fmt.Sprint(r.ObservedAt)}, "\x1f")
 }
@@ -1032,6 +1178,14 @@ func sameFiling(a, b FilingRow) bool {
 	a.AvailableAt = b.AvailableAt
 	a.IngestionRunID = b.IngestionRunID
 	a.IngestedAt = b.IngestedAt
+	return a == b
+}
+func sameFX(a, b FXRow) bool {
+	// A replay can come from a differently shaped period response and a later
+	// ingestion run. Canonical bulletin identity and values must remain exact.
+	a.RawPayloadHash = b.RawPayloadHash
+	a.IngestionRunID = b.IngestionRunID
+	a.RecordedAt = b.RecordedAt
 	return a == b
 }
 
@@ -1197,6 +1351,10 @@ func validateRowPartition[T any](row T, partition map[string]string) error {
 		if r.Source != source || r.IssuerID != partition["issuer_id"] {
 			return errors.New("filing row does not match partition identity")
 		}
+	case FXRow:
+		if r.Source != source || r.BaseCurrency+"-"+r.QuoteCurrency != partition["pair"] {
+			return errors.New("FX row does not match partition identity")
+		}
 	default:
 		return errors.New("unsupported normalized row type")
 	}
@@ -1303,6 +1461,8 @@ func validateExistingRow[T any](row T) (string, error) {
 		return economicKey(r), validateStoredEconomic(r)
 	case FilingRow:
 		return filingKey(r), validateStoredFiling(r)
+	case FXRow:
+		return fxKey(r), validateStoredFX(r)
 	default:
 		return "", errors.New("unsupported normalized row type")
 	}
@@ -1427,6 +1587,34 @@ func validateStoredEconomic(r EconomicRow) error {
 		return errors.New("vintage_at presence mismatch")
 	}
 	return validateTemporal(storedTemporal(r.ObservedAt, r.PublishedAt, r.ObservedPrecision, r.PublishedPrecision, r.AvailableAt, r.IngestedAt, true), true)
+}
+
+func validateStoredFX(r FXRow) error {
+	if err := validateStoredCommon(r.SchemaVersion, r.Source, r.RawPayloadHash, r.DataSourceID, r.IngestionRunID, r.NormalizerVersion); err != nil {
+		return err
+	}
+	if _, err := uuid.Parse(r.ID); err != nil {
+		return errors.New("FX observation id must be UUID")
+	}
+	if r.Source != "bcb_ptax" || r.BaseCurrency != "USD" || r.QuoteCurrency != "BRL" || r.RateKind != "ptax_closing" || r.FixingTimezone != "America/Sao_Paulo" {
+		return errors.New("unsupported FX source contract")
+	}
+	if r.Revision != 0 || r.SourceRecordID == "" {
+		return errors.New("invalid FX source identity or revision")
+	}
+	if err := validateCanonicalDecimal(r.BuyRate, true); err != nil || r.BuyRate == "0" {
+		return errors.New("invalid FX buy rate")
+	}
+	if err := validateCanonicalDecimal(r.SellRate, true); err != nil || r.SellRate == "0" {
+		return errors.New("invalid FX sell rate")
+	}
+	if compareDecimal(r.BuyRate, r.SellRate) > 0 {
+		return errors.New("FX buy rate exceeds sell rate")
+	}
+	if r.FixingAt == 0 || r.PublishedAt != r.FixingAt || r.AvailableAt != r.PublishedAt || r.RecordedAt < r.AvailableAt {
+		return errors.New("invalid FX temporal semantics")
+	}
+	return nil
 }
 
 func validateStoredFiling(r FilingRow) error {

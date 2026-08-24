@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/fx-observation.schema.json",
+  "title": "FXObservation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "source",
+    "base_currency",
+    "quote_currency",
+    "rate_kind",
+    "fixing_timezone",
+    "buy_rate",
+    "sell_rate",
+    "fixing_at",
+    "published_at",
+    "available_at",
+    "recorded_at",
+    "revision",
+    "source_record_id",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "source": { "const": "bcb_ptax" },
+    "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "quote_currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "rate_kind": { "const": "ptax_closing" },
+    "fixing_timezone": { "const": "America/Sao_Paulo" },
+    "buy_rate": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "sell_rate": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "fixing_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "published_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "recorded_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "revision": { "const": 0 },
+    "source_record_id": { "type": "string", "minLength": 1 },
+    "provenance": { "$ref": "common.schema.json#/$defs/provenance" }
+  }
+}

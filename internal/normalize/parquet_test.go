@@ -26,7 +26,7 @@ func TestV1PhysicalSchemasContainCanonicalColumns(t *testing.T) {
 		name string
 		cols map[string]bool
 		want []string
-	}{{"price", columnsOf[PriceRow](), []string{"schema_version", "security_id", "interval", "price_basis", "currency", "observed_at", "observed_precision", "published_at", "has_published_at", "open", "high", "low", "close", "volume", "has_volume", "data_source_id", "ingestion_run_id", "raw_payload_hash", "ingested_at"}}, {"fundamental", columnsOf[FundamentalRow](), []string{"schema_version", "issuer_id", "security_id", "has_security_id", "concept", "value", "has_value", "unit", "currency", "has_currency", "period_start", "has_period_start", "period_end", "fiscal_period", "observed_at", "observed_precision", "published_at", "revision", "data_source_id", "ingestion_run_id"}}, {"economic", columnsOf[EconomicRow](), []string{"schema_version", "series_id", "geography", "value", "has_value", "unit", "frequency", "seasonal_adjustment", "has_seasonal_adjustment", "observed_at", "observed_precision", "published_at", "revision", "data_source_id", "ingestion_run_id"}}}
+	}{{"price", columnsOf[PriceRow](), []string{"schema_version", "security_id", "interval", "price_basis", "currency", "observed_at", "observed_precision", "published_at", "has_published_at", "open", "high", "low", "close", "volume", "has_volume", "data_source_id", "ingestion_run_id", "raw_payload_hash", "ingested_at"}}, {"fundamental", columnsOf[FundamentalRow](), []string{"schema_version", "issuer_id", "security_id", "has_security_id", "concept", "value", "has_value", "unit", "currency", "has_currency", "period_start", "has_period_start", "period_end", "fiscal_period", "observed_at", "observed_precision", "published_at", "revision", "data_source_id", "ingestion_run_id"}}, {"economic", columnsOf[EconomicRow](), []string{"schema_version", "series_id", "geography", "value", "has_value", "unit", "frequency", "seasonal_adjustment", "has_seasonal_adjustment", "observed_at", "observed_precision", "published_at", "revision", "data_source_id", "ingestion_run_id"}}, {"FX", columnsOf[FXRow](), []string{"schema_version", "id", "source", "base_currency", "quote_currency", "rate_kind", "fixing_timezone", "buy_rate", "sell_rate", "fixing_at", "published_at", "available_at", "recorded_at", "revision", "source_record_id", "data_source_id", "ingestion_run_id", "raw_payload_hash"}}}
 	for _, tc := range cases {
 		for _, name := range tc.want {
 			if !tc.cols[name] {
@@ -48,6 +48,107 @@ func provenance(at time.Time) model.Provenance {
 func price(at time.Time) model.PriceBar {
 	at = at.Truncate(time.Microsecond)
 	return model.PriceBar{Source: "yahoo", SecurityID: securityID, Interval: "1d", PriceBasis: "split_adjusted", Currency: "USD", Temporal: model.Temporal{ObservedAt: at, PublishedAt: at.Add(time.Hour), AvailableAt: at.Add(time.Hour), IngestedAt: at.Add(2 * time.Hour), PublishedPrecision: model.PrecisionSecond}, Open: "1.000000000000000001", High: "3", Low: "1", Close: "2", Volume: "10", RawPayloadHash: rawHash, Provenance: provenance(at.Add(2 * time.Hour))}
+}
+
+func fx(at time.Time) model.FXObservation {
+	at = at.Truncate(time.Microsecond)
+	recorded := at.Add(time.Hour)
+	return model.FXObservation{
+		ID: "4db8232a-0703-5d14-a020-cec2764cb347", Source: "bcb_ptax",
+		BaseCurrency: "USD", QuoteCurrency: "BRL", RateKind: "ptax_closing",
+		FixingTimezone: "America/Sao_Paulo", BuyRate: "5.22300", SellRate: "5.22360",
+		FixingAt: at, PublishedAt: at, AvailableAt: at, RecordedAt: recorded,
+		Revision: 0, SourceRecordID: "ptax-closing/USD-BRL/2026-08-14T13:10:22.94166-03:00",
+		RawPayloadHash: rawHash, Provenance: provenance(recorded),
+	}
+}
+
+func TestFXV1PublishesExactIdempotentPairPartition(t *testing.T) {
+	root := t.TempDir()
+	w, err := NewWriter(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := fx(time.Date(2026, 8, 14, 16, 10, 22, 941660000, time.UTC))
+	path, n, err := w.WriteFX("USD", "BRL", []model.FXObservation{observation, observation})
+	if err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	wantPath := filepath.Join(root, "fx", "source=bcb_ptax", "pair=USD-BRL", ManifestFilename)
+	if path != wantPath {
+		t.Fatalf("path=%q want %q", path, wantPath)
+	}
+	rows := rowsFromManifest[FXRow](t, path)
+	if len(rows) != 1 || rows[0].BuyRate != "5.223" || rows[0].SellRate != "5.2236" {
+		t.Fatalf("rows=%+v", rows)
+	}
+	if !time.UnixMicro(rows[0].FixingAt).UTC().Equal(observation.FixingAt) || rows[0].SourceRecordID != observation.SourceRecordID {
+		t.Fatalf("stored observation=%+v", rows[0])
+	}
+	manifest, err := ReadManifest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Partition["dataset"] != "fx" || manifest.Partition["pair"] != "USD-BRL" || manifest.Source != "bcb_ptax" {
+		t.Fatalf("manifest=%+v", manifest)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry := observation
+	retry.RecordedAt = retry.RecordedAt.Add(time.Hour)
+	retry.Provenance.IngestedAt = retry.RecordedAt
+	retry.Provenance.IngestionRunID = "b2468ace-1357-4bdf-9024-6e2f59b9527a"
+	gotPath, n, err := w.WriteFX("USD", "BRL", []model.FXObservation{retry})
+	if err != nil || n != 0 || gotPath != path {
+		t.Fatalf("retry path=%q n=%d err=%v", gotPath, n, err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !before.ModTime().Equal(after.ModTime()) {
+		t.Fatal("idempotent retry replaced manifest")
+	}
+	if err := w.ValidateExisting(); err != nil {
+		t.Fatalf("ValidateExisting: %v", err)
+	}
+}
+
+func TestFXSameNaturalKeyCorrectionConflicts(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	observation := fx(time.Date(2026, 8, 14, 16, 10, 22, 941660000, time.UTC))
+	if _, _, err := w.WriteFX("USD", "BRL", []model.FXObservation{observation}); err != nil {
+		t.Fatal(err)
+	}
+	observation.SellRate = "5.3"
+	if _, _, err := w.WriteFX("USD", "BRL", []model.FXObservation{observation}); !errors.Is(err, ErrNaturalKeyConflict) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestFXRejectsUnsupportedOrInconsistentContract(t *testing.T) {
+	base := fx(time.Date(2026, 8, 14, 16, 10, 22, 941660000, time.UTC))
+	cases := map[string]func(*model.FXObservation){
+		"pair":           func(o *model.FXObservation) { o.QuoteCurrency = "EUR" },
+		"buy above sell": func(o *model.FXObservation) { o.BuyRate = "6" },
+		"publication":    func(o *model.FXObservation) { o.PublishedAt = o.PublishedAt.Add(time.Microsecond) },
+		"receipt": func(o *model.FXObservation) {
+			o.RecordedAt = o.AvailableAt.Add(-time.Microsecond)
+			o.Provenance.IngestedAt = o.RecordedAt
+		},
+		"revision": func(o *model.FXObservation) { o.Revision = 1 },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			o := base
+			mutate(&o)
+			if _, err := fxRow(o); err == nil {
+				t.Fatal("invalid FX observation accepted")
+			}
+		})
+	}
 }
 
 func TestObservedPrecisionIsValidatedAndDefaultsToUnknown(t *testing.T) {
