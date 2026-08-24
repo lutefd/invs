@@ -402,6 +402,22 @@ func TestDatabaseConstraintParity(t *testing.T) {
 		t.Fatal("11-digit CIK accepted")
 	}
 	c = validConfig()
+	c.Universe[0].CIK = -1
+	if err := c.Validate(); err == nil {
+		t.Fatal("negative CIK accepted")
+	}
+	c = validConfig()
+	c.Universe[0].CIK = 0
+	if err := c.Validate(); err != nil {
+		t.Fatalf("issuer without optional CIK rejected while SEC disabled: %v", err)
+	}
+	c = validConfig()
+	c.Providers.SEC.Enabled = true
+	c.Universe[0].CIK = 0
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "at least one universe issuer with a CIK") {
+		t.Fatalf("SEC config without an eligible CIK error = %v", err)
+	}
+	c = validConfig()
 	c.Universe[0].CIK = 9999999999
 	if err := c.Validate(); err != nil {
 		t.Fatalf("10-digit CIK rejected: %v", err)

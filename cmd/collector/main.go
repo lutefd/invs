@@ -372,7 +372,8 @@ func (a *app) run(ctx context.Context, source string) error {
 func (a *app) collectSEC(ctx context.Context) error {
 	c := sec.NewClient(a.http)
 	m := metrics{Source: "sec", StartedAt: a.nowUTC(), Cursor: map[string]any{}}
-	run, skip, err := a.start(ctx, &m, secRunInputs(a.cfg.Universe))
+	eligibleUniverse := secEligibleUniverse(a.cfg.Universe)
+	run, skip, err := a.start(ctx, &m, secRunInputs(eligibleUniverse))
 	if err != nil {
 		return err
 	}
@@ -380,7 +381,7 @@ func (a *app) collectSEC(ctx context.Context) error {
 		return nil
 	}
 	var errs []error
-	for _, s := range a.cfg.Universe {
+	for _, s := range eligibleUniverse {
 		if err := ctx.Err(); err != nil {
 			errs = append(errs, err)
 			break
@@ -1781,8 +1782,9 @@ func bcbLogicalKey(series config.BCBSeries) string {
 }
 
 func secRunInputs(universe []config.Security) metadata.RunInputs {
-	requests := make([]metadata.IssuerRequest, 0, len(universe))
-	for _, security := range universe {
+	eligibleUniverse := secEligibleUniverse(universe)
+	requests := make([]metadata.IssuerRequest, 0, len(eligibleUniverse))
+	for _, security := range eligibleUniverse {
 		requests = append(requests, metadata.IssuerRequest{
 			IssuerID:   security.IssuerID,
 			SecurityID: security.SecurityID,
@@ -1796,10 +1798,20 @@ func secRunInputs(universe []config.Security) metadata.RunInputs {
 		Provider: metadata.ProviderInputs{
 			Name:                    "sec",
 			Kind:                    "fundamentals",
-			ConfiguredUniverseCount: len(universe),
+			ConfiguredUniverseCount: len(eligibleUniverse),
 			IssuerRequests:          requests,
 		},
 	}
+}
+
+func secEligibleUniverse(universe []config.Security) []config.Security {
+	eligible := make([]config.Security, 0, len(universe))
+	for _, security := range universe {
+		if security.CIK > 0 {
+			eligible = append(eligible, security)
+		}
+	}
+	return eligible
 }
 
 func pricesRunInputs(universe []config.Security, start, end time.Time) metadata.RunInputs {

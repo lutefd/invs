@@ -236,6 +236,18 @@ func (c Config) Validate() error {
 	if c.Providers.SEC.Enabled && (strings.Contains(strings.ToLower(c.UserAgent), "example.com") || !strings.Contains(c.UserAgent, "@")) {
 		errs = append(errs, errors.New("enabled SEC provider requires a real contact email in user_agent"))
 	}
+	if c.Providers.SEC.Enabled {
+		hasCIK := false
+		for _, security := range c.Universe {
+			if security.CIK > 0 {
+				hasCIK = true
+				break
+			}
+		}
+		if !hasCIK {
+			errs = append(errs, errors.New("enabled SEC provider requires at least one universe issuer with a CIK"))
+		}
+	}
 	if c.Providers.Prices.Enabled {
 		if _, err := time.Parse("2006-01-02", c.Providers.Prices.Start); err != nil {
 			errs = append(errs, errors.New("enabled prices provider requires a valid start date"))
@@ -439,8 +451,8 @@ func (c Config) Validate() error {
 			errs = append(errs, fmt.Errorf("%s: duplicate security_id %q", pfx, s.SecurityID))
 		}
 		seenIssuer[s.IssuerID], seenSecurity[s.SecurityID] = true, true
-		if s.CIK <= 0 {
-			errs = append(errs, fmt.Errorf("%s: cik must be positive", pfx))
+		if s.CIK < 0 {
+			errs = append(errs, fmt.Errorf("%s: cik must not be negative", pfx))
 		} else if s.CIK > 9999999999 {
 			errs = append(errs, fmt.Errorf("%s: cik must contain at most 10 digits", pfx))
 		}

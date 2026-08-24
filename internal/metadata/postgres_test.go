@@ -235,6 +235,8 @@ func TestCatalogIncludesNYSECalendarSource(t *testing.T) {
 
 func TestIssuerUpsertPreservesExistingCVMCode(t *testing.T) {
 	for _, fragment := range []string{
+		"NULLIF($4,'')",
+		"cik=COALESCE(excluded.cik,issuers.cik)",
 		"cvm_code",
 		"NULLIF($5,'')",
 		"cvm_code=COALESCE(excluded.cvm_code,issuers.cvm_code)",

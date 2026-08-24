@@ -322,11 +322,11 @@ ORDER BY r.started_at, r.id`
 
 const upsertIssuerSQL = `
 INSERT INTO issuers(id,legal_name,country_code,cik,cvm_code,metadata)
-VALUES($1,$2,$3,$4,NULLIF($5,''),'{}')
+VALUES($1,$2,$3,NULLIF($4,''),NULLIF($5,''),'{}')
 ON CONFLICT(id) DO UPDATE SET
     legal_name=excluded.legal_name,
     country_code=excluded.country_code,
-    cik=excluded.cik,
+    cik=COALESCE(excluded.cik,issuers.cik),
     cvm_code=COALESCE(excluded.cvm_code,issuers.cvm_code),
     updated_at=now()`
 
@@ -378,7 +378,10 @@ func (r *Repository) SyncCatalog(ctx context.Context, cfg config.Config) error {
 		if parseErr != nil {
 			return fmt.Errorf("identifier valid_from %s: %w", s.SecurityID, parseErr)
 		}
-		cik := fmt.Sprintf("%010d", s.CIK)
+		cik := ""
+		if s.CIK > 0 {
+			cik = fmt.Sprintf("%010d", s.CIK)
+		}
 		_, err = tx.Exec(ctx, upsertIssuerSQL, s.IssuerID, s.LegalName, s.CountryCode, cik, s.CVMCode)
 		if err != nil {
 			return fmt.Errorf("upsert issuer %s: %w", s.IssuerID, err)

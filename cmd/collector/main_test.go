@@ -384,6 +384,9 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	universe := []config.Security{{
 		IssuerID: "issuer-1", SecurityID: "security-1", CIK: 320193,
 		YahooSymbol: "AAPL", Currency: "USD",
+	}, {
+		IssuerID: "issuer-2", SecurityID: "security-2", CIK: 0,
+		YahooSymbol: "PETZ3.SA", Currency: "BRL",
 	}}
 	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
@@ -394,6 +397,9 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	}
 	if got := secInputs.Provider.IssuerRequests[0]; got.IssuerID != "issuer-1" || got.SecurityID != "security-1" || got.CIK != 320193 || !reflect.DeepEqual(got.Resources, []string{"submissions", "companyfacts"}) {
 		t.Fatalf("SEC issuer request = %+v", got)
+	}
+	if got := secEligibleUniverse(universe); len(got) != 1 || got[0].IssuerID != "issuer-1" {
+		t.Fatalf("SEC eligible universe = %+v", got)
 	}
 
 	priceInputs := pricesRunInputs(universe, start, end)
