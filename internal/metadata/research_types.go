@@ -93,6 +93,27 @@ type ResearchThemeCondition struct {
 	RecordHash    string                `json:"record_hash,omitempty"`
 }
 
+type ResearchThemeBundleTheme struct {
+	Theme    ResearchTheme         `json:"theme"`
+	Revision ResearchThemeRevision `json:"revision"`
+}
+
+type ResearchThemeBundleRelationship struct {
+	Relationship ResearchRelationship         `json:"relationship"`
+	Revision     ResearchRelationshipRevision `json:"revision"`
+}
+
+type ResearchThemeBundle struct {
+	SchemaVersion string                            `json:"schema_version"`
+	Themes        []ResearchThemeBundleTheme        `json:"themes"`
+	Entities      []ResearchEntity                  `json:"entities"`
+	Memberships   []ResearchThemeMembership         `json:"memberships"`
+	Relationships []ResearchThemeBundleRelationship `json:"relationships"`
+	Indicators    []ResearchThemeIndicator          `json:"indicators"`
+	FeatureRefs   []ResearchThemeFeatureRef         `json:"feature_refs"`
+	Conditions    []ResearchThemeCondition          `json:"conditions"`
+}
+
 type ResearchRelationship struct {
 	ID        string    `json:"id,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`

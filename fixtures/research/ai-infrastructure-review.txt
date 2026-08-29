@@ -1,0 +1,12 @@
+# AI infrastructure review
+
+This reviewed fixture defines a bounded AI-infrastructure theme for v0.4.
+Compute demand depends on advanced semiconductor manufacturing and packaging,
+high-bandwidth memory, networking, datacenters and cooling, and generation,
+grid, and electrical equipment. The linked company relationships are reviewed
+interpretations for research use and require source-backed revision before a
+production investment decision.
+
+The theme is weakened if demand growth becomes inventory-led rather than
+deployment-led, if supply substitution removes the bottleneck, or if power
+interconnection delays prevent datacenter capacity from being commissioned.

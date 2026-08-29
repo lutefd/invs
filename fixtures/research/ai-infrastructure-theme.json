@@ -1,0 +1,150 @@
+{
+  "schema_version": "1.0.0",
+  "themes": [
+    {
+      "theme": { "id": "10000000-0000-4000-8000-000000000001", "stable_key": "ai-infrastructure" },
+      "revision": {
+        "theme_id": "10000000-0000-4000-8000-000000000001",
+        "revision": 1,
+        "parent_theme_id": null,
+        "name": "AI infrastructure",
+        "knowledge_kind": "interpretation",
+        "review_state": "reviewed",
+        "description": "A reviewed chain from AI compute demand through semiconductor, memory, networking, datacenter, and power bottlenecks.",
+        "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=1-12" }],
+        "author_method": "human-reviewed-v0.4-reference-theme",
+        "recorded_at": "2026-08-29T12:00:00Z"
+      }
+    },
+    {
+      "theme": { "id": "10000000-0000-4000-8000-000000000002", "stable_key": "ai-infrastructure-compute" },
+      "revision": {
+        "theme_id": "10000000-0000-4000-8000-000000000002",
+        "revision": 1,
+        "parent_theme_id": "10000000-0000-4000-8000-000000000001",
+        "name": "Compute",
+        "knowledge_kind": "interpretation",
+        "review_state": "reviewed",
+        "description": "Accelerator and systems demand created by AI model training and inference deployment.",
+        "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=3-4" }],
+        "author_method": "human-reviewed-v0.4-reference-theme",
+        "recorded_at": "2026-08-29T12:00:00Z"
+      }
+    },
+    {
+      "theme": { "id": "10000000-0000-4000-8000-000000000003", "stable_key": "ai-infrastructure-semiconductor-manufacturing-packaging" },
+      "revision": {
+        "theme_id": "10000000-0000-4000-8000-000000000003",
+        "revision": 1,
+        "parent_theme_id": "10000000-0000-4000-8000-000000000001",
+        "name": "Semiconductor manufacturing and packaging",
+        "knowledge_kind": "interpretation",
+        "review_state": "reviewed",
+        "description": "Foundry, process, and advanced packaging capacity that constrains accelerator supply.",
+        "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=4-5" }],
+        "author_method": "human-reviewed-v0.4-reference-theme",
+        "recorded_at": "2026-08-29T12:00:00Z"
+      }
+    },
+    {
+      "theme": { "id": "10000000-0000-4000-8000-000000000004", "stable_key": "ai-infrastructure-memory" },
+      "revision": {
+        "theme_id": "10000000-0000-4000-8000-000000000004",
+        "revision": 1,
+        "parent_theme_id": "10000000-0000-4000-8000-000000000001",
+        "name": "Memory",
+        "knowledge_kind": "interpretation",
+        "review_state": "reviewed",
+        "description": "High-bandwidth and advanced memory supply needed to feed AI compute.",
+        "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=5-6" }],
+        "author_method": "human-reviewed-v0.4-reference-theme",
+        "recorded_at": "2026-08-29T12:00:00Z"
+      }
+    },
+    {
+      "theme": { "id": "10000000-0000-4000-8000-000000000005", "stable_key": "ai-infrastructure-networking" },
+      "revision": {
+        "theme_id": "10000000-0000-4000-8000-000000000005",
+        "revision": 1,
+        "parent_theme_id": "10000000-0000-4000-8000-000000000001",
+        "name": "Networking",
+        "knowledge_kind": "interpretation",
+        "review_state": "reviewed",
+        "description": "Interconnect, switching, and optical networking required to scale distributed AI systems.",
+        "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=6-7" }],
+        "author_method": "human-reviewed-v0.4-reference-theme",
+        "recorded_at": "2026-08-29T12:00:00Z"
+      }
+    },
+    {
+      "theme": { "id": "10000000-0000-4000-8000-000000000006", "stable_key": "ai-infrastructure-datacenters-cooling" },
+      "revision": {
+        "theme_id": "10000000-0000-4000-8000-000000000006",
+        "revision": 1,
+        "parent_theme_id": "10000000-0000-4000-8000-000000000001",
+        "name": "Datacenters and cooling",
+        "knowledge_kind": "interpretation",
+        "review_state": "reviewed",
+        "description": "Datacenter construction, thermal management, and capacity commissioning.",
+        "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=7-8" }],
+        "author_method": "human-reviewed-v0.4-reference-theme",
+        "recorded_at": "2026-08-29T12:00:00Z"
+      }
+    },
+    {
+      "theme": { "id": "10000000-0000-4000-8000-000000000007", "stable_key": "ai-infrastructure-generation-grid-electrical" },
+      "revision": {
+        "theme_id": "10000000-0000-4000-8000-000000000007",
+        "revision": 1,
+        "parent_theme_id": "10000000-0000-4000-8000-000000000001",
+        "name": "Generation, grid, and electrical equipment",
+        "knowledge_kind": "interpretation",
+        "review_state": "reviewed",
+        "description": "Power generation, interconnection, grid equipment, and electrical systems supporting AI load growth.",
+        "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=8-9" }],
+        "author_method": "human-reviewed-v0.4-reference-theme",
+        "recorded_at": "2026-08-29T12:00:00Z"
+      }
+    }
+  ],
+  "entities": [
+    { "id": "20000000-0000-4000-8000-000000000001", "entity_type": "company", "stable_key": "company:nvidia", "display_name": "NVIDIA", "metadata": { "country": "US", "exposure": "accelerator-compute" } },
+    { "id": "20000000-0000-4000-8000-000000000002", "entity_type": "company", "stable_key": "company:tsmc", "display_name": "Taiwan Semiconductor Manufacturing Company", "metadata": { "country": "TW", "exposure": "foundry-packaging" } },
+    { "id": "20000000-0000-4000-8000-000000000003", "entity_type": "company", "stable_key": "company:sk-hynix", "display_name": "SK hynix", "metadata": { "country": "KR", "exposure": "high-bandwidth-memory" } },
+    { "id": "20000000-0000-4000-8000-000000000004", "entity_type": "company", "stable_key": "company:arista-networks", "display_name": "Arista Networks", "metadata": { "country": "US", "exposure": "datacenter-networking" } },
+    { "id": "20000000-0000-4000-8000-000000000005", "entity_type": "company", "stable_key": "company:vertiv", "display_name": "Vertiv", "metadata": { "country": "US", "exposure": "datacenter-cooling-power" } },
+    { "id": "20000000-0000-4000-8000-000000000006", "entity_type": "company", "stable_key": "company:weg", "display_name": "WEG", "metadata": { "country": "BR", "exposure": "electrical-equipment" } },
+    { "id": "20000000-0000-4000-8000-000000000007", "entity_type": "company", "stable_key": "company:equatorial", "display_name": "Equatorial Energia", "metadata": { "country": "BR", "exposure": "power-grid" } },
+    { "id": "20000000-0000-4000-8000-000000000008", "entity_type": "indicator", "stable_key": "indicator:ai-capex-guidance", "display_name": "AI infrastructure capex guidance", "metadata": { "source": "reviewed-event-proposals" } }
+  ],
+  "memberships": [
+    { "theme_id": "10000000-0000-4000-8000-000000000002", "entity_id": "20000000-0000-4000-8000-000000000001", "revision": 1, "role": "accelerator demand anchor", "knowledge_kind": "interpretation", "confidence": 0.96, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=3-4" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" },
+    { "theme_id": "10000000-0000-4000-8000-000000000003", "entity_id": "20000000-0000-4000-8000-000000000002", "revision": 1, "role": "advanced foundry and packaging supplier", "knowledge_kind": "interpretation", "confidence": 0.94, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=4-5" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" },
+    { "theme_id": "10000000-0000-4000-8000-000000000004", "entity_id": "20000000-0000-4000-8000-000000000003", "revision": 1, "role": "memory supplier", "knowledge_kind": "interpretation", "confidence": 0.91, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=5-6" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" },
+    { "theme_id": "10000000-0000-4000-8000-000000000005", "entity_id": "20000000-0000-4000-8000-000000000004", "revision": 1, "role": "interconnect supplier", "knowledge_kind": "interpretation", "confidence": 0.87, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=6-7" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" },
+    { "theme_id": "10000000-0000-4000-8000-000000000006", "entity_id": "20000000-0000-4000-8000-000000000005", "revision": 1, "role": "cooling and power systems supplier", "knowledge_kind": "interpretation", "confidence": 0.89, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=7-8" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" },
+    { "theme_id": "10000000-0000-4000-8000-000000000007", "entity_id": "20000000-0000-4000-8000-000000000006", "revision": 1, "role": "Brazilian electrical-equipment exposure", "knowledge_kind": "interpretation", "confidence": 0.76, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=8-9" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" },
+    { "theme_id": "10000000-0000-4000-8000-000000000007", "entity_id": "20000000-0000-4000-8000-000000000007", "revision": 1, "role": "Brazilian grid exposure", "knowledge_kind": "interpretation", "confidence": 0.71, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=8-9" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" }
+  ],
+  "relationships": [
+    { "relationship": { "id": "30000000-0000-4000-8000-000000000001" }, "revision": { "relationship_id": "30000000-0000-4000-8000-000000000001", "revision": 1, "from_entity_id": "20000000-0000-4000-8000-000000000002", "to_entity_id": "20000000-0000-4000-8000-000000000001", "relationship_type": "SUPPLIES", "direction": "forward", "knowledge_kind": "interpretation", "confidence": 0.94, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=4-5" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" } },
+    { "relationship": { "id": "30000000-0000-4000-8000-000000000002" }, "revision": { "relationship_id": "30000000-0000-4000-8000-000000000002", "revision": 1, "from_entity_id": "20000000-0000-4000-8000-000000000001", "to_entity_id": "20000000-0000-4000-8000-000000000002", "relationship_type": "DEPENDS_ON", "direction": "forward", "knowledge_kind": "interpretation", "confidence": 0.95, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=4-5" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" } },
+    { "relationship": { "id": "30000000-0000-4000-8000-000000000003" }, "revision": { "relationship_id": "30000000-0000-4000-8000-000000000003", "revision": 1, "from_entity_id": "20000000-0000-4000-8000-000000000003", "to_entity_id": "20000000-0000-4000-8000-000000000001", "relationship_type": "SUPPLIES", "direction": "forward", "knowledge_kind": "interpretation", "confidence": 0.91, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=5-6" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" } },
+    { "relationship": { "id": "30000000-0000-4000-8000-000000000004" }, "revision": { "relationship_id": "30000000-0000-4000-8000-000000000004", "revision": 1, "from_entity_id": "20000000-0000-4000-8000-000000000004", "to_entity_id": "20000000-0000-4000-8000-000000000001", "relationship_type": "SUPPLIES", "direction": "forward", "knowledge_kind": "interpretation", "confidence": 0.87, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=6-7" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" } },
+    { "relationship": { "id": "30000000-0000-4000-8000-000000000005" }, "revision": { "relationship_id": "30000000-0000-4000-8000-000000000005", "revision": 1, "from_entity_id": "20000000-0000-4000-8000-000000000005", "to_entity_id": "20000000-0000-4000-8000-000000000001", "relationship_type": "BENEFITS_FROM", "direction": "forward", "knowledge_kind": "interpretation", "confidence": 0.83, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=7-8" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" } },
+    { "relationship": { "id": "30000000-0000-4000-8000-000000000006" }, "revision": { "relationship_id": "30000000-0000-4000-8000-000000000006", "revision": 1, "from_entity_id": "20000000-0000-4000-8000-000000000006", "to_entity_id": "20000000-0000-4000-8000-000000000005", "relationship_type": "SUPPLIES", "direction": "forward", "knowledge_kind": "interpretation", "confidence": 0.76, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=8-9" }], "author_method": "human-reviewed-v0.4-reference-theme", "valid_from": "2026-01-01T00:00:00Z", "valid_until": null, "recorded_at": "2026-08-29T12:00:00Z", "revision_state": "reviewed" } }
+  ],
+  "indicators": [
+    { "indicator_id": "40000000-0000-4000-8000-000000000001", "theme_id": "10000000-0000-4000-8000-000000000001", "indicator_key": "ai-capex-guidance", "display_name": "AI infrastructure capex guidance", "source_ref": "reviewed-event-proposals:capex_guidance", "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=3-4" }], "recorded_at": "2026-08-29T12:00:00Z" },
+    { "indicator_id": "40000000-0000-4000-8000-000000000002", "theme_id": "10000000-0000-4000-8000-000000000007", "indicator_key": "datacenter-power-demand", "display_name": "Datacenter power demand and interconnection", "source_ref": "macro:power-demand", "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=8-11" }], "recorded_at": "2026-08-29T12:00:00Z" }
+  ],
+  "feature_refs": [
+    { "feature_ref_id": "50000000-0000-4000-8000-000000000001", "theme_id": "10000000-0000-4000-8000-000000000001", "feature_set": "market-momentum", "feature_set_version": "1.0.0", "artifact_ref": { "kind": "feature-set", "id": "market-momentum@1.0.0", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "feature-registry" }, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=3-4" }], "recorded_at": "2026-08-29T12:00:00Z" },
+    { "feature_ref_id": "50000000-0000-4000-8000-000000000002", "theme_id": "10000000-0000-4000-8000-000000000001", "feature_set": "fundamental-growth", "feature_set_version": "1.0.0", "artifact_ref": { "kind": "feature-set", "id": "fundamental-growth@1.0.0", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "feature-registry" }, "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=3-4" }], "recorded_at": "2026-08-29T12:00:00Z" }
+  ],
+  "conditions": [
+    { "condition_id": "60000000-0000-4000-8000-000000000001", "theme_id": "10000000-0000-4000-8000-000000000001", "condition_type": "weaken", "condition": "AI demand becomes inventory-led rather than deployment-led.", "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=10-11" }], "recorded_at": "2026-08-29T12:00:00Z" },
+    { "condition_id": "60000000-0000-4000-8000-000000000002", "theme_id": "10000000-0000-4000-8000-000000000001", "condition_type": "invalidation", "condition": "Supply substitution removes the expected semiconductor or memory bottleneck.", "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=10-11" }], "recorded_at": "2026-08-29T12:00:00Z" },
+    { "condition_id": "60000000-0000-4000-8000-000000000003", "theme_id": "10000000-0000-4000-8000-000000000001", "condition_type": "weaken", "condition": "Power interconnection delays prevent datacenter capacity from being commissioned.", "evidence_refs": [{ "kind": "fixture-document", "id": "ai-infrastructure-review", "sha256": "f2296908b2223bc082a2dc3a7a563bc2a12866be8a74a815e1a2bfd1d5056ec3", "locator": "lines=11-12" }], "recorded_at": "2026-08-29T12:00:00Z" }
+  ]
+}

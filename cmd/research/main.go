@@ -105,6 +105,15 @@ func dispatch(ctx context.Context, repository *metadata.Repository, operation st
 			return nil, err
 		}
 		return repository.CreateResearchTheme(ctx, value)
+	case "seed-theme":
+		var value metadata.ResearchThemeBundle
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		if err := repository.SeedResearchThemeBundle(ctx, value); err != nil {
+			return nil, err
+		}
+		return map[string]string{"status": "seeded"}, nil
 	case "theme-revision":
 		var value metadata.ResearchThemeRevision
 		if err := decodeInput(input, &value); err != nil {
