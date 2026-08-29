@@ -16,7 +16,7 @@ if [[ -e "$backup_root" ]]; then
 	exit 2
 fi
 
-mkdir -p "$backup_root/immutable/raw" "$backup_root/immutable/normalized" "$backup_root/immutable/features"
+mkdir -p "$backup_root/immutable/raw" "$backup_root/immutable/normalized" "$backup_root/immutable/features" "$backup_root/immutable/research"
 created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 git_commit=$(git rev-parse --verify HEAD 2>/dev/null || printf 'unknown')
 
@@ -32,6 +32,7 @@ copy_layer() {
 copy_layer raw
 copy_layer normalized
 copy_layer features
+copy_layer research
 
 # The dump is emitted by the running PostgreSQL service so credentials never
 # need to be sourced into this shell or printed in the backup metadata.

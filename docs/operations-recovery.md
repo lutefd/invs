@@ -82,7 +82,8 @@ make backup BACKUP_DIR=/home/luis/invs-backups/$(date -u +%Y%m%dT%H%M%SZ)
 The backup contains:
 
 - a plain PostgreSQL dump from the running Compose database;
-- `immutable/raw/`, `immutable/normalized/`, and `immutable/features/`;
+- `immutable/raw/`, `immutable/normalized/`, `immutable/features/`, and
+  `immutable/research/`;
 - the PostgreSQL feature-artifact catalog rows that describe any registered batches;
 - `backup-manifest.txt` with file sizes and SHA-256 hashes;
 - the effective Git commit and a SHA-256 fingerprint of
@@ -115,7 +116,7 @@ When `RESTORE_DB` is provided it must begin with `restore_`; the script creates
 that new database and never drops or overwrites the configured application
 database. The order is:
 
-1. verify and copy immutable raw, normalized, and feature files;
+1. verify and copy immutable raw, normalized, feature, and research files;
 2. create and load the explicitly named restore database;
 3. run reconciliation against the restored data root and restored database;
 4. run read-only DuckDB/catalog, feature-validation, notebook, and dashboard

@@ -45,6 +45,7 @@ while IFS=$'\t' read -r marker relative expected_size expected_sha256; do
 		immutable/raw/*) destination="$restore_root/data/raw/${relative#immutable/raw/}" ;;
 		immutable/normalized/*) destination="$restore_root/data/normalized/${relative#immutable/normalized/}" ;;
 		immutable/features/*) destination="$restore_root/data/features/${relative#immutable/features/}" ;;
+		immutable/research/*) destination="$restore_root/data/research/${relative#immutable/research/}" ;;
 		*) printf 'unsupported backup manifest path: %s\n' "$relative" >&2; exit 1 ;;
 	esac
 	source="$backup_root/$relative"

@@ -14,7 +14,7 @@ DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
 	@test -f config/config.local.yaml || (umask 077 && cp config/config.example.yaml config/config.local.yaml)
-	@mkdir -p data/raw data/normalized data/features
+	@mkdir -p data/raw data/normalized data/features data/research
 	@echo "Local files ready. Set a real SEC contact in .env and config/config.local.yaml."
 
 config:
