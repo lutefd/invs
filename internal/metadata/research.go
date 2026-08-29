@@ -362,6 +362,156 @@ VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $1
 	return err
 }
 
+func (r *Repository) AppendResearchThemeIndicator(ctx context.Context, indicator ResearchThemeIndicator) (ResearchThemeIndicator, error) {
+	if err := requireResearchRepository(r); err != nil {
+		return ResearchThemeIndicator{}, err
+	}
+	var err error
+	indicator.ThemeID, err = requireResearchUUID(indicator.ThemeID, "theme_id", false)
+	if err != nil {
+		return ResearchThemeIndicator{}, err
+	}
+	indicator.IndicatorID, err = requireResearchUUID(indicator.IndicatorID, "indicator_id", true)
+	if err != nil {
+		return ResearchThemeIndicator{}, err
+	}
+	indicator.IndicatorKey = strings.TrimSpace(indicator.IndicatorKey)
+	indicator.DisplayName = strings.TrimSpace(indicator.DisplayName)
+	indicator.SourceRef = strings.TrimSpace(indicator.SourceRef)
+	if indicator.IndicatorKey == "" || indicator.DisplayName == "" || indicator.SourceRef == "" {
+		return ResearchThemeIndicator{}, errors.New("theme indicator key, display_name, and source_ref are required")
+	}
+	if indicator.RecordedAt.IsZero() {
+		indicator.RecordedAt = time.Now().UTC()
+	}
+	evidenceRefs, err := evidenceRefsJSON(indicator.EvidenceRefs)
+	if err != nil {
+		return ResearchThemeIndicator{}, err
+	}
+	if indicator.RecordHash == "" {
+		indicator.RecordHash, err = researchRecordHash(struct {
+			IndicatorID, ThemeID, IndicatorKey, DisplayName, SourceRef string
+			EvidenceRefs                                               []ResearchEvidenceRef
+			RecordedAt                                                 time.Time
+		}{indicator.IndicatorID, indicator.ThemeID, indicator.IndicatorKey, indicator.DisplayName, indicator.SourceRef, indicator.EvidenceRefs, indicator.RecordedAt.UTC()})
+		if err != nil {
+			return ResearchThemeIndicator{}, err
+		}
+	}
+	if err := requireResearchHash(indicator.RecordHash, "record_hash"); err != nil {
+		return ResearchThemeIndicator{}, err
+	}
+	if err := r.pool.QueryRow(ctx, `
+INSERT INTO research_theme_indicators(indicator_id, theme_id, indicator_key, display_name, source_ref, evidence_refs, recorded_at, record_hash)
+VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2::uuid, $3, $4, $5, $6::jsonb, $7, $8)
+RETURNING indicator_id::text`, indicator.IndicatorID, indicator.ThemeID, indicator.IndicatorKey, indicator.DisplayName, indicator.SourceRef, evidenceRefs, indicator.RecordedAt.UTC(), indicator.RecordHash).Scan(&indicator.IndicatorID); err != nil {
+		return ResearchThemeIndicator{}, fmt.Errorf("append research theme indicator: %w", err)
+	}
+	return indicator, nil
+}
+
+func (r *Repository) AppendResearchThemeFeatureRef(ctx context.Context, featureRef ResearchThemeFeatureRef) (ResearchThemeFeatureRef, error) {
+	if err := requireResearchRepository(r); err != nil {
+		return ResearchThemeFeatureRef{}, err
+	}
+	var err error
+	featureRef.ThemeID, err = requireResearchUUID(featureRef.ThemeID, "theme_id", false)
+	if err != nil {
+		return ResearchThemeFeatureRef{}, err
+	}
+	featureRef.FeatureRefID, err = requireResearchUUID(featureRef.FeatureRefID, "feature_ref_id", true)
+	if err != nil {
+		return ResearchThemeFeatureRef{}, err
+	}
+	featureRef.FeatureSet = strings.TrimSpace(featureRef.FeatureSet)
+	featureRef.FeatureSetVersion = strings.TrimSpace(featureRef.FeatureSetVersion)
+	if featureRef.FeatureSet == "" || featureRef.FeatureSetVersion == "" {
+		return ResearchThemeFeatureRef{}, errors.New("theme feature_ref feature_set and feature_set_version are required")
+	}
+	artifactRef, err := requireResearchJSON(featureRef.ArtifactRef, "artifact_ref", "object", true)
+	if err != nil {
+		return ResearchThemeFeatureRef{}, err
+	}
+	if featureRef.RecordedAt.IsZero() {
+		featureRef.RecordedAt = time.Now().UTC()
+	}
+	evidenceRefs, err := evidenceRefsJSON(featureRef.EvidenceRefs)
+	if err != nil {
+		return ResearchThemeFeatureRef{}, err
+	}
+	if featureRef.RecordHash == "" {
+		featureRef.RecordHash, err = researchRecordHash(struct {
+			FeatureRefID, ThemeID, FeatureSet, FeatureSetVersion string
+			ArtifactRef                                          json.RawMessage
+			EvidenceRefs                                         []ResearchEvidenceRef
+			RecordedAt                                           time.Time
+		}{featureRef.FeatureRefID, featureRef.ThemeID, featureRef.FeatureSet, featureRef.FeatureSetVersion, featureRef.ArtifactRef, featureRef.EvidenceRefs, featureRef.RecordedAt.UTC()})
+		if err != nil {
+			return ResearchThemeFeatureRef{}, err
+		}
+	}
+	if err := requireResearchHash(featureRef.RecordHash, "record_hash"); err != nil {
+		return ResearchThemeFeatureRef{}, err
+	}
+	if err := r.pool.QueryRow(ctx, `
+INSERT INTO research_theme_feature_refs(feature_ref_id, theme_id, feature_set, feature_set_version, artifact_ref, evidence_refs, recorded_at, record_hash)
+VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2::uuid, $3, $4, $5::jsonb, $6::jsonb, $7, $8)
+RETURNING feature_ref_id::text`, featureRef.FeatureRefID, featureRef.ThemeID, featureRef.FeatureSet, featureRef.FeatureSetVersion, artifactRef, evidenceRefs, featureRef.RecordedAt.UTC(), featureRef.RecordHash).Scan(&featureRef.FeatureRefID); err != nil {
+		return ResearchThemeFeatureRef{}, fmt.Errorf("append research theme feature reference: %w", err)
+	}
+	return featureRef, nil
+}
+
+func (r *Repository) AppendResearchThemeCondition(ctx context.Context, condition ResearchThemeCondition) (ResearchThemeCondition, error) {
+	if err := requireResearchRepository(r); err != nil {
+		return ResearchThemeCondition{}, err
+	}
+	var err error
+	condition.ThemeID, err = requireResearchUUID(condition.ThemeID, "theme_id", false)
+	if err != nil {
+		return ResearchThemeCondition{}, err
+	}
+	condition.ConditionID, err = requireResearchUUID(condition.ConditionID, "condition_id", true)
+	if err != nil {
+		return ResearchThemeCondition{}, err
+	}
+	condition.ConditionType = strings.TrimSpace(condition.ConditionType)
+	condition.Condition = strings.TrimSpace(condition.Condition)
+	if condition.ConditionType != "invalidation" && condition.ConditionType != "weaken" {
+		return ResearchThemeCondition{}, errors.New("theme condition type must be invalidation or weaken")
+	}
+	if condition.Condition == "" {
+		return ResearchThemeCondition{}, errors.New("theme condition is required")
+	}
+	if condition.RecordedAt.IsZero() {
+		condition.RecordedAt = time.Now().UTC()
+	}
+	evidenceRefs, err := evidenceRefsJSON(condition.EvidenceRefs)
+	if err != nil {
+		return ResearchThemeCondition{}, err
+	}
+	if condition.RecordHash == "" {
+		condition.RecordHash, err = researchRecordHash(struct {
+			ConditionID, ThemeID, ConditionType, Condition string
+			EvidenceRefs                                   []ResearchEvidenceRef
+			RecordedAt                                     time.Time
+		}{condition.ConditionID, condition.ThemeID, condition.ConditionType, condition.Condition, condition.EvidenceRefs, condition.RecordedAt.UTC()})
+		if err != nil {
+			return ResearchThemeCondition{}, err
+		}
+	}
+	if err := requireResearchHash(condition.RecordHash, "record_hash"); err != nil {
+		return ResearchThemeCondition{}, err
+	}
+	if err := r.pool.QueryRow(ctx, `
+INSERT INTO research_theme_conditions(condition_id, theme_id, condition_type, condition, evidence_refs, recorded_at, record_hash)
+VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2::uuid, $3, $4, $5::jsonb, $6, $7)
+RETURNING condition_id::text`, condition.ConditionID, condition.ThemeID, condition.ConditionType, condition.Condition, evidenceRefs, condition.RecordedAt.UTC(), condition.RecordHash).Scan(&condition.ConditionID); err != nil {
+		return ResearchThemeCondition{}, fmt.Errorf("append research theme condition: %w", err)
+	}
+	return condition, nil
+}
+
 func (r *Repository) CreateResearchRelationship(ctx context.Context, relationship ResearchRelationship) (ResearchRelationship, error) {
 	if err := requireResearchRepository(r); err != nil {
 		return ResearchRelationship{}, err

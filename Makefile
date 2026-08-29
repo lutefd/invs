@@ -69,6 +69,10 @@ migrate: setup config
 		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT to_regclass('"'"'public.research_entities'"'"')"' | \
 		grep -qx 'research_entities' || \
 		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000012_research_workspace.up.sql
+	@$(COMPOSE) exec -T postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT to_regclass('"'"'public.research_theme_indicators'"'"')"' | \
+		grep -qx 'research_theme_indicators' || \
+		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000013_research_theme_context.up.sql
 
 historical-truth-db-test: config
 	@scripts/test-historical-truth-db.sh

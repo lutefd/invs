@@ -14,3 +14,4 @@ COPY --chmod=0444 migrations/000009_nullable_price_publication.up.sql /docker-en
 COPY --chmod=0444 migrations/000010_feature_artifacts.up.sql /docker-entrypoint-initdb.d/000010_feature_artifacts.sql
 COPY --chmod=0444 migrations/000011_feature_artifact_input_fitness.up.sql /docker-entrypoint-initdb.d/000011_feature_artifact_input_fitness.sql
 COPY --chmod=0444 migrations/000012_research_workspace.up.sql /docker-entrypoint-initdb.d/000012_research_workspace.sql
+COPY --chmod=0444 migrations/000013_research_theme_context.up.sql /docker-entrypoint-initdb.d/000013_research_theme_context.sql

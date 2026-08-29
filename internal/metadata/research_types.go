@@ -61,6 +61,38 @@ type ResearchThemeMembership struct {
 	RecordHash    string                `json:"record_hash,omitempty"`
 }
 
+type ResearchThemeIndicator struct {
+	IndicatorID  string                `json:"indicator_id,omitempty"`
+	ThemeID      string                `json:"theme_id"`
+	IndicatorKey string                `json:"indicator_key"`
+	DisplayName  string                `json:"display_name"`
+	SourceRef    string                `json:"source_ref"`
+	EvidenceRefs []ResearchEvidenceRef `json:"evidence_refs"`
+	RecordedAt   time.Time             `json:"recorded_at"`
+	RecordHash   string                `json:"record_hash,omitempty"`
+}
+
+type ResearchThemeFeatureRef struct {
+	FeatureRefID      string                `json:"feature_ref_id,omitempty"`
+	ThemeID           string                `json:"theme_id"`
+	FeatureSet        string                `json:"feature_set"`
+	FeatureSetVersion string                `json:"feature_set_version"`
+	ArtifactRef       json.RawMessage       `json:"artifact_ref"`
+	EvidenceRefs      []ResearchEvidenceRef `json:"evidence_refs"`
+	RecordedAt        time.Time             `json:"recorded_at"`
+	RecordHash        string                `json:"record_hash,omitempty"`
+}
+
+type ResearchThemeCondition struct {
+	ConditionID   string                `json:"condition_id,omitempty"`
+	ThemeID       string                `json:"theme_id"`
+	ConditionType string                `json:"condition_type"`
+	Condition     string                `json:"condition"`
+	EvidenceRefs  []ResearchEvidenceRef `json:"evidence_refs"`
+	RecordedAt    time.Time             `json:"recorded_at"`
+	RecordHash    string                `json:"record_hash,omitempty"`
+}
+
 type ResearchRelationship struct {
 	ID        string    `json:"id,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`

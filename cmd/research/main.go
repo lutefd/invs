@@ -117,6 +117,24 @@ func dispatch(ctx context.Context, repository *metadata.Repository, operation st
 			return nil, err
 		}
 		return repository.AppendResearchThemeMembership(ctx, value)
+	case "theme-indicator":
+		var value metadata.ResearchThemeIndicator
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.AppendResearchThemeIndicator(ctx, value)
+	case "theme-feature-ref":
+		var value metadata.ResearchThemeFeatureRef
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.AppendResearchThemeFeatureRef(ctx, value)
+	case "theme-condition":
+		var value metadata.ResearchThemeCondition
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.AppendResearchThemeCondition(ctx, value)
 	case "create-relationship":
 		var value metadata.ResearchRelationship
 		if err := decodeInput(input, &value); err != nil {
