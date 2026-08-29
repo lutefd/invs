@@ -54,7 +54,9 @@
         "kind": { "type": "string", "minLength": 1 },
         "id": { "type": "string", "minLength": 1 },
         "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
-        "locator": { "type": "string", "minLength": 1 }
+        "locator": { "type": "string", "minLength": 1 },
+        "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "path": { "type": "string", "minLength": 1 }
       }
     },
     "availableArtifactRef": {

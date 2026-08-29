@@ -42,6 +42,16 @@ from .events import (
     verify_source_spans,
     write_event_proposal,
 )
+from .evidence import (
+    ELIGIBILITY_POLICY,
+    EvidencePackConflictError,
+    EvidencePackError,
+    EvidencePackValidationError,
+    build_evidence_pack,
+    export_research_memo,
+    import_research_memo,
+    read_evidence_pack,
+)
 from .feature_quality import FeatureQualityReportError, build_feature_quality_report
 from .fundamental_growth import (
     compute_fundamental_growth_features,
@@ -103,6 +113,7 @@ from .taxonomy import (
 )
 
 __all__ = [
+    "ELIGIBILITY_POLICY",
     "EVENT_TYPES",
     "FX_POLICY_VERSION",
     "AdjustmentArtifactConflictError",
@@ -120,6 +131,9 @@ __all__ = [
     "EventProposalConflictError",
     "EventProposalError",
     "EventProposalValidationError",
+    "EvidencePackConflictError",
+    "EvidencePackError",
+    "EvidencePackValidationError",
     "FXObservationNotFound",
     "FXPolicyError",
     "FeatureBatchConflictError",
@@ -142,6 +156,7 @@ __all__ = [
     "TaxonomyRegistryError",
     "after_close_execution_session",
     "build_event_proposal",
+    "build_evidence_pack",
     "build_feature_quality_report",
     "calendar_fingerprint",
     "calendar_manifest_as_of",
@@ -150,8 +165,10 @@ __all__ = [
     "compute_macro_state_features",
     "convert_currency",
     "corporate_actions_as_of",
+    "export_research_memo",
     "fx_as_of",
     "fx_record_hash",
+    "import_research_memo",
     "listing_as_of",
     "listings_as_of",
     "load_feature_registry",
@@ -168,6 +185,7 @@ __all__ = [
     "read_document",
     "read_document_text",
     "read_event_proposal",
+    "read_evidence_pack",
     "read_feature_batch",
     "read_fundamental_growth_artifact",
     "read_macro_state_artifact",
