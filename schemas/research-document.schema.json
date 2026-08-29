@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/research-document.schema.json",
+  "title": "Immutable research document and text artifact manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "document_id",
+    "source",
+    "source_document_id",
+    "entity_ids",
+    "media_type",
+    "source_uri",
+    "published_at",
+    "available_at",
+    "retrieved_at",
+    "supersedes_document_id",
+    "raw_artifact",
+    "text_artifact"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "document_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "source": { "type": "string", "minLength": 1 },
+    "source_document_id": { "type": "string", "minLength": 1 },
+    "entity_ids": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/uuid" },
+      "uniqueItems": true
+    },
+    "media_type": { "type": "string", "pattern": "^[a-z0-9.+-]+/[a-z0-9.+-]+$" },
+    "source_uri": { "type": "string", "format": "uri", "minLength": 1 },
+    "published_at": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        { "type": "null" }
+      ]
+    },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "retrieved_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "supersedes_document_id": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/uuid" },
+        { "type": "null" }
+      ]
+    },
+    "raw_artifact": { "$ref": "#/$defs/rawArtifact" },
+    "text_artifact": { "$ref": "#/$defs/textArtifact" }
+  },
+  "$defs": {
+    "rawArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size", "content_type"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "size": { "type": "integer", "minimum": 0 },
+        "content_type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "textArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "path",
+        "input_sha256",
+        "output_sha256",
+        "extractor",
+        "extractor_version",
+        "config",
+        "locators",
+        "errors"
+      ],
+      "properties": {
+        "status": { "enum": ["extracted", "failed"] },
+        "path": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "input_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "output_sha256": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "extractor": { "type": "string", "minLength": 1 },
+        "extractor_version": { "type": "string", "minLength": 1 },
+        "config": { "type": "object", "additionalProperties": true },
+        "locators": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/locator" }
+        },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "start", "end"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "page": { "type": "integer", "minimum": 1 },
+        "section": { "type": "string", "minLength": 1 },
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

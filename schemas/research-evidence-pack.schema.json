@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/research-evidence-pack.schema.json",
+  "title": "Point-in-time research evidence pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pack_id",
+    "decision_at",
+    "created_at",
+    "eligibility_policy",
+    "theme_refs",
+    "canonical_observation_refs",
+    "feature_artifact_refs",
+    "document_refs",
+    "event_proposal_refs",
+    "content_sha256"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "pack_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "created_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "eligibility_policy": { "const": "available_at_le_decision_at" },
+    "theme_refs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifactRef" }
+    },
+    "canonical_observation_refs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/availableArtifactRef" }
+    },
+    "feature_artifact_refs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/availableArtifactRef" }
+    },
+    "document_refs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/availableArtifactRef" }
+    },
+    "event_proposal_refs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/availableArtifactRef" }
+    },
+    "content_sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+  },
+  "$defs": {
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "sha256"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "locator": { "type": "string", "minLength": 1 }
+      }
+    },
+    "availableArtifactRef": {
+      "allOf": [
+        { "$ref": "#/$defs/artifactRef" },
+        {
+          "type": "object",
+          "required": ["available_at"],
+          "properties": {
+            "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+          }
+        }
+      ]
+    }
+  }
+}

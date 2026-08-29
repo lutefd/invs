@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/research-memo.schema.json",
+  "title": "Self-contained research memo export",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "memo_id",
+    "evidence_pack_id",
+    "evidence_pack_sha256",
+    "hypothesis_id",
+    "hypothesis_revision",
+    "decision_at",
+    "prediction_ids",
+    "referenced_ids",
+    "body",
+    "markdown_sha256"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "memo_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "evidence_pack_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "evidence_pack_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "hypothesis_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "hypothesis_revision": { "type": "integer", "minimum": 1 },
+    "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "prediction_ids": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/uuid" },
+      "uniqueItems": true
+    },
+    "referenced_ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "body": { "type": "string", "minLength": 1 },
+    "markdown_sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+  }
+}

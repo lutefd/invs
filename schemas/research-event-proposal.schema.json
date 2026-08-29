@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/research-event-proposal.schema.json",
+  "title": "LLM-derived reviewed event proposal revision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposal_id",
+    "revision",
+    "document_id",
+    "event_type",
+    "payload",
+    "source_spans",
+    "prompt_version",
+    "model",
+    "parameters",
+    "extraction_version",
+    "source_document_sha256",
+    "confidence",
+    "status",
+    "proposed_at",
+    "review"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "proposal_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "document_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "event_type": {
+      "enum": [
+        "capex_guidance",
+        "production_guidance",
+        "material_customer_supplier",
+        "financing",
+        "theme_exposure"
+      ]
+    },
+    "payload": { "type": "object", "minProperties": 1 },
+    "source_spans": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/sourceSpan" }
+    },
+    "prompt_version": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "parameters": { "type": "object", "additionalProperties": true },
+    "extraction_version": { "type": "string", "minLength": 1 },
+    "source_document_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "status": { "enum": ["proposed", "accepted", "rejected", "superseded"] },
+    "proposed_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "review": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/review" }
+      ]
+    }
+  },
+  "$defs": {
+    "sourceSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locator", "text_sha256"],
+      "properties": {
+        "locator": { "type": "string", "minLength": 1 },
+        "text_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "excerpt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer_id", "method", "reviewed_at", "note"],
+      "properties": {
+        "reviewer_id": { "type": "string", "minLength": 1 },
+        "method": { "const": "human" },
+        "reviewed_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

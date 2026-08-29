@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/research-prediction.schema.json",
+  "title": "Frozen hypothesis prediction",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "prediction_id",
+    "hypothesis_id",
+    "hypothesis_revision",
+    "asset_or_universe",
+    "expected_direction",
+    "expected_range",
+    "horizon",
+    "confidence",
+    "created_at",
+    "frozen_at",
+    "status"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "prediction_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "hypothesis_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "hypothesis_revision": { "type": "integer", "minimum": 1 },
+    "asset_or_universe": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "expected_direction": { "enum": ["up", "down", "flat", "relative_outperformance", "relative_underperformance"] },
+    "expected_range": { "type": "object", "minProperties": 1 },
+    "horizon": { "type": "string", "minLength": 1 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "created_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "frozen_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "status": { "enum": ["draft", "frozen", "measured", "invalidated"] }
+  }
+}

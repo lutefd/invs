@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/research-hypothesis.schema.json",
+  "title": "Hypothesis revision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "hypothesis_id",
+    "revision",
+    "title",
+    "thesis",
+    "causal_model",
+    "horizon",
+    "benchmark",
+    "universe",
+    "invalidation_conditions",
+    "decision_at",
+    "evidence_pack_id",
+    "evidence_pack_sha256",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "hypothesis_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "thesis": { "type": "string", "minLength": 1 },
+    "causal_model": { "type": "object", "minProperties": 1 },
+    "horizon": { "type": "string", "minLength": 1 },
+    "benchmark": { "type": "string", "minLength": 1 },
+    "universe": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "invalidation_conditions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "evidence_pack_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "evidence_pack_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "created_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+  }
+}

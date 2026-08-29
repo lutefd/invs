@@ -65,6 +65,10 @@ migrate: setup config
 		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT to_regclass('"'"'public.feature_artifact_input_fitness'"'"')"' | \
 		grep -qx 'feature_artifact_input_fitness' || \
 		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000011_feature_artifact_input_fitness.up.sql
+	@$(COMPOSE) exec -T postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT to_regclass('"'"'public.research_entities'"'"')"' | \
+		grep -qx 'research_entities' || \
+		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000012_research_workspace.up.sql
 
 historical-truth-db-test: config
 	@scripts/test-historical-truth-db.sh
