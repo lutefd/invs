@@ -6,7 +6,8 @@ FRED/BCB macro series, and bounded ALFRED historical vintages. It preserves sour
 Parquet through immutable manifests, registers operational and feature-artifact
 metadata in PostgreSQL, and publishes accepted latest-only price/macro projections
 for Grafana. It exposes canonical history through DuckDB/Jupyter and a closed,
-deterministic `market-basic` and `market-momentum` feature artifact engine. It
+deterministic `market-basic`, `market-momentum`, `fundamental-growth`, and
+`macro-state` feature artifact engine. It
 intentionally does not include a strategy API, backtester, distributed queue, or
 live execution.
 
@@ -97,7 +98,7 @@ SEC / FRED / ALFRED / BCB / B3 / Yahoo / CVM provider
 | Raw store | immutable bytes, hashes, atomic put/get | vendor parsing |
 | PostgreSQL | identity, versioned mappings, source/run metadata, latest-only operational projections, feature-artifact discovery and lineage metadata | canonical history, bulk daily observations, and feature rows |
 | Parquet writer | immutable content-named analytical parts and manifests | operational leases and latest-only projections |
-| Research | DuckDB queries, notebooks, deterministic feature artifacts | direct vendor calls, strategy execution |
+| Research | DuckDB queries, notebooks, deterministic feature artifacts and quality reports | direct vendor calls, strategy execution |
 
 ## Data flow and commit boundary
 
@@ -124,14 +125,22 @@ values remain in the referenced Parquet parts, and repeating registration of the
 envelope is an idempotent no-op; the catalog is not a second feature-value store. The
 read-only `make feature-report` path summarizes registered partition coverage and
 lineage from PostgreSQL without inspecting feature values; filesystem/hash
-reconciliation remains a separate operation.
+reconciliation remains a separate operation. The separate
+`make feature-quality-report` path revalidates one batch and its selected canonical
+input manifests/parts, applies each input's decision clock, and reports feature-level
+coverage, typed-null reasons, stale inputs, rejects, source contribution, and raw
+record locators without mutating the filesystem or PostgreSQL.
 
-The controlled feature registry currently contains `market-basic` 1.0.0 and
-`market-momentum` 1.0.0. The latter consumes one point-in-time daily price series and
-publishes four close-return horizons, annualized 21-return volatility, and a trailing
-21-close maximum drawdown. Both families retain receipt-time price inputs as
-`installation_replay_only`; adding a feature family does not upgrade source fitness
-or introduce a strategy, signal, or model boundary.
+The controlled feature registry currently contains `market-basic` 1.0.0,
+`market-momentum` 1.0.0, `fundamental-growth` 1.0.0, and `macro-state` 1.0.0. The
+momentum family consumes one point-in-time daily price series and publishes four
+close-return horizons, annualized 21-return volatility, and a trailing 21-close
+maximum drawdown. Fundamental growth consumes explicitly mapped SEC facts through
+an issuer mapping; macro state consumes explicitly selected historical-vintage
+macro rows. Receipt-time price inputs remain `installation_replay_only`; adding
+these families does not upgrade source fitness or introduce a strategy, signal, or
+model boundary. See [ADR 0013](adr/0013-fundamental-and-macro-feature-sets.md) and
+[ADR 0014](adr/0014-feature-quality-and-replay-acceptance.md).
 
 At source-run finalization, all candidate provenance is validated before candidates are
 collapsed to one winning price per security or macro observation per series. This keeps
@@ -239,5 +248,8 @@ Detailed rationale is recorded in [ADR 0001](adr/0001-storage-boundaries.md),
 [ADR 0002](adr/0002-point-in-time-semantics.md), [ADR 0003](adr/0003-canonical-domain-models.md),
 and [ADR 0004](adr/0004-failure-and-idempotency.md). Feature publication and catalog
 boundaries are further specified by [ADR 0005](adr/0005-deterministic-feature-artifacts.md),
-[ADR 0010](adr/0010-versioned-feature-set-registry.md), and
-[ADR 0011](adr/0011-feature-artifact-catalog.md).
+[ADR 0010](adr/0010-versioned-feature-set-registry.md),
+[ADR 0011](adr/0011-feature-artifact-catalog.md),
+[ADR 0012](adr/0012-market-momentum-feature-set.md),
+[ADR 0013](adr/0013-fundamental-and-macro-feature-sets.md), and
+[ADR 0014](adr/0014-feature-quality-and-replay-acceptance.md).

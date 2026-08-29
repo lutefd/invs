@@ -102,11 +102,11 @@ The following baseline limitations drive the version order:
   outstanding.
 - SEC filing metadata is canonical and live-accepted for a bounded AAPL submissions
   slice; CVM CAD remains intentionally raw-only.
-- The feature engine has a bounded versioned registry, dataset-level `market-basic`
-  and `market-momentum` runners, a PostgreSQL catalog for validated batches, and a
-  read-only catalog coverage/lineage report, but still lacks broader feature families,
-  reviewed taxonomy mappings, feature-level null reporting, and automatic catalog
-  reconciliation.
+- The feature engine has a bounded versioned registry, dataset-level `market-basic`,
+  `market-momentum`, `fundamental-growth`, and `macro-state` runners, a PostgreSQL
+  catalog for validated batches, and separate read-only catalog and feature-quality
+  reports. The v0.3 multi-asset clean-root acceptance is complete; automatic catalog
+  reconciliation remains a later operations boundary.
 - There is no theme graph, document-event pipeline, hypothesis ledger, backtester,
   portfolio engine, paper account, or live execution.
 
@@ -818,9 +818,11 @@ Feature rows remain in Parquet. PostgreSQL is for discovery, lineage, run state,
 operator queries only. Registration happens after immutable publication is revalidated
 and is idempotent for the same complete envelope; same-identity conflicts fail closed.
 The read-only `make feature-report` command exposes catalog-level coverage, per-decision
-unaccounted partitions, input fitness, and manifest/part lineage. It does not inspect
-feature values, report feature-level null reasons, repair orphans, or discover child
-artifacts independent of a batch registration.
+unaccounted partitions, input fitness, and manifest/part lineage. The separate
+`make feature-quality-report` command revalidates one batch and its selected canonical
+inputs, applies decision clocks, and reports feature-level null reasons, stale inputs,
+rejects, source contribution, and raw locators. Neither path repairs orphans or
+discovers child artifacts independent of a batch registration.
 
 ### 4. Initial feature families
 
@@ -857,7 +859,9 @@ Implement in dependency order and only where source quality supports them:
 
 Feature sets should be cohesive and versioned (`market-momentum`,
 `fundamental-growth`, `valuation-basic`, `macro-state`, for example) rather than one
-ever-growing object.
+ever-growing object. The bounded v0.3 implementation accepts `market-basic`,
+`market-momentum`, `fundamental-growth`, and `macro-state` at version `1.0.0`;
+valuation and broader cross-asset families remain later work.
 
 ### 5. Taxonomy and comparability policy
 
@@ -923,10 +927,14 @@ ever-growing object.
 4. `feat(metadata): add read-only feature catalog reports` (`03521c2`, `731b0b4`,
    `94a3bf0`)
 5. `feat(features): add market momentum and risk set`
-6. `feat(features): add reviewed fundamental mappings`
-7. `feat(features): add growth and quality set`
-8. `feat(features): add macro state set`
-9. `test(acceptance): reproduce multi-asset feature datasets`
+6. `feat(taxonomy): add reviewed feature mappings` (`53fe4fe`)
+7. `feat(catalog): add point-in-time fundamental and macro inputs` (`ccb9cbf`)
+8. `feat(registry): register fundamental and macro feature sets` (`4827537`)
+9. `feat(features): add fundamental and macro producers` (`eee7fe1`)
+10. `feat(features): support multi-dataset feature batches` (`c126d39`)
+11. `feat(reporting): add feature quality and lineage reports` (`54a00d2`), followed
+    by `fix(reporting): apply decision clocks to lineage analysis` (`0454d0e`)
+12. `test(acceptance): prove v0.3 multi-asset replay` (`5fc3783`)
 
 ## Explicit non-goals
 
@@ -937,9 +945,10 @@ ever-growing object.
 
 ## Exit criteria
 
-v0.3 is complete when a multi-asset, multi-date feature dataset can be published,
-resumed, verified, reproduced in a clean root, and explained from raw lineage without
-using any future or latest-only input.
+v0.3 is complete: the multi-asset, multi-date acceptance dataset is published,
+resumed, verified, reproduced in a clean root, and explained from raw lineage
+without using future or latest-only input. Evidence is recorded in
+[`2026-08-29-v0.3-feature-platform.md`](acceptance/2026-08-29-v0.3-feature-platform.md).
 
 ---
 
@@ -1938,9 +1947,10 @@ unsupported scope decisions. The next narrow queue is v0.3 feature-platform work
 The v0.3 entry registry and bounded resumable `market-basic` batch are implemented
 through `f1792ad`, and verified batch metadata is cataloged through `12fdf56` without
 copying feature rows. Catalog-level coverage/lineage reporting is implemented through
-`94a3bf0`. The first accepted market/risk family, `market-momentum` 1.0.0, is defined
-in ADR 0012 and implemented through `dd450b3` and `941c6b5`; it is followed by
-feature-level null reporting and clean-root multi-asset acceptance.
-The general backtester remains a later v0.5 boundary; the fastest path to the full
-platform is still to keep every later result explainable from a trusted historical
-input boundary.
+`94a3bf0`. The accepted market/risk family, `market-momentum` 1.0.0, is defined in
+ADR 0012 and implemented through `dd450b3` and `941c6b5`. The reviewed taxonomy and
+fundamental/macro families, decision-clock-aware feature-quality report, and
+20-security clean-root replay are accepted through `53fe4fe`, `eee7fe1`, `54a00d2`,
+`0454d0e`, and `5fc3783`; see the v0.3 acceptance report. The general backtester
+remains a later v0.5 boundary; the fastest path to the full platform is still to
+keep every later result explainable from a trusted historical input boundary.

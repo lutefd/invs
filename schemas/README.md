@@ -11,9 +11,17 @@ entries pin their required canonical inputs, historical-fitness labels, calendar
 decision-clock policy, lookback, null behavior, computation delay, output types, and
 generator implementation. The registry is planning metadata; feature rows remain in
 manifest-backed Parquet and callers must resolve a feature set by exact name and
-version. `feature-catalog-report.schema.json` defines the read-only coverage and
-lineage report for registered dataset-level feature batches; it contains catalog
-metadata and hashes, never feature values.
+version. `feature-taxonomy-registry.schema.json` and the checked-in
+`feature-taxonomy-registry.json` define the small reviewed SEC concept mapping used
+by `fundamental-growth`; they are explicit, versioned, and fingerprinted into the
+derived artifact input. `feature-catalog-report.schema.json` defines the read-only
+coverage and lineage report for registered dataset-level feature batches; it contains
+catalog metadata and hashes, never feature values. `feature-quality-report.schema.json`
+defines the separate read-only feature-level diagnostic report for a batch, including
+typed-null reasons, stale inputs, rejected partitions, source contribution, and raw
+locators. The strict `feature-fundamental-*` and `feature-macro-*` schemas define the
+manifest/observation contracts for the reviewed `fundamental-growth` and `macro-state`
+families.
 `feature-momentum-manifest.schema.json` and `feature-momentum-observation.schema.json`
 define the strict manifest and row contracts for the registered `market-momentum`
 feature set, including its six decimal-or-null outputs.

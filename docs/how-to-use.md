@@ -977,16 +977,94 @@ For library use, call `publish_market_momentum` from
 `validate_feature_artifact` functions dispatch to its strict reader based on the
 manifest feature-set identity.
 
+### Publishing fundamental and macro features
+
+`fundamental-growth` 1.0.0 uses exact reviewed SEC mappings from
+[`feature-taxonomy-registry.json`](../schemas/feature-taxonomy-registry.json). A
+security-to-issuer mapping is mandatory; the producer never substitutes a current
+YAML mapping or treats an unmapped fact as zero. Its outputs are `revenue`,
+`revenue_growth_yoy`, and `operating_margin`.
+
+`macro-state` 1.0.0 uses an explicit ALFRED historical-vintage selector. Pass the
+source, series, geography, unit, and frequency when publishing a macro artifact:
+
+```sh
+make feature \
+  SECURITY_ID=469fc20f-7d4b-45bb-b827-05f8410e71aa \
+  ISSUER_ID=1b3d88f5-55b8-4dc5-a6be-2f77e9e99201 \
+  DECISION_AT=2025-02-01T00:00:00Z \
+  CALENDAR_PIN=/absolute/path/to/xnys-calendar-pin.json \
+  FEATURE_SET=fundamental-growth \
+  TAXONOMY_REGISTRY=/absolute/path/to/feature-taxonomy-registry.json
+
+make feature \
+  SECURITY_ID=469fc20f-7d4b-45bb-b827-05f8410e71aa \
+  DECISION_AT=2025-02-01T00:00:00Z \
+  CALENDAR_PIN=/absolute/path/to/xnys-calendar-pin.json \
+  FEATURE_SET=macro-state \
+  MACRO_SOURCE=alfred \
+  MACRO_SERIES_ID=CPIAUCSL \
+  MACRO_GEOGRAPHY=US \
+  MACRO_UNIT=Index \
+  MACRO_FREQUENCY=monthly
+```
+
+For a fundamental batch, provide both a strict mapping file and the reviewed
+taxonomy registry:
+
+```json
+{"mappings": [{"security_id": "469fc20f-7d4b-45bb-b827-05f8410e71aa", "issuer_id": "1b3d88f5-55b8-4dc5-a6be-2f77e9e99201"}]}
+```
+
+```sh
+make feature-batch \
+  FEATURE_REGISTRY=/absolute/path/to/schemas/feature-set-registry.json \
+  BATCH_UNIVERSE=/absolute/path/to/universe.json \
+  BATCH_SCHEDULE=/absolute/path/to/schedule.json \
+  CALENDAR_PIN=/absolute/path/to/xnys-calendar-pin.json \
+  FEATURE_SET=fundamental-growth \
+  SECURITY_MAPPINGS=/absolute/path/to/security-mappings.json \
+  TAXONOMY_REGISTRY=/absolute/path/to/feature-taxonomy-registry.json
+```
+
+For a macro batch, use the same batch target with `FEATURE_SET=macro-state` and the
+five `MACRO_*` selectors shown above. The macro producer selects eligible historical
+vintages at each decision time, so a later revision can change a later feature row
+without changing an earlier one.
+
+### Inspecting feature-level quality
+
+The catalog report and the feature-quality report serve different purposes. After a
+batch is published, run the read-only quality report against the host paths for the
+batch manifest and registry:
+
+```sh
+make feature-quality-report \
+  BATCH_MANIFEST=/absolute/path/to/data/features/batches/market-basic/1.0.0/batch-<uuid>/manifest.json \
+  FEATURE_REGISTRY=/absolute/path/to/schemas/feature-set-registry.json \
+  STALE_AFTER_SECONDS=2592000
+```
+
+The report is validated as `feature-quality-report.schema.json` and includes coverage
+by decision and feature, present/null counts, registry-approved null reasons, stale
+input ages, explicit rejected partitions, source contribution, selected canonical
+manifest/part hashes, and raw record locators. It applies the input decision clock
+before analyzing rows, including period-end and macro-vintage cutoffs. It emits no
+feature values and writes neither PostgreSQL nor the feature root. A hash mismatch or
+unsafe lineage path fails closed.
+
 ### Publishing a dataset-level batch
 
 The controlled registry is the checked-in
-`schemas/feature-set-registry.json`. Resolve feature sets by exact name and version;
+`schemas/feature-set-registry.json`. It currently contains `market-basic`,
+`market-momentum`, `fundamental-growth`, and `macro-state`, each at version
+`1.0.0`. Resolve feature sets by exact name and version;
 do not pass arbitrary Python functions or a latest-only PostgreSQL projection to a
 batch. The current registry explicitly labels receipt-time price inputs
 `installation_replay_only`; a batch does not upgrade that label into a historical
 public-availability claim. The batch target defaults to `market-basic`; pass
-`FEATURE_SET=market-momentum FEATURE_SET_VERSION=1.0.0` to use the second registered
-producer.
+the exact `FEATURE_SET` and `FEATURE_SET_VERSION` to select one of the other
+registered producers.
 
 Create an explicit universe snapshot and decision schedule. Both files are strict
 JSON objects:

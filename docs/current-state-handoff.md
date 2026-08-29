@@ -125,6 +125,29 @@ schemas, formulas, point-in-time boundary, and receipt-time `installation_replay
 fitness are recorded in ADR 0012 and the
 [implementation acceptance note](acceptance/2026-08-29-market-momentum.md).
 
+## v0.3 completion boundary
+
+The v0.3 feature-platform exit gate is now accepted on 2026-08-29. The continuation
+chain added the reviewed SEC taxonomy registry and mappings (`53fe4fe`), canonical
+fundamental and macro point-in-time selectors (`ccb9cbf`), registered
+`fundamental-growth` and `macro-state` contracts (`4827537`), their strict producers
+and schemas (`eee7fe1`), multi-dataset batch dispatch (`c126d39`), and the read-only
+feature-quality report (`54a00d2`, decision-clock correction `0454d0e`).
+
+The acceptance fixture at `5fc3783` publishes `market-basic`, `fundamental-growth`,
+and `macro-state` for 20 deterministic securities at two monthly decisions. It
+prepublishes one child per family, resumes the remainder, crosses an ALFRED revision
+boundary (`0.1` before the revision and `0.15` after it), compares the interrupted
+and clean feature trees byte-for-byte, and fails closed for input-part, output-part,
+registry, taxonomy, and universe tampering. The quality report applies availability,
+observed-time, period-end, and vintage cutoffs before explaining typed nulls and raw
+locators. The exact commands and evidence are in the
+[v0.3 acceptance report](acceptance/2026-08-29-v0.3-feature-platform.md).
+
+The v0.3 scope is complete. Valuation, broader taxonomy coverage, feature notebooks,
+Grafana freshness panels, automatic orphan repair, strategies, and backtesting remain
+later roadmap boundaries.
+
 ## Yahoo `.SA` source-admission verification
 
 The bounded live verification is recorded in the
@@ -171,6 +194,10 @@ to close the v0.2 calendar gate. See the
 
 - Repository: `/home/luis/dev/invs`
 - Branch: `main`
+- v0.3 status: complete; see [the v0.3 acceptance report](acceptance/2026-08-29-v0.3-feature-platform.md)
+- Latest v0.3 implementation boundary: `c126d39` (`feat(features): support multi-dataset feature batches`)
+- Latest v0.3 reporting boundary: `0454d0e` (`fix(reporting): apply decision clocks to lineage analysis`)
+- Latest v0.3 acceptance boundary: `5fc3783` (`test(acceptance): prove v0.3 multi-asset replay`)
 - Latest market-momentum contract boundary: `dd450b3` (`feat(registry): register market momentum feature set`)
 - Latest market-momentum producer boundary: `941c6b5` (`feat(features): add market momentum producer`)
 - Market-momentum implementation acceptance: [bounded Decimal producer, batch, and CLI checks](acceptance/2026-08-29-market-momentum.md)
@@ -1098,23 +1125,20 @@ The following are not accidental omissions:
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
   multi-user authorization.
-- Feature engine has a checked-in closed registry and bounded `market-basic` and
-  `market-momentum` batch runners with one pinned `after_close_next_session` policy.
-  A PostgreSQL catalog now stores validated dataset-level batch metadata and lineage,
-  and its read-only report exposes catalog-level partition coverage. There are still
-  no broader clock policies, feature-level null reporting, automatic catalog
-  reconciliation, strategy, backtester, portfolio, execution, labels, training data,
-  or ML behavior.
+- Feature engine v0.3 is complete with a checked-in closed registry and bounded
+  `market-basic`, `market-momentum`, `fundamental-growth`, and `macro-state` batch
+  runners. A PostgreSQL catalog stores validated dataset-level batch metadata and
+  lineage; separate read-only catalog and feature-quality reports expose partition
+  coverage, typed nulls, freshness, rejects, source contribution, and raw locators.
+  Automatic catalog reconciliation, strategy, backtester, portfolio, execution,
+  labels, training data, and ML behavior remain later boundaries.
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
 
 ## Exact next actions
 
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
-`63d479d` and v0.2 at `0bfdc27`. The v0.3 entry registry and bounded resumable batch
-slice is committed through `f1792ad`; catalog registration is committed through
-`12fdf56`; catalog reporting is committed through `94a3bf0`; and the first
-market/risk feature family is committed through `dd450b3` and `941c6b5`. The next
-cohesive units are feature-level null reporting and clean-root multi-asset
-acceptance. Keep receipt-time prices installation-replay only, and leave v0.5
+`63d479d` and v0.2 at `0bfdc27`; v0.3 is accepted at
+`5fc3783` with reporting correction `0454d0e`. Keep receipt-time prices
+installation-replay only, and leave v0.4 theme/hypothesis work and v0.5
 strategy/backtester behavior deferred.
