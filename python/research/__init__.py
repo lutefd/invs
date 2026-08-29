@@ -92,6 +92,12 @@ from .macro_state import (
     read_macro_state_artifact,
     validate_macro_state_artifact,
 )
+from .measurement import (
+    MEASUREMENT_POLICY_VERSION,
+    MeasurementError,
+    MeasurementValidationError,
+    measure_prediction,
+)
 from .registry import (
     CalendarPolicy,
     ComputationPolicy,
@@ -116,6 +122,7 @@ __all__ = [
     "ELIGIBILITY_POLICY",
     "EVENT_TYPES",
     "FX_POLICY_VERSION",
+    "MEASUREMENT_POLICY_VERSION",
     "AdjustmentArtifactConflictError",
     "AdjustmentArtifactError",
     "AdjustmentArtifactValidationError",
@@ -148,6 +155,8 @@ __all__ = [
     "HistoricalResolutionError",
     "InputRequirement",
     "LookbackPolicy",
+    "MeasurementError",
+    "MeasurementValidationError",
     "NullPolicy",
     "ResearchCatalog",
     "SecurityMapping",
@@ -174,6 +183,7 @@ __all__ = [
     "load_feature_registry",
     "load_security_mappings",
     "load_taxonomy_registry",
+    "measure_prediction",
     "membership_as_of",
     "metadata_revision_input",
     "next_trading_session",
