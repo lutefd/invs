@@ -60,6 +60,10 @@ not systems to replace:
 - Supported `make feature` and `make feature-validate` operator paths, accepted
   against the real manifest-backed AAPL slice with identical replay and an exact
   point-in-time cutoff check.
+- A checked-in versioned feature-set registry and bounded resumable dataset-level
+  `market-basic` batch manifest. The batch records its explicit universe, decision
+  schedule, registry/input fingerprints, accepted input fitness, child output parts,
+  and rejected partitions; receipt-time prices remain `installation_replay_only`.
 - Grafana pipeline-health and latest-snapshot dashboards.
 - A validation surface built around Go tests and vet, schema validation, Python tests
   and Ruff, notebook execution, dashboard SQL smoke tests, image builds, migration
@@ -93,8 +97,9 @@ The following baseline limitations drive the version order:
   outstanding.
 - SEC filing metadata is canonical and live-accepted for a bounded AAPL submissions
   slice; CVM CAD remains intentionally raw-only.
-- The feature engine publishes a single bounded feature set and lacks a dataset-wide
-  runner and catalog.
+- The feature engine has one bounded versioned registry and a dataset-level
+  `market-basic` runner, but still lacks a PostgreSQL artifact catalog, broad feature
+  families, reviewed taxonomy mappings, and coverage/lineage reporting.
 - There is no theme graph, document-event pipeline, hypothesis ledger, backtester,
   portfolio engine, paper account, or live execution.
 
@@ -1917,6 +1922,9 @@ v0.1 and v0.2 are accepted. The retained 13-probe US/Brazil audit integrates the
 bounded identity, membership, calendar, price, action, FX, macro, and SEC filing
 chains, verifies 16 pinned evidence artifacts, and preserves installation-replay and
 unsupported scope decisions. The next narrow queue is v0.3 feature-platform work.
+The v0.3 entry registry and bounded resumable `market-basic` batch are implemented
+through `f1792ad`; the next narrow unit is to catalog verified batch metadata in
+PostgreSQL without copying feature rows.
 The general backtester remains a later v0.5 boundary; the fastest path to the full
 platform is still to keep every later result explainable from a trusted historical
 input boundary.

@@ -113,9 +113,14 @@ The official B3 COTAHIST follow-up is accepted in the
 It publishes exact ticker+ISIN-allowlisted, unadjusted PETZ3 prices from a closed
 annual archive with receipt-time availability. Yahoo `.SA` is no longer required by
 the bounded path and remains unadmitted for unattended raw retention.
-The next unaccepted cohesive unit belongs to v0.3: define and publish the first
-research-grade feature dataset using the accepted historical-fitness labels and
-explicit decision clocks.
+v0.3 is now **in progress**. ADR 0010 and the checked-in strict feature-set
+registry landed in `1a951e5` and `1f8f270`; the bounded resumable dataset-level
+`market-basic` batch manifest and its operator CLI landed in `a8c2302` and
+`f1792ad`. The batch records an explicit security list, decision schedule, registry
+hash, input fitness, manifest/part lineage, and rejected partitions, while keeping
+receipt-time prices labelled `installation_replay_only`. The next unaccepted
+cohesive unit is PostgreSQL feature-artifact catalog metadata; v0.3's broader
+feature families and clean-root acceptance remain open.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook

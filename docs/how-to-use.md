@@ -2,8 +2,8 @@
 
 This guide is for the current working v0/v1 foundation in this repository. It
 covers operating the local runtime, collecting the configured sources, inspecting
-the evidence, running point-in-time research, and publishing the first
-deterministic market feature artifact.
+the evidence, running point-in-time research, and publishing deterministic market
+feature artifacts and batches.
 
 The accepted v0 vertical slice is Yahoo daily prices, SEC company metadata and
 facts, FRED series, and BCB SGS series. CVM is now also live-accepted at the
@@ -940,6 +940,59 @@ identity with changed content raises a conflict. Validation rejects hash
 mismatches, unsupported versions, malformed decimal strings, wrong physical
 types, duplicate JSON keys, missing listed parts, and unlisted files.
 
+### Publishing a dataset-level batch
+
+The controlled registry is the checked-in
+`schemas/feature-set-registry.json`. Resolve feature sets by exact name and version;
+do not pass arbitrary Python functions or a latest-only PostgreSQL projection to a
+batch. The current `market-basic` registry explicitly labels receipt-time price
+inputs `installation_replay_only`; a batch does not upgrade that label into a
+historical public-availability claim.
+
+Create an explicit universe snapshot and decision schedule. Both files are strict
+JSON objects:
+
+```json
+{"security_ids": ["469fc20f-7d4b-45bb-b827-05f8410e71aa"]}
+```
+
+```json
+{"decision_ats": ["2026-08-12T21:00:00Z", "2026-08-13T21:00:00Z"]}
+```
+
+Publish and immediately validate the batch through the operator path:
+
+```sh
+make feature-batch \
+  FEATURE_REGISTRY=/absolute/path/to/schemas/feature-set-registry.json \
+  BATCH_UNIVERSE=/absolute/path/to/universe.json \
+  BATCH_SCHEDULE=/absolute/path/to/schedule.json \
+  CALENDAR_PIN=/absolute/path/to/xnas-calendar-pin.json
+```
+
+The batch command partitions by decision timestamp and security, publishes each
+partition as an immutable `market-basic` child artifact, and installs one batch
+manifest only after the children validate. Missing input partitions are retained in
+the manifest's `rejected` list with a reason and detail. Repeating the same command
+with the same normalized manifests, registry, universe, schedule, and calendar
+reuses the child artifacts and returns the same batch manifest; a changed input or
+registry fingerprint creates a different batch identity.
+
+Validate a batch independently from inside the Jupyter container:
+
+```sh
+make feature-batch-validate \
+  FEATURE_REGISTRY=/absolute/path/to/schemas/feature-set-registry.json \
+  BATCH_MANIFEST=/data/features/batches/market-basic/1.0.0/batch-<uuid>/manifest.json
+```
+
+The batch manifest is stored under
+`data/features/batches/market-basic/1.0.0/batch-<uuid>/manifest.json`. It records
+the registry hash, exact universe fingerprint, sorted decision schedule, calendar
+pin, input fitness, selected input manifest/part hashes, child output part hashes,
+row count, and accepted/rejected partition summary. Feature rows remain in the
+child Parquet artifacts; PostgreSQL is not used as a feature-row store.
+
 ## 8. Notebook and Grafana
 
 Execute the empty-safe vertical-slice notebook in a disposable Jupyter process:
@@ -1112,6 +1165,8 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   eligible under `filings_as_of`.
 - A deterministic `market-basic` artifact with exact decimal/null outputs and
   reproducible input lineage.
+- A deterministic dataset-level `market-basic` batch over an explicit security list
+  and decision schedule, including accepted input fitness labels and explicit rejects.
 - Current latest-only operational coverage and projection health in Grafana.
 
 ### It cannot honestly answer yet
@@ -1127,7 +1182,7 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   candidate price bridge but not as security-master evidence, while official B3
   identity/listing integration, coverage, terms, and historical-fitness acceptance
   remain pending.
-- A backtest, strategy signal, portfolio, forecast, ML model, execution order,
+- A feature-artifact catalog, broad market/risk feature family, backtest, strategy signal, portfolio, forecast, ML model, execution order,
   or performance claim. The feature engine is deliberately only the first
   deterministic market-basic registry.
 - A historical identity relationship solely from today's YAML universe mapping.

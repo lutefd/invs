@@ -88,6 +88,16 @@ with exact ticker+ISIN mapping, raw prices, and receipt-time availability. The f
 combined audit now passes 13 exact US/Brazil probes, verifies 16 retained artifacts,
 and closes v0.2 without adding a strategy or backtester.
 
+The first v0.3 feature-platform entry slice is now implemented in four reviewable
+commits: ADR 0010 at `1a951e5`, the checked-in registry and strict resolver at
+`1f8f270`, the resumable dataset-level batch manifest at `a8c2302`, and the
+operator CLI/Makefile path at `f1792ad`. The bounded producer still dispatches only
+the accepted `market-basic` 1.0.0 implementation. It records the explicit security
+list, decision schedule, registry hash, accepted historical-fitness label
+(`installation_replay_only` for receipt-time prices), input lineage, child output
+parts, and rejected partitions. This is a v0.3 entry boundary, not the complete
+feature-platform exit gate.
+
 ## Yahoo `.SA` source-admission verification
 
 The bounded live verification is recorded in the
@@ -746,6 +756,14 @@ and the schemas [feature-observation.schema.json](../schemas/feature-observation
 and [feature-manifest.schema.json](../schemas/feature-manifest.schema.json). The
 bounded implementation is in [python/research/features.py](../python/research/features.py).
 
+The v0.3 registry boundary is defined by [ADR 0010](adr/0010-versioned-feature-set-registry.md),
+the checked-in [feature-set-registry.json](../schemas/feature-set-registry.json), and
+its strict resolver in [python/research/registry.py](../python/research/registry.py).
+The registry is a closed allowlist keyed by exact feature-set name and version. It
+declares required canonical inputs, historical-fitness labels, lookback, calendar
+clock, null policy, computation delay, output types, and generator implementation.
+The registry document's exact bytes are fingerprinted into later batch identity.
+
 The closed `market-basic` 1.0.0 registry contains exactly:
 
 - `close`: selected daily close;
@@ -775,11 +793,17 @@ The current engine:
 - rejects tampered parts, unknown versions/features, duplicate JSON keys, unlisted
   files, hash mismatches, timing violations, and physical schema drift.
 
-The artifact reader follows the feature manifest, not recursive discovery. The engine
-is intentionally not yet a collector stage, notebook cell, strategy API, backtester,
-portfolio constructor, label/training pipeline, or ML model registry. It currently
-publishes one security artifact per call; a dataset-wide orchestrator and feature
-artifact catalog are future work.
+The artifact reader follows the feature manifest, not recursive discovery. The
+dataset-level [batch manifest](../schemas/feature-batch-manifest.schema.json) and
+[python/research/batches.py](../python/research/batches.py) now orchestrate explicit
+security/decision partitions by reusing those immutable child artifacts. A batch is
+reproducible from its registry hash, universe fingerprint, calendar pin, schedule,
+input manifests/parts, and output child hashes. Missing input partitions are recorded
+as explicit rejects; a rerun validates and reuses the same child artifacts. The
+feature artifact catalog, broader feature families, coverage reporting, and clean-root
+multi-asset acceptance remain future work. The engine is intentionally not yet a
+collector stage, strategy API, backtester, portfolio constructor, label/training
+pipeline, or ML model registry.
 
 The bounded engine documentation has been aligned without broadening its scope.
 
@@ -988,9 +1012,10 @@ The following are not accidental omissions:
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
   multi-user authorization.
-- Feature engine is a closed first registry with one pinned
-  `after_close_next_session` policy only; no feature discovery catalog, batch runner,
-  broader clock policies, strategy, backtester, portfolio, execution, labels,
+- Feature engine has a checked-in closed registry and a bounded `market-basic` batch
+  runner with one pinned `after_close_next_session` policy. It still has no feature
+  artifact catalog, broader clock policies, accepted market/risk feature families,
+  coverage/null reporting, strategy, backtester, portfolio, execution, labels,
   training data, or ML behavior.
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
@@ -998,7 +1023,8 @@ The following are not accidental omissions:
 ## Exact next actions
 
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
-`63d479d` and v0.2 at `0bfdc27`. The next cohesive unit is the v0.3 feature-platform
-entry slice: use the accepted fitness labels and decision clocks, keep receipt-time
-prices installation-replay only, and do not pull v0.5 strategy/backtester behavior
-forward.
+`63d479d` and v0.2 at `0bfdc27`. The v0.3 entry registry and bounded resumable batch
+slice are committed through `f1792ad`. The next cohesive unit is feature-artifact
+catalog metadata: register verified batch manifests in PostgreSQL without copying
+feature rows, while keeping receipt-time prices installation-replay only and leaving
+v0.5 strategy/backtester behavior deferred.
