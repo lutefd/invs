@@ -17,6 +17,7 @@ from research.batches import (
     read_feature_batch,
 )
 from research.catalog import DatasetSchemaError, ResearchCatalog
+from research.feature_quality import build_feature_quality_report
 from research.features import publish_feature_artifact
 from research.registry import load_feature_registry
 
@@ -422,6 +423,33 @@ def test_v03_reproduces_interrupted_multi_asset_batches_in_a_clean_root(
         "macro_level": "115",
         "macro_change_yoy": "0.15",
     }
+    fundamental_report = build_feature_quality_report(
+        interrupted["fundamental-growth"],
+        features_root=interrupted_features,
+        data_root=source_data,
+        registry=registry,
+        stale_after_seconds=0,
+    )
+    fundamental_null = next(
+        item
+        for item in fundamental_report["null_cases"]
+        if item["feature_name"] == "revenue_growth_yoy"
+    )
+    assert fundamental_null["reason"] == "insufficient_history"
+    assert fundamental_null["lineage"]["sources"] == ["sec"]
+    assert fundamental_null["lineage"]["raw_locators"]
+    macro_report = build_feature_quality_report(
+        interrupted["macro-state"],
+        features_root=interrupted_features,
+        data_root=source_data,
+        registry=registry,
+        stale_after_seconds=0,
+    )
+    macro_features = {item["feature_name"]: item for item in macro_report["features"]}
+    assert macro_features["macro_change_yoy"]["null_count"] == 0
+    assert macro_features["macro_change_yoy"]["source_contribution"] == [
+        {"source": "alfred", "count": 40}
+    ]
 
 
 def test_v03_tamper_boundaries_fail_closed(tmp_path: Path) -> None:

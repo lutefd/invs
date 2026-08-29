@@ -162,6 +162,7 @@ def _input_lineage(
                         "concept": _as_text(row[columns.index("concept")]) if "concept" in columns else None,
                         "series_id": _as_text(row[columns.index("series_id")]) if "series_id" in columns else None,
                         "observed_at": _as_text(row[columns.index("observed_at")]) if "observed_at" in columns else None,
+                        "available_at": _as_text(row[columns.index("available_at")]) if "available_at" in columns else None,
                         "period_end": _as_text(row[columns.index("period_end")]) if "period_end" in columns else None,
                         "fiscal_period": _as_text(row[columns.index("fiscal_period")]) if "fiscal_period" in columns else None,
                         "value": _as_text(row[columns.index("value")]) if "value" in columns else None,
@@ -171,6 +172,9 @@ def _input_lineage(
                         "low": _as_text(row[columns.index("low")]) if "low" in columns else None,
                         "volume": _as_text(row[columns.index("volume")]) if "volume" in columns else None,
                         "has_volume": row[columns.index("has_volume")] if "has_volume" in columns else None,
+                        "vintage_at": _as_text(row[columns.index("vintage_at")]) if "vintage_at" in columns else None,
+                        "has_vintage_at": row[columns.index("has_vintage_at")] if "has_vintage_at" in columns else None,
+                        "raw_record_locator": _as_text(row[columns.index("raw_record_locator")]) if "raw_record_locator" in columns else None,
                     }
                 )
     if {(item["path"], item["sha256"]) for item in child_manifest["selected_input_parts"]} != {
@@ -193,43 +197,41 @@ def _input_lineage(
     )
 
 
+def _eligible_input_rows(
+    child_manifest: Mapping[str, Any],
+    input_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    decision_at = _parse_timestamp(child_manifest["decision_at"])
+    feature_set = child_manifest["feature_set"]
+    eligible: list[dict[str, Any]] = []
+    for row in input_rows:
+        if row["available_at"] is None or row["observed_at"] is None:
+            continue
+        if _parse_timestamp(row["available_at"]) > decision_at:
+            continue
+        if _parse_timestamp(row["observed_at"]) > decision_at:
+            continue
+        if feature_set == "fundamental-growth":
+            period_end = _date_from_value(row["period_end"])
+            if period_end is None or period_end > decision_at.date():
+                continue
+        if feature_set == "macro-state" and row["has_vintage_at"] is True and (
+            row["vintage_at"] is None or _parse_timestamp(row["vintage_at"]) > decision_at
+        ):
+            continue
+        eligible.append(row)
+    return eligible
+
+
 def _lineage_with_locators(
     lineage: dict[str, Any],
     input_rows: list[dict[str, Any]],
-    child_manifest: Mapping[str, Any],
-    *,
-    data_root: Path,
 ) -> dict[str, Any]:
-    locators: set[str] = set()
-    selected_parts = {
-        (item["path"], item["sha256"])
-        for item in child_manifest["selected_input_parts"]
+    locators = {
+        row["raw_record_locator"]
+        for row in input_rows
+        if row["raw_record_locator"] is not None
     }
-    for manifest_ref in child_manifest["selected_input_manifests"]:
-        path = (
-            data_root / _safe_relative_path(manifest_ref["path"], label="lineage manifest")
-        ).resolve()
-        try:
-            path.relative_to(data_root.resolve())
-        except ValueError as error:
-            raise FeatureQualityReportError("lineage manifest escapes data root") from error
-        document = _strict_json(path, label="selected input manifest")
-        for part in document.get("parts", []):
-            if not isinstance(part, dict) or (part.get("path"), part.get("sha256")) not in selected_parts:
-                continue
-            part_path = path.parent / part["path"]
-            connection = None
-            try:
-                connection = duckdb.connect(":memory:")
-                rows = connection.execute(
-                    f"SELECT raw_record_locator FROM read_parquet({_quote_literal(str(part_path))}, hive_partitioning=false)"
-                ).fetchall()
-            except duckdb.Error as error:
-                raise FeatureQualityReportError(f"cannot read raw locators from {part_path}: {error}") from error
-            finally:
-                if connection is not None:
-                    connection.close()
-            locators.update(str(row[0]) for row in rows if row[0] is not None)
     result = dict(lineage)
     result["raw_locators"] = sorted(locators)
     result["input_row_count"] = len(input_rows)
@@ -357,7 +359,8 @@ def build_feature_quality_report(
         except FeatureArtifactError as error:
             raise FeatureQualityReportError(str(error)) from error
         lineage, input_rows = _input_lineage(child.manifest, data_root=normalized_root)
-        lineage = _lineage_with_locators(lineage, input_rows, child.manifest, data_root=normalized_root)
+        input_rows = _eligible_input_rows(child.manifest, input_rows)
+        lineage = _lineage_with_locators(lineage, input_rows)
         if len(child.observations) != 1:
             raise FeatureQualityReportError("feature-quality report requires one observation per child partition")
         observation = child.observations[0]
