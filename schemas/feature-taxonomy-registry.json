@@ -1,0 +1,39 @@
+{
+  "registry_version": "1.0.0",
+  "entries": [
+    {
+      "feature_set": "fundamental-growth",
+      "feature_set_version": "1.0.0",
+      "source": "sec",
+      "taxonomy": "us-gaap",
+      "source_concept": "OperatingIncomeLoss",
+      "canonical_concept": "operating_income",
+      "unit": "USD",
+      "currency": "USD",
+      "period_type": "duration",
+      "fiscal_periods": ["FY", "Q4"],
+      "scope": "consolidated",
+      "sign": "reported",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-08-29",
+      "review_note": "Use consolidated duration facts only; do not infer operating income from segment or instant facts."
+    },
+    {
+      "feature_set": "fundamental-growth",
+      "feature_set_version": "1.0.0",
+      "source": "sec",
+      "taxonomy": "us-gaap",
+      "source_concept": "Revenue",
+      "canonical_concept": "revenue",
+      "unit": "USD",
+      "currency": "USD",
+      "period_type": "duration",
+      "fiscal_periods": ["FY", "Q4"],
+      "scope": "consolidated",
+      "sign": "reported",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-08-29",
+      "review_note": "Use consolidated duration revenue facts; the producer compares matching fiscal periods and never treats an unmapped fact as zero."
+    }
+  ]
+}

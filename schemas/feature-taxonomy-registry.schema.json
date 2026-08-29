@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-taxonomy-registry.schema.json",
+  "title": "FeatureTaxonomyRegistry",
+  "description": "The reviewed, versioned mapping from source fundamental concepts to canonical feature concepts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["registry_version", "entries"],
+  "properties": {
+    "registry_version": { "const": "1.0.0" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "nonEmpty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feature_set",
+        "feature_set_version",
+        "source",
+        "taxonomy",
+        "source_concept",
+        "canonical_concept",
+        "unit",
+        "currency",
+        "period_type",
+        "fiscal_periods",
+        "scope",
+        "sign",
+        "review_status",
+        "reviewed_at",
+        "review_note"
+      ],
+      "properties": {
+        "feature_set": { "$ref": "#/$defs/identifier" },
+        "feature_set_version": { "$ref": "#/$defs/version" },
+        "source": { "$ref": "#/$defs/identifier" },
+        "taxonomy": { "$ref": "#/$defs/nonEmpty" },
+        "source_concept": { "$ref": "#/$defs/nonEmpty" },
+        "canonical_concept": { "$ref": "#/$defs/identifier" },
+        "unit": { "$ref": "#/$defs/nonEmpty" },
+        "currency": { "$ref": "#/$defs/nonEmpty" },
+        "period_type": {
+          "type": "string",
+          "enum": ["instant", "duration"]
+        },
+        "fiscal_periods": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["FY", "Q1", "Q2", "Q3", "Q4", "H1", "H2", "YTD", "instant", "other"]
+          }
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["consolidated", "parent_only", "segment", "unknown"]
+        },
+        "sign": {
+          "type": "string",
+          "enum": ["reported", "negated"]
+        },
+        "review_status": { "const": "reviewed" },
+        "reviewed_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "review_note": { "$ref": "#/$defs/nonEmpty" }
+      }
+    }
+  }
+}

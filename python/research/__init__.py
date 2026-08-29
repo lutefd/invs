@@ -62,6 +62,12 @@ from .registry import (
     NullPolicy,
     load_feature_registry,
 )
+from .taxonomy import (
+    TaxonomyMapping,
+    TaxonomyRegistry,
+    TaxonomyRegistryError,
+    load_taxonomy_registry,
+)
 
 __all__ = [
     "FX_POLICY_VERSION",
@@ -90,6 +96,9 @@ __all__ = [
     "NullPolicy",
     "ResearchCatalog",
     "SecurityMapping",
+    "TaxonomyMapping",
+    "TaxonomyRegistry",
+    "TaxonomyRegistryError",
     "after_close_execution_session",
     "calendar_fingerprint",
     "calendar_manifest_as_of",
@@ -102,6 +111,7 @@ __all__ = [
     "listings_as_of",
     "load_feature_registry",
     "load_security_mappings",
+    "load_taxonomy_registry",
     "membership_as_of",
     "next_trading_session",
     "publish_adjusted_prices",
