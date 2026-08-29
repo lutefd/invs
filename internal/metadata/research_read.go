@@ -63,7 +63,7 @@ WITH RECURSIVE theme_tree(id) AS (
     WHERE revision.recorded_at <= $2::timestamptz
     ORDER BY revision.theme_id, revision.revision DESC
 )
-SELECT theme.id::text, theme.stable_key, theme.created_at,
+SELECT theme.id::text, theme.stable_key,
        revision.theme_id::text, revision.revision, COALESCE(revision.parent_theme_id::text, ''),
        revision.name, revision.knowledge_kind, revision.review_state, revision.description,
        revision.evidence_refs, revision.author_method, revision.recorded_at, revision.record_hash
@@ -79,7 +79,7 @@ ORDER BY theme.id`, themeID, decisionAt.UTC())
 		var revision ResearchThemeRevision
 		var evidenceRefs []byte
 		if err := themeRows.Scan(
-			&theme.ID, &theme.StableKey, &theme.CreatedAt,
+			&theme.ID, &theme.StableKey,
 			&revision.ThemeID, &revision.Revision, &revision.ParentThemeID,
 			&revision.Name, &revision.KnowledgeKind, &revision.ReviewState, &revision.Description,
 			&evidenceRefs, &revision.AuthorMethod, &revision.RecordedAt, &revision.RecordHash,
@@ -194,7 +194,7 @@ WITH RECURSIVE theme_tree(id) AS (
       AND (revision.valid_until IS NULL OR $2::timestamptz < revision.valid_until)
     ORDER BY revision.relationship_id, revision.revision DESC
 )
-SELECT revision.relationship_id::text, relationship.created_at, revision.revision,
+SELECT revision.relationship_id::text, revision.revision,
        revision.from_entity_id::text, revision.to_entity_id::text, revision.relationship_type,
        revision.direction, revision.knowledge_kind, revision.confidence::double precision,
        revision.evidence_refs, revision.author_method, revision.valid_from,
@@ -211,7 +211,7 @@ ORDER BY revision.relationship_id`, themeID, decisionAt.UTC())
 		var revision ResearchRelationshipRevision
 		var evidenceRefs []byte
 		if err := relationshipRows.Scan(
-			&relationship.ID, &relationship.CreatedAt, &revision.Revision,
+			&relationship.ID, &revision.Revision,
 			&revision.FromEntityID, &revision.ToEntityID,
 			&revision.RelationshipType, &revision.Direction, &revision.KnowledgeKind, &revision.Confidence,
 			&evidenceRefs, &revision.AuthorMethod, &revision.ValidFrom, &revision.ValidUntil,
