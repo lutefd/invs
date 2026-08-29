@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate feature-batch feature-batch-validate action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate feature-batch feature-batch-validate feature-catalog action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -151,8 +151,21 @@ feature-batch-validate: config
 		-v "$(or $(FEATURE_REGISTRY),$(CURDIR)/schemas/feature-set-registry.json):/tmp/feature-set-registry.json:ro" \
 		jupyter python -m research.feature_cli batch-validate \
 			--manifest "$(BATCH_MANIFEST)" \
+				--features-root /data/features \
+				--registry /tmp/feature-set-registry.json
+
+feature-catalog: migrate
+	@test -n "$(BATCH_MANIFEST)" || (echo "BATCH_MANIFEST is required" >&2; exit 2)
+	@test -f "$(or $(FEATURE_REGISTRY),$(CURDIR)/schemas/feature-set-registry.json)" || (echo "FEATURE_REGISTRY is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps \
+		-v "$(or $(FEATURE_REGISTRY),$(CURDIR)/schemas/feature-set-registry.json):/tmp/feature-set-registry.json:ro" \
+		jupyter python -m research.feature_cli batch-validate \
+			--manifest "$(BATCH_MANIFEST)" \
 			--features-root /data/features \
 			--registry /tmp/feature-set-registry.json
+	@$(COMPOSE) --profile collect run --rm --build --entrypoint invs-feature-catalog collector \
+		--manifest "$(BATCH_MANIFEST)" \
+		--features-root /data/features
 
 action-snapshot: config
 	@test -n "$(DATA_SOURCE_ID)" || (echo "DATA_SOURCE_ID is required" >&2; exit 2)
