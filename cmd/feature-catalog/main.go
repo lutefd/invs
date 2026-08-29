@@ -266,6 +266,10 @@ func registrationFromBatchManifest(document batchManifest, outputPath, outputHas
 			Dataset: item.Dataset, HistoricalFitness: item.HistoricalFitness, AvailabilityPolicy: item.AvailabilityPolicy,
 		}
 	}
+	universe := make([]metadata.FeatureArtifactUniverseMember, len(document.Universe.SecurityIDs))
+	for index, securityID := range document.Universe.SecurityIDs {
+		universe[index] = metadata.FeatureArtifactUniverseMember{Ordinal: index, SecurityID: securityID}
+	}
 	partitions := make([]metadata.FeatureArtifactPartition, len(document.Parts))
 	for index, item := range document.Parts {
 		decisionAt, _ := parseCanonicalTimestamp(item.DecisionAt, fmt.Sprintf("batch parts[%d].decision_at", index))
@@ -282,7 +286,7 @@ func registrationFromBatchManifest(document batchManifest, outputPath, outputHas
 		FeatureSet: document.FeatureSet, FeatureSetVersion: document.FeatureSetVersion,
 		RegistrySHA256: document.RegistrySHA256, GeneratorVersion: document.Batch.GeneratorVersion,
 		GitCommit: document.Batch.GitCommit, DecisionStart: decisionTimes[0], DecisionEnd: decisionTimes[len(decisionTimes)-1],
-		DecisionPoints: decisionPoints, UniverseFingerprint: document.Universe.Fingerprint,
+		DecisionPoints: decisionPoints, UniverseFingerprint: document.Universe.Fingerprint, Universe: universe,
 		InputFitness: inputFitness, InputFingerprint: document.InputFingerprint, InputRefs: inputRefs,
 		OutputManifestPath: outputPath, OutputManifestSHA256: outputHash,
 		CalendarDataSourceID: document.CalendarPin.DataSourceID, CalendarMIC: document.CalendarPin.MIC,

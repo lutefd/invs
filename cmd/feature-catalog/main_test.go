@@ -70,6 +70,9 @@ func TestRegistrationFromBatchManifestValidatesContract(t *testing.T) {
 	if len(registration.InputFitness) != 1 || registration.InputFitness[0].HistoricalFitness != "installation_replay_only" {
 		t.Fatalf("registration input fitness = %+v", registration.InputFitness)
 	}
+	if len(registration.Universe) != len(document.Universe.SecurityIDs) || registration.Universe[0].SecurityID != document.Universe.SecurityIDs[0] {
+		t.Fatalf("registration universe = %+v", registration.Universe)
+	}
 }
 
 func TestValidateBatchManifestRejectsFingerprintMutation(t *testing.T) {
