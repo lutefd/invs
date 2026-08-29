@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-catalog-report.schema.json",
+  "title": "FeatureArtifactCatalogReport",
+  "description": "A read-only coverage and lineage report for registered feature batches.",
+  "$comment": "Feature values remain in manifest-addressed Parquet; this report contains catalog metadata and hashes only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "generated_at", "filters", "summary", "artifacts"],
+  "properties": {
+    "version": { "const": 1 },
+    "generated_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "filters": { "$ref": "#/$defs/filters" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "uuid": { "$ref": "common.schema.json#/$defs/uuid" },
+    "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "timestamp": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "version": { "$ref": "feature-set-registry.schema.json#/$defs/version" },
+    "identifier": { "$ref": "feature-set-registry.schema.json#/$defs/identifier" },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\\\u0000].*$"
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "feature_set", "feature_set_version"],
+      "properties": {
+        "artifact_id": { "type": "string" },
+        "feature_set": { "type": "string" },
+        "feature_set_version": { "type": "string" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_count",
+        "complete_artifacts",
+        "partial_artifacts",
+        "empty_artifacts",
+        "inconsistent_artifacts",
+        "decision_point_count",
+        "universe_member_count",
+        "input_reference_count",
+        "input_fitness_count",
+        "requested_partitions",
+        "accepted_partitions",
+        "cataloged_partitions",
+        "rejected_partitions",
+        "row_count"
+      ],
+      "properties": {
+        "artifact_count": { "type": "integer", "minimum": 0 },
+        "complete_artifacts": { "type": "integer", "minimum": 0 },
+        "partial_artifacts": { "type": "integer", "minimum": 0 },
+        "empty_artifacts": { "type": "integer", "minimum": 0 },
+        "inconsistent_artifacts": { "type": "integer", "minimum": 0 },
+        "decision_point_count": { "type": "integer", "minimum": 0 },
+        "universe_member_count": { "type": "integer", "minimum": 0 },
+        "input_reference_count": { "type": "integer", "minimum": 0 },
+        "input_fitness_count": { "type": "integer", "minimum": 0 },
+        "requested_partitions": { "type": "integer", "minimum": 0 },
+        "accepted_partitions": { "type": "integer", "minimum": 0 },
+        "cataloged_partitions": { "type": "integer", "minimum": 0 },
+        "rejected_partitions": { "type": "integer", "minimum": 0 },
+        "row_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "decisionCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_at",
+        "expected_partitions",
+        "accepted_partitions",
+        "unaccounted_partitions",
+        "accepted_row_count"
+      ],
+      "properties": {
+        "decision_at": { "$ref": "#/$defs/timestamp" },
+        "expected_partitions": { "type": "integer", "minimum": 0 },
+        "accepted_partitions": { "type": "integer", "minimum": 0 },
+        "unaccounted_partitions": { "type": "integer", "minimum": 0 },
+        "accepted_row_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "decisionPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "decision_at"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "decision_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "universeMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "security_id"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "security_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "inputFitness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset", "historical_fitness", "availability_policy"],
+      "properties": {
+        "dataset": { "$ref": "#/$defs/identifier" },
+        "historical_fitness": {
+          "type": "string",
+          "enum": [
+            "backtest_safe",
+            "current_research_only",
+            "installation_replay_only",
+            "unsupported"
+          ]
+        },
+        "availability_policy": {
+          "type": "string",
+          "enum": [
+            "exact_publication",
+            "source_declared",
+            "conservative_receipt_time",
+            "current_snapshot",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "inputRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "sha256"],
+      "properties": {
+        "kind": { "enum": ["manifest", "part"] },
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "partition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "security_id",
+        "decision_at",
+        "child_artifact_id",
+        "manifest_path",
+        "manifest_sha256",
+        "part_path",
+        "part_sha256",
+        "row_count"
+      ],
+      "properties": {
+        "security_id": { "$ref": "#/$defs/uuid" },
+        "decision_at": { "$ref": "#/$defs/timestamp" },
+        "child_artifact_id": { "$ref": "#/$defs/uuid" },
+        "manifest_path": { "$ref": "#/$defs/relativePath" },
+        "manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "part_path": { "$ref": "#/$defs/relativePath" },
+        "part_sha256": { "$ref": "#/$defs/sha256" },
+        "row_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "artifact_version",
+        "feature_set",
+        "feature_set_version",
+        "registry_sha256",
+        "generator_version",
+        "git_commit",
+        "decision_start",
+        "decision_end",
+        "universe_fingerprint",
+        "input_fingerprint",
+        "output_manifest_path",
+        "output_manifest_sha256",
+        "calendar_data_source_id",
+        "calendar_mic",
+        "calendar_version",
+        "calendar_session_fingerprint",
+        "calendar_available_at",
+        "decision_clock_policy",
+        "row_count",
+        "requested_partitions",
+        "accepted_partitions",
+        "rejected_partitions",
+        "status",
+        "created_at",
+        "registered_at",
+        "decision_point_count",
+        "universe_count",
+        "input_reference_count",
+        "input_fitness_count",
+        "expected_partitions",
+        "coverage_status",
+        "partition_grid_consistent",
+        "row_count_consistent",
+        "issues",
+        "decision_coverage",
+        "decision_points",
+        "universe",
+        "input_fitness",
+        "input_refs",
+        "partitions"
+      ],
+      "properties": {
+        "artifact_id": { "$ref": "#/$defs/uuid" },
+        "artifact_version": { "$ref": "#/$defs/version" },
+        "feature_set": { "$ref": "#/$defs/identifier" },
+        "feature_set_version": { "$ref": "#/$defs/version" },
+        "registry_sha256": { "$ref": "#/$defs/sha256" },
+        "generator_version": { "type": "string", "minLength": 1 },
+        "git_commit": {
+          "oneOf": [
+            { "const": "unknown" },
+            { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+          ]
+        },
+        "decision_start": { "$ref": "#/$defs/timestamp" },
+        "decision_end": { "$ref": "#/$defs/timestamp" },
+        "universe_fingerprint": { "$ref": "#/$defs/sha256" },
+        "input_fingerprint": { "$ref": "#/$defs/sha256" },
+        "output_manifest_path": { "$ref": "#/$defs/relativePath" },
+        "output_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "calendar_data_source_id": { "$ref": "#/$defs/uuid" },
+        "calendar_mic": { "$ref": "common.schema.json#/$defs/mic" },
+        "calendar_version": { "$ref": "#/$defs/identifier" },
+        "calendar_session_fingerprint": { "$ref": "#/$defs/sha256" },
+        "calendar_available_at": { "$ref": "#/$defs/timestamp" },
+        "decision_clock_policy": { "type": "string", "minLength": 1 },
+        "row_count": { "type": "integer", "minimum": 0 },
+        "requested_partitions": { "type": "integer", "minimum": 0 },
+        "accepted_partitions": { "type": "integer", "minimum": 0 },
+        "rejected_partitions": { "type": "integer", "minimum": 0 },
+        "status": { "enum": ["published", "invalid", "orphaned"] },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "registered_at": { "$ref": "#/$defs/timestamp" },
+        "decision_point_count": { "type": "integer", "minimum": 0 },
+        "universe_count": { "type": "integer", "minimum": 0 },
+        "input_reference_count": { "type": "integer", "minimum": 0 },
+        "input_fitness_count": { "type": "integer", "minimum": 0 },
+        "expected_partitions": { "type": "integer", "minimum": 0 },
+        "coverage_status": { "enum": ["complete", "partial", "empty", "inconsistent"] },
+        "partition_grid_consistent": { "type": "boolean" },
+        "row_count_consistent": { "type": "boolean" },
+        "issues": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "decision_coverage": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/decisionCoverage" }
+        },
+        "decision_points": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/decisionPoint" }
+        },
+        "universe": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/universeMember" }
+        },
+        "input_fitness": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/inputFitness" }
+        },
+        "input_refs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/inputRef" }
+        },
+        "partitions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/partition" }
+        }
+      }
+    }
+  }
+}

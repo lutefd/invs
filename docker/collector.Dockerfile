@@ -12,7 +12,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/collector ./cmd/collector && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/reconcile ./cmd/reconcile && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/invs-action-snapshot ./cmd/action-snapshot && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/invs-feature-catalog ./cmd/feature-catalog
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/invs-feature-catalog ./cmd/feature-catalog && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/invs-feature-report ./cmd/feature-report
 
 FROM alpine:3.22
 ARG INVS_GIT_COMMIT=unknown
@@ -23,6 +24,7 @@ COPY --from=build /out/collector /usr/local/bin/collector
 COPY --from=build /out/reconcile /usr/local/bin/reconcile
 COPY --from=build /out/invs-action-snapshot /usr/local/bin/invs-action-snapshot
 COPY --from=build /out/invs-feature-catalog /usr/local/bin/invs-feature-catalog
+COPY --from=build /out/invs-feature-report /usr/local/bin/invs-feature-report
 COPY --chmod=0444 config/config.example.yaml /etc/invs/config.yaml
 COPY docker/collector-entrypoint.sh /usr/local/bin/collector-entrypoint
 RUN chmod 0755 /etc/invs /usr/local/bin/collector-entrypoint && \

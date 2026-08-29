@@ -11,7 +11,9 @@ entries pin their required canonical inputs, historical-fitness labels, calendar
 decision-clock policy, lookback, null behavior, computation delay, output types, and
 generator implementation. The registry is planning metadata; feature rows remain in
 manifest-backed Parquet and callers must resolve a feature set by exact name and
-version.
+version. `feature-catalog-report.schema.json` defines the read-only coverage and
+lineage report for registered dataset-level feature batches; it contains catalog
+metadata and hashes, never feature values.
 
 ## Normalized publication boundary
 

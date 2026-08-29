@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate feature-batch feature-batch-validate feature-catalog action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate feature-batch feature-batch-validate feature-catalog feature-report action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -166,6 +166,14 @@ feature-catalog: migrate
 	@$(COMPOSE) --profile collect run --rm --build --entrypoint invs-feature-catalog collector \
 		--manifest "$(BATCH_MANIFEST)" \
 		--features-root /data/features
+
+feature-report: migrate
+	@$(COMPOSE) --profile collect run --rm --build --entrypoint invs-feature-report collector \
+		$(if $(FEATURE_ARTIFACT_ID),--artifact-id "$(FEATURE_ARTIFACT_ID)",) \
+		$(if $(FEATURE_SET),--feature-set "$(FEATURE_SET)",) \
+		$(if $(FEATURE_SET_VERSION),--feature-set-version "$(FEATURE_SET_VERSION)",) \
+		$(if $(FEATURE_REPORT_JSON),--json,) \
+		$(if $(FEATURE_REPORT_FAIL_ON_ISSUES),--fail-on-issues,)
 
 action-snapshot: config
 	@test -n "$(DATA_SOURCE_ID)" || (echo "DATA_SOURCE_ID is required" >&2; exit 2)
