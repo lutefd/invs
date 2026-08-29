@@ -156,7 +156,11 @@ def _validate_pack(pack: dict[str, Any]) -> dict[str, Any]:
     _, decision_at = _evidence_timestamp(pack["decision_at"], field="decision_at")
     _evidence_timestamp(pack["created_at"], field="created_at")
     for field in ("theme_refs", "canonical_observation_refs", "feature_artifact_refs", "document_refs", "event_proposal_refs"):
-        _normalise_refs(pack[field], decision_at=decision_at, label=field)
+        normalized_refs = _normalise_refs(pack[field], decision_at=decision_at, label=field)
+        if field == "theme_refs" and not normalized_refs:
+            raise EvidencePackValidationError("theme_refs must contain at least one reference")
+        if normalized_refs != pack[field]:
+            raise EvidencePackValidationError(f"{field} must use canonical reference ordering")
     expected_hash = _sha256_bytes(_pack_content(pack))
     if pack["content_sha256"] != expected_hash:
         raise EvidencePackValidationError(
@@ -258,6 +262,9 @@ def _validate_memo(memo: dict[str, Any]) -> dict[str, Any]:
         raise EvidencePackValidationError("referenced_ids must be unique")
     _evidence_nonempty(memo["body"], field="body")
     _evidence_hash(memo["markdown_sha256"], field="markdown_sha256")
+    expected_markdown_hash = _sha256_bytes(_markdown(memo))
+    if memo["markdown_sha256"] != expected_markdown_hash:
+        raise EvidencePackValidationError("markdown_sha256 mismatch")
     return memo
 
 

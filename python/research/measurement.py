@@ -15,6 +15,7 @@ from .documents import (
     _sha256_bytes,
     _strict_json,
     _timestamp,
+    _uuid,
 )
 
 MEASUREMENT_POLICY_VERSION: Final[str] = "close_to_close_equal_weight_v1"
@@ -54,6 +55,15 @@ def _measurement_hash(value: Any, *, field: str) -> str:
     return result
 
 
+def _measurement_uuid(value: Any, *, field: str) -> str:
+    try:
+        result = _uuid(value, field=field)
+    except DocumentArtifactValidationError as error:
+        raise MeasurementValidationError(str(error)) from error
+    assert result is not None
+    return result
+
+
 def _decimal(value: Any, *, field: str) -> Decimal:
     try:
         parsed = Decimal(str(value))
@@ -86,6 +96,8 @@ def _read_price_artifact(path: str | Path, *, expected_sha256: str | None = None
         observed_text, observed_at = _measurement_timestamp(row["observed_at"], field=f"rows[{index}].observed_at")
         close = _decimal(row["close"], field=f"rows[{index}].close")
         validated_rows.append({"asset_id": asset_id, "observed_at": observed_text, "observed": observed_at, "close": close})
+    if len({(row["asset_id"], row["observed"]) for row in validated_rows}) != len(validated_rows):
+        raise MeasurementValidationError("price measurement artifact contains duplicate asset observations")
     validated_rows.sort(key=lambda row: (row["asset_id"], row["observed"], row["close"]))
     return {"artifact": document, "available": available_at, "rows": validated_rows, "sha256": _sha256_file(artifact_path), "path": artifact_path}
 
@@ -139,6 +151,7 @@ def measure_prediction(
 
     if not isinstance(prediction, dict) or prediction.get("status") != "frozen":
         raise MeasurementValidationError("only frozen predictions can be measured")
+    prediction_id = _measurement_uuid(prediction.get("id"), field="prediction_id")
     direction = _measurement_nonempty(prediction.get("expected_direction"), field="expected_direction")
     _, measurement_time = _measurement_timestamp(measured_at, field="measured_at")
     artifact = _read_price_artifact(price_artifact, expected_sha256=price_artifact_sha256)
@@ -147,7 +160,10 @@ def measure_prediction(
     expected_assets = prediction.get("asset_or_universe")
     if not isinstance(expected_assets, list) or not expected_assets:
         raise MeasurementValidationError("prediction asset_or_universe must be non-empty")
-    asset_ids = {_measurement_nonempty(value, field="asset_or_universe") for value in expected_assets}
+    normalized_assets = [_measurement_nonempty(value, field="asset_or_universe") for value in expected_assets]
+    if len(set(normalized_assets)) != len(normalized_assets):
+        raise MeasurementValidationError("prediction asset_or_universe must be unique")
+    asset_ids = set(normalized_assets)
     benchmark_asset_id = _measurement_nonempty(benchmark_asset_id, field="benchmark_asset_id")
     if benchmark_asset_id in asset_ids:
         raise MeasurementValidationError("benchmark must not be part of the predicted basket")
@@ -158,16 +174,22 @@ def measure_prediction(
     for asset_id in [*asset_ids, benchmark_asset_id]:
         if asset_id not in rows_by_asset or len(rows_by_asset[asset_id]) < 2:
             raise MeasurementValidationError(f"measurement data is incomplete for {asset_id}")
-    basket_returns: list[Decimal] = []
-    basket_series: list[Decimal] = []
+    asset_series: dict[str, dict[datetime, Decimal]] = {}
     for asset_id in sorted(asset_ids):
         series = sorted(rows_by_asset[asset_id], key=lambda row: row["observed"])
-        basket_returns.append(_return(series[0]["close"], series[-1]["close"]))
-        basket_series.extend(row["close"] for row in series)
-    benchmark_series = sorted(rows_by_asset[benchmark_asset_id], key=lambda row: row["observed"])
+        asset_series[asset_id] = {row["observed"]: row["close"] for row in series}
+    common_observations = set.intersection(*(set(series) for series in asset_series.values()))
+    if len(common_observations) < 2:
+        raise MeasurementValidationError("measurement data must share at least two basket observations")
+    first_prices = {asset_id: asset_series[asset_id][min(common_observations)] for asset_id in asset_ids}
+    basket_series: list[Decimal] = []
     with localcontext() as context:
         context.prec = 50
-        basket_return = sum(basket_returns, Decimal(0)) / Decimal(len(basket_returns))
+        for observed_at in sorted(common_observations):
+            normalized_values = [asset_series[asset_id][observed_at] / first_prices[asset_id] for asset_id in sorted(asset_ids)]
+            basket_series.append(sum(normalized_values, Decimal(0)) / Decimal(len(normalized_values)))
+        basket_return = basket_series[-1] - Decimal(1)
+    benchmark_series = sorted(rows_by_asset[benchmark_asset_id], key=lambda row: row["observed"])
     benchmark_return = _return(benchmark_series[0]["close"], benchmark_series[-1]["close"])
     relative_return = basket_return - benchmark_return
     if direction == "up":
@@ -184,8 +206,8 @@ def measure_prediction(
         raise MeasurementValidationError(f"unsupported prediction direction {direction!r}")
     refs = []
     for index, ref in enumerate(input_artifact_refs):
-        if not isinstance(ref, dict) or not {"kind", "id", "sha256"} <= frozenset(ref):
-            raise MeasurementValidationError(f"input_artifact_refs[{index}] requires kind, id, sha256")
+        if not isinstance(ref, dict) or frozenset(ref) != {"kind", "id", "sha256"}:
+            raise MeasurementValidationError(f"input_artifact_refs[{index}] requires exactly kind, id, sha256")
         refs.append(
             {
                 "kind": _measurement_nonempty(ref["kind"], field=f"input_artifact_refs[{index}].kind"),
@@ -197,8 +219,8 @@ def measure_prediction(
         raise MeasurementValidationError("at least one input artifact reference is required")
     return {
         "schema_version": "1.0.0",
-        "outcome_id": str(uuid5(_OUTCOME_NAMESPACE, f"{prediction['id']}:{MEASUREMENT_POLICY_VERSION}")),
-        "prediction_id": prediction["id"],
+        "outcome_id": str(uuid5(_OUTCOME_NAMESPACE, f"{prediction_id}:{MEASUREMENT_POLICY_VERSION}")),
+        "prediction_id": prediction_id,
         "measurement_policy_version": MEASUREMENT_POLICY_VERSION,
         "status": "measured",
         "realized_result": {
