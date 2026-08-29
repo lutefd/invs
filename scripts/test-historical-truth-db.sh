@@ -401,7 +401,7 @@ printf '%s\n' 'checking fresh-image migration wiring'
 docker compose build postgres >/dev/null
 fresh_image=$(docker image inspect --format '{{.Id}}' invs-postgres:latest)
 docker run --rm --entrypoint sh "$fresh_image" \
-	-c 'test -r /docker-entrypoint-initdb.d/000006_historical_truth.sql && test -r /docker-entrypoint-initdb.d/000007_corporate_actions.sql && test -r /docker-entrypoint-initdb.d/000008_price_basis.sql && test -r /docker-entrypoint-initdb.d/000009_nullable_price_publication.sql'
+	-c 'test -r /docker-entrypoint-initdb.d/000006_historical_truth.sql && test -r /docker-entrypoint-initdb.d/000007_corporate_actions.sql && test -r /docker-entrypoint-initdb.d/000008_price_basis.sql && test -r /docker-entrypoint-initdb.d/000009_nullable_price_publication.sql && test -r /docker-entrypoint-initdb.d/000010_feature_artifacts.sql'
 
 fresh_volume="invs-historical-truth-test-$PPID-$$"
 fresh_container="invs-historical-truth-test-$PPID-$$"
@@ -453,7 +453,17 @@ if [[ "$fresh_price_publication_nullable" != "YES" ]]; then
 	printf 'fresh initialization price publication nullable=%s, want YES\n' "$fresh_price_publication_nullable" >&2
 	exit 1
 fi
+fresh_feature_artifact_table=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test -Atc \
+	"SELECT to_regclass('public.feature_artifacts');")
+if [[ "$fresh_feature_artifact_table" != "feature_artifacts" ]]; then
+	printf 'fresh initialization did not create feature_artifacts: %s\n' "$fresh_feature_artifact_table" >&2
+	exit 1
+fi
 
+docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test \
+	< migrations/000010_feature_artifacts.down.sql >/dev/null
 docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test \
 	< migrations/000009_nullable_price_publication.down.sql >/dev/null
@@ -486,6 +496,9 @@ docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test \
 	< migrations/000009_nullable_price_publication.up.sql >/dev/null
+docker exec -i "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test \
+	< migrations/000010_feature_artifacts.up.sql >/dev/null
 after_up_count=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 	-U historical_truth_test -d historical_truth_test -Atc \
 	"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'), to_regclass('public.corporate_action_versions'));" | tr -d '[:space:]')
@@ -505,6 +518,13 @@ reapplied_price_publication_nullable=$(docker exec "$fresh_container" psql -v ON
 	"SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'market_price_snapshots' AND column_name = 'published_at';")
 if [[ "$reapplied_price_publication_nullable" != "YES" ]]; then
 	printf 'migration re-apply price publication nullable=%s, want YES\n' "$reapplied_price_publication_nullable" >&2
+	exit 1
+fi
+reapplied_feature_artifact_table=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	-U historical_truth_test -d historical_truth_test -Atc \
+	"SELECT to_regclass('public.feature_artifacts');")
+if [[ "$reapplied_feature_artifact_table" != "feature_artifacts" ]]; then
+	printf 'migration re-apply did not recreate feature_artifacts: %s\n' "$reapplied_feature_artifact_table" >&2
 	exit 1
 fi
 

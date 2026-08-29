@@ -11,3 +11,4 @@ COPY --chmod=0444 migrations/000006_historical_truth.up.sql /docker-entrypoint-i
 COPY --chmod=0444 migrations/000007_corporate_actions.up.sql /docker-entrypoint-initdb.d/000007_corporate_actions.sql
 COPY --chmod=0444 migrations/000008_price_basis.up.sql /docker-entrypoint-initdb.d/000008_price_basis.sql
 COPY --chmod=0444 migrations/000009_nullable_price_publication.up.sql /docker-entrypoint-initdb.d/000009_nullable_price_publication.sql
+COPY --chmod=0444 migrations/000010_feature_artifacts.up.sql /docker-entrypoint-initdb.d/000010_feature_artifacts.sql
