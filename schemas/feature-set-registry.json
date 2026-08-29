@@ -2,6 +2,161 @@
   "registry_version": "1.0.0",
   "entries": [
     {
+      "feature_set": "fundamental-growth",
+      "feature_set_version": "1.0.0",
+      "description": "Point-in-time revenue level, year-over-year revenue growth, and operating margin for one security.",
+      "entity_type": "security",
+      "decision_frequency": "monthly",
+      "lookback": {
+        "unit": "calendar_periods",
+        "minimum_observations": 2,
+        "warmup_policy": "null_until_available"
+      },
+      "inputs": [
+        {
+          "dataset": "fundamentals",
+          "contract_version": "1.0.0",
+          "required_fields": [
+            "issuer_id",
+            "taxonomy",
+            "concept",
+            "unit",
+            "currency",
+            "period_end",
+            "fiscal_period",
+            "observed_at",
+            "published_at",
+            "available_at",
+            "value",
+            "revision"
+          ],
+          "selection_mode": "point_in_time",
+          "selection_policy": "available_at_and_observed_at",
+          "availability_field": "available_at",
+          "observed_field": "observed_at",
+          "historical_fitness": "backtest_safe",
+          "availability_policy": "exact_publication"
+        }
+      ],
+      "calendar": {
+        "required": true,
+        "scope": "exchange",
+        "pin_required": true,
+        "decision_clock_policy": "after_close_next_session"
+      },
+      "null_policy": {
+        "mode": "typed_null",
+        "reason_vocabulary": [
+          "insufficient_history",
+          "missing_value",
+          "incomparable_period",
+          "zero_denominator",
+          "missing_mapping"
+        ]
+      },
+      "computation": {
+        "delay_seconds": 0,
+        "availability_rule": "max_selected_input_available_at_plus_delay"
+      },
+      "outputs": [
+        {
+          "name": "revenue",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "The latest eligible reviewed revenue fact in the selected fiscal-period policy."
+        },
+        {
+          "name": "revenue_growth_yoy",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Revenue divided by the matching prior-year fiscal-period fact minus one, or null when unavailable."
+        },
+        {
+          "name": "operating_margin",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Latest reviewed operating income divided by matching revenue, or null when incomparable."
+        }
+      ],
+      "generator": {
+        "version": "python-fundamental-growth-1.0.0",
+        "implementation": "research.fundamental_growth.publish_fundamental_growth"
+      }
+    },
+    {
+      "feature_set": "macro-state",
+      "feature_set_version": "1.0.0",
+      "description": "Point-in-time historical-vintage macro level and year-over-year change attached to one security decision.",
+      "entity_type": "security",
+      "decision_frequency": "monthly",
+      "lookback": {
+        "unit": "calendar_periods",
+        "minimum_observations": 2,
+        "warmup_policy": "null_until_available"
+      },
+      "inputs": [
+        {
+          "dataset": "macroeconomics",
+          "contract_version": "1.0.0",
+          "required_fields": [
+            "series_id",
+            "geography",
+            "unit",
+            "frequency",
+            "observed_at",
+            "published_at",
+            "available_at",
+            "value",
+            "revision",
+            "vintage_at"
+          ],
+          "selection_mode": "point_in_time",
+          "selection_policy": "available_at_and_observed_at",
+          "availability_field": "available_at",
+          "observed_field": "observed_at",
+          "historical_fitness": "backtest_safe",
+          "availability_policy": "source_declared"
+        }
+      ],
+      "calendar": {
+        "required": true,
+        "scope": "exchange",
+        "pin_required": true,
+        "decision_clock_policy": "after_close_next_session"
+      },
+      "null_policy": {
+        "mode": "typed_null",
+        "reason_vocabulary": [
+          "insufficient_history",
+          "missing_value",
+          "missing_vintage",
+          "missing_series"
+        ]
+      },
+      "computation": {
+        "delay_seconds": 0,
+        "availability_rule": "max_selected_input_available_at_plus_delay"
+      },
+      "outputs": [
+        {
+          "name": "macro_level",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "The latest eligible value from the selected historical macro vintage."
+        },
+        {
+          "name": "macro_change_yoy",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Latest macro value divided by the matching prior-year observation minus one, or null during warmup."
+        }
+      ],
+      "generator": {
+        "version": "python-macro-state-1.0.0",
+        "implementation": "research.macro_state.publish_macro_state"
+      }
+    },
+    {
       "feature_set": "market-basic",
       "feature_set_version": "1.0.0",
       "description": "Daily close, one-day return, daily range, and volume for one security.",

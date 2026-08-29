@@ -31,11 +31,19 @@ def _write_registry(tmp_path: Path, document: str | dict) -> Path:
 
 def test_checked_in_registry_resolves_market_basic_and_fingerprints_exact_bytes() -> None:
     registry = load_feature_registry(REGISTRY_PATH)
+    fundamental = registry.resolve("fundamental-growth", "1.0.0")
+    macro = registry.resolve("macro-state", "1.0.0")
     definition = registry.resolve("market-basic", "1.0.0")
     momentum = registry.resolve("market-momentum", "1.0.0")
 
     assert registry.registry_version == "1.0.0"
     assert registry.registry_sha256 == hashlib.sha256(REGISTRY_PATH.read_bytes()).hexdigest()
+    assert fundamental.required_datasets == ("fundamentals",)
+    assert fundamental.feature_names == ("revenue", "revenue_growth_yoy", "operating_margin")
+    assert fundamental.inputs[0].historical_fitness == "backtest_safe"
+    assert macro.required_datasets == ("macroeconomics",)
+    assert macro.feature_names == ("macro_level", "macro_change_yoy")
+    assert macro.inputs[0].availability_policy == "source_declared"
     assert definition.feature_names == ("close", "return_1d", "range_1d", "volume")
     assert definition.required_datasets == ("prices",)
     assert definition.inputs[0].historical_fitness == "installation_replay_only"
@@ -93,7 +101,10 @@ def test_duplicate_json_keys_and_semantic_policy_mismatches_fail_closed(tmp_path
         load_feature_registry(_write_registry(tmp_path / "duplicate-keys", duplicate_keys))
 
     mismatch = _registry_document()
-    mismatch["entries"][0]["outputs"][0]["nullable"] = True
+    market_basic = next(
+        entry for entry in mismatch["entries"] if entry["feature_set"] == "market-basic"
+    )
+    market_basic["outputs"][0]["nullable"] = True
     with pytest.raises(FeatureRegistryError, match="nullable must match"):
         load_feature_registry(_write_registry(tmp_path / "nullable", mismatch))
 
