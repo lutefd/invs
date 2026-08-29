@@ -109,7 +109,10 @@ feature: config
 	@test -n "$(SECURITY_ID)" || (echo "SECURITY_ID is required" >&2; exit 2)
 	@test -n "$(DECISION_AT)" || (echo "DECISION_AT is required" >&2; exit 2)
 	@test -n "$(CALENDAR_PIN)" || (echo "CALENDAR_PIN is required" >&2; exit 2)
-	@$(COMPOSE) run --rm --no-deps jupyter python -m research.feature_cli publish \
+	@test -f "$(or $(TAXONOMY_REGISTRY),$(CURDIR)/schemas/feature-taxonomy-registry.json)" || (echo "TAXONOMY_REGISTRY is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps \
+		-v "$(or $(TAXONOMY_REGISTRY),$(CURDIR)/schemas/feature-taxonomy-registry.json):/tmp/feature-taxonomy-registry.json:ro" \
+		jupyter python -m research.feature_cli publish \
 		--data-root /data \
 		--features-root /data/features \
 		--security-id "$(SECURITY_ID)" \
@@ -117,6 +120,13 @@ feature: config
 		--calendar-pin "$(CALENDAR_PIN)" \
 		--feature-set "$(or $(FEATURE_SET),market-basic)" \
 		--feature-set-version "$(or $(FEATURE_SET_VERSION),1.0.0)" \
+		$(if $(ISSUER_ID),--issuer-id "$(ISSUER_ID)",) \
+		--taxonomy-registry /tmp/feature-taxonomy-registry.json \
+		$(if $(MACRO_SOURCE),--macro-source "$(MACRO_SOURCE)",) \
+		$(if $(MACRO_SERIES_ID),--macro-series-id "$(MACRO_SERIES_ID)",) \
+		$(if $(MACRO_GEOGRAPHY),--macro-geography "$(MACRO_GEOGRAPHY)",) \
+		$(if $(MACRO_UNIT),--macro-unit "$(MACRO_UNIT)",) \
+		$(if $(MACRO_FREQUENCY),--macro-frequency "$(MACRO_FREQUENCY)",) \
 		--computation-delay-seconds "$(or $(FEATURE_DELAY),0)" \
 		--git-commit "$(or $(INVS_GIT_COMMIT),unknown)"
 
@@ -135,6 +145,8 @@ feature-batch: config
 		-v "$(BATCH_UNIVERSE):/tmp/feature-universe.json:ro" \
 		-v "$(BATCH_SCHEDULE):/tmp/feature-schedule.json:ro" \
 		-v "$(CALENDAR_PIN):/tmp/calendar-pin.json:ro" \
+		-v "$(or $(TAXONOMY_REGISTRY),$(CURDIR)/schemas/feature-taxonomy-registry.json):/tmp/feature-taxonomy-registry.json:ro" \
+		$(if $(SECURITY_MAPPINGS),-v "$(SECURITY_MAPPINGS):/tmp/feature-security-mappings.json:ro",) \
 		jupyter python -m research.feature_cli batch-publish \
 			--data-root /data \
 			--features-root /data/features \
@@ -142,8 +154,15 @@ feature-batch: config
 			--universe /tmp/feature-universe.json \
 			--schedule /tmp/feature-schedule.json \
 			--calendar-pin /tmp/calendar-pin.json \
+			--taxonomy-registry /tmp/feature-taxonomy-registry.json \
+			$(if $(SECURITY_MAPPINGS),--security-mappings /tmp/feature-security-mappings.json,) \
 			--feature-set "$(or $(FEATURE_SET),market-basic)" \
 			--feature-set-version "$(or $(FEATURE_SET_VERSION),1.0.0)" \
+			$(if $(MACRO_SOURCE),--macro-source "$(MACRO_SOURCE)",) \
+			$(if $(MACRO_SERIES_ID),--macro-series-id "$(MACRO_SERIES_ID)",) \
+			$(if $(MACRO_GEOGRAPHY),--macro-geography "$(MACRO_GEOGRAPHY)",) \
+			$(if $(MACRO_UNIT),--macro-unit "$(MACRO_UNIT)",) \
+			$(if $(MACRO_FREQUENCY),--macro-frequency "$(MACRO_FREQUENCY)",) \
 			--git-commit "$(or $(INVS_GIT_COMMIT),unknown)"
 
 feature-batch-validate: config

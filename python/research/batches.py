@@ -231,6 +231,54 @@ def _canonical_security_ids(value: Sequence[Any]) -> list[str]:
     return sorted(result)
 
 
+def _canonical_security_mappings(
+    value: Mapping[str, Any] | Sequence[Any] | None,
+    *,
+    security_ids: Sequence[str],
+) -> dict[str, str]:
+    """Normalize an explicit security-to-issuer input for fundamental batches."""
+    if value is None:
+        return {}
+    if isinstance(value, Mapping):
+        items = value.items()
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        normalized_items: list[tuple[Any, Any]] = []
+        for index, item in enumerate(value):
+            if isinstance(item, Mapping):
+                if set(item) != {"security_id", "issuer_id"}:
+                    raise FeatureBatchError(
+                        f"security_mappings[{index}] must contain security_id and issuer_id"
+                    )
+                normalized_items.append((item["security_id"], item["issuer_id"]))
+                continue
+            try:
+                normalized_items.append((item.security_id, item.issuer_id))
+            except AttributeError as error:
+                raise FeatureBatchError(
+                    f"security_mappings[{index}] must expose security_id and issuer_id"
+                ) from error
+        items = normalized_items
+    else:
+        raise FeatureBatchError("security_mappings must be an object or a list")
+
+    result: dict[str, str] = {}
+    universe = set(security_ids)
+    for raw_security_id, raw_issuer_id in items:
+        try:
+            security_id = _canonical_uuid(raw_security_id, field="security_mappings.security_id")
+            issuer_id = _canonical_uuid(raw_issuer_id, field="security_mappings.issuer_id")
+        except FeatureArtifactError as error:
+            raise FeatureBatchError(str(error)) from error
+        if security_id not in universe:
+            raise FeatureBatchError(
+                f"security_mappings contains security outside the explicit universe: {security_id}"
+            )
+        if security_id in result:
+            raise FeatureBatchError(f"security_mappings contains duplicate security_id {security_id}")
+        result[security_id] = issuer_id
+    return result
+
+
 def _calendar_pin(value: Mapping[str, Any], *, decision_at: str) -> dict[str, str]:
     if not isinstance(value, Mapping) or set(value) != _CALENDAR_FIELDS:
         raise FeatureBatchError("calendar_pin has an unsupported field set")
@@ -651,6 +699,13 @@ def publish_feature_batch(
     feature_set: str = "market-basic",
     feature_set_version: str = "1.0.0",
     git_commit: str = "unknown",
+    security_mappings: Mapping[str, Any] | Sequence[Any] | None = None,
+    taxonomy_registry: Any = None,
+    macro_source: str | None = None,
+    macro_series_id: str | None = None,
+    macro_geography: str | None = None,
+    macro_unit: str | None = None,
+    macro_frequency: str | None = None,
 ) -> Path:
     """Publish or resume a deterministic dataset-level batch.
 
@@ -662,12 +717,21 @@ def publish_feature_batch(
         definition = registry.resolve(feature_set, feature_set_version)
     except FeatureRegistryError as error:
         raise FeatureBatchError(str(error)) from error
-    if definition.required_datasets != ("prices",):
-        raise FeatureBatchError(f"{feature_set} batch requires the prices input contract")
+    supported_datasets = {"prices", "fundamentals", "macroeconomics"}
+    unsupported_datasets = set(definition.required_datasets) - supported_datasets
+    if unsupported_datasets:
+        raise FeatureBatchError(
+            f"{feature_set} batch requires unsupported input dataset(s): "
+            f"{', '.join(sorted(unsupported_datasets))}"
+        )
     if not isinstance(git_commit, str) or not (git_commit == "unknown" or _GIT_COMMIT_PATTERN.fullmatch(git_commit)):
         raise FeatureBatchError("git_commit must be a lower-case SHA-1 or 'unknown'")
 
     canonical_security_ids = _canonical_security_ids(security_ids)
+    canonical_mappings = _canonical_security_mappings(
+        security_mappings,
+        security_ids=canonical_security_ids,
+    )
     canonical_schedule = _canonical_schedule(decision_ats, field="decision_ats")
     canonical_calendar = _calendar_pin(calendar_pin, decision_at=canonical_schedule[0])
     for decision_at in canonical_schedule[1:]:
@@ -680,6 +744,20 @@ def publish_feature_batch(
     root = Path(features_root).expanduser().resolve()
     for decision_at in canonical_schedule:
         for security_id in canonical_security_ids:
+            if "fundamentals" in definition.required_datasets:
+                issuer_id = canonical_mappings.get(security_id)
+                if issuer_id is None:
+                    rejected.append(
+                        {
+                            "security_id": security_id,
+                            "decision_at": decision_at,
+                            "reason": "missing_security_mapping",
+                            "detail": "fundamental-growth requires an explicit security-to-issuer mapping",
+                        }
+                    )
+                    continue
+            else:
+                issuer_id = None
             try:
                 child_path = publish_feature_artifact(
                     catalog,
@@ -692,6 +770,13 @@ def publish_feature_batch(
                     git_commit=git_commit,
                     feature_set=feature_set,
                     feature_set_version=feature_set_version,
+                    issuer_id=issuer_id,
+                    taxonomy_registry=taxonomy_registry,
+                    macro_source=macro_source,
+                    macro_series_id=macro_series_id,
+                    macro_geography=macro_geography,
+                    macro_unit=macro_unit,
+                    macro_frequency=macro_frequency,
                 )
                 child = read_feature_artifact(child_path)
             except (FeatureArtifactConflictError, FeatureArtifactValidationError):

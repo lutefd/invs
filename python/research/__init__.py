@@ -22,6 +22,12 @@ from .catalog import (
     SecurityMapping,
     load_security_mappings,
 )
+from .fundamental_growth import (
+    compute_fundamental_growth_features,
+    publish_fundamental_growth,
+    read_fundamental_growth_artifact,
+    validate_fundamental_growth_artifact,
+)
 from .fx import (
     POLICY_VERSION as FX_POLICY_VERSION,
 )
@@ -48,6 +54,12 @@ from .historical import (
     security_identifier_as_of,
     trading_session_at,
     universe_as_of,
+)
+from .macro_state import (
+    compute_macro_state_features,
+    publish_macro_state,
+    read_macro_state_artifact,
+    validate_macro_state_artifact,
 )
 from .registry import (
     CalendarPolicy,
@@ -103,6 +115,8 @@ __all__ = [
     "calendar_fingerprint",
     "calendar_manifest_as_of",
     "canonical_fx_observation",
+    "compute_fundamental_growth_features",
+    "compute_macro_state_features",
     "convert_currency",
     "corporate_actions_as_of",
     "fx_as_of",
@@ -116,10 +130,16 @@ __all__ = [
     "next_trading_session",
     "publish_adjusted_prices",
     "publish_feature_batch",
+    "publish_fundamental_growth",
+    "publish_macro_state",
     "read_feature_batch",
+    "read_fundamental_growth_artifact",
+    "read_macro_state_artifact",
     "security_identifier_as_of",
     "trading_session_at",
     "universe_as_of",
     "validate_adjustment_artifact",
     "validate_feature_batch",
+    "validate_fundamental_growth_artifact",
+    "validate_macro_state_artifact",
 ]

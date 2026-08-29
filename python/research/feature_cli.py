@@ -73,6 +73,7 @@ def _parser() -> argparse.ArgumentParser:
     publish.add_argument("--data-root", default="/data")
     publish.add_argument("--features-root", default="/data/features")
     publish.add_argument("--security-id", required=True)
+    publish.add_argument("--issuer-id")
     publish.add_argument("--decision-at", required=True)
     publish.add_argument("--feature-set", default="market-basic")
     publish.add_argument("--feature-set-version", default="1.0.0")
@@ -82,6 +83,12 @@ def _parser() -> argparse.ArgumentParser:
         help="path to an exact calendar-manifest pin JSON object",
     )
     publish.add_argument("--computation-delay-seconds", type=int, default=0)
+    publish.add_argument("--taxonomy-registry")
+    publish.add_argument("--macro-source")
+    publish.add_argument("--macro-series-id")
+    publish.add_argument("--macro-geography")
+    publish.add_argument("--macro-unit")
+    publish.add_argument("--macro-frequency")
     publish.add_argument("--git-commit", default=os.environ.get("INVS_GIT_COMMIT", "unknown"))
 
     validate = subcommands.add_parser(
@@ -100,6 +107,13 @@ def _parser() -> argparse.ArgumentParser:
     batch_publish.add_argument("--calendar-pin", required=True)
     batch_publish.add_argument("--feature-set", default="market-basic")
     batch_publish.add_argument("--feature-set-version", default="1.0.0")
+    batch_publish.add_argument("--security-mappings", help="JSON security-to-issuer mappings")
+    batch_publish.add_argument("--taxonomy-registry", help="reviewed taxonomy mapping registry")
+    batch_publish.add_argument("--macro-source")
+    batch_publish.add_argument("--macro-series-id")
+    batch_publish.add_argument("--macro-geography")
+    batch_publish.add_argument("--macro-unit")
+    batch_publish.add_argument("--macro-frequency")
     batch_publish.add_argument("--git-commit", default=os.environ.get("INVS_GIT_COMMIT", "unknown"))
 
     batch_validate = subcommands.add_parser(
@@ -144,6 +158,23 @@ def _load_security_ids(path: str) -> list[str]:
     return document["security_ids"]
 
 
+def _load_security_mappings(path: str | None) -> list[dict[str, str]] | None:
+    if path is None:
+        return None
+    document = _load_json_object(path, label="security mappings")
+    mappings = document.get("mappings")
+    if set(document) != {"mappings"} or not isinstance(mappings, list):
+        raise ValueError("security mappings must contain exactly one mappings array")
+    result: list[dict[str, str]] = []
+    for index, item in enumerate(mappings):
+        if not isinstance(item, dict) or set(item) != {"security_id", "issuer_id"}:
+            raise ValueError(
+                f"security mappings entry {index} must contain security_id and issuer_id"
+            )
+        result.append(item)
+    return result
+
+
 def _load_decision_ats(path: str) -> list[str]:
     document = _load_json_object(path, label="schedule")
     if set(document) != {"decision_ats"} or not isinstance(document["decision_ats"], list):
@@ -160,12 +191,19 @@ def main(argv: list[str] | None = None) -> int:
                 catalog,
                 decision_at=args.decision_at,
                 security_id=args.security_id,
+                issuer_id=args.issuer_id,
                 calendar_pin=_load_calendar_pin(args.calendar_pin),
                 features_root=args.features_root,
                 computation_delay_seconds=args.computation_delay_seconds,
                 git_commit=args.git_commit,
                 feature_set=args.feature_set,
                 feature_set_version=args.feature_set_version,
+                taxonomy_registry=args.taxonomy_registry,
+                macro_source=args.macro_source,
+                macro_series_id=args.macro_series_id,
+                macro_geography=args.macro_geography,
+                macro_unit=args.macro_unit,
+                macro_frequency=args.macro_frequency,
             )
             artifact = validate_feature_artifact(manifest_path)
             result = _summary(artifact, action="published")
@@ -185,6 +223,13 @@ def main(argv: list[str] | None = None) -> int:
                 feature_set=args.feature_set,
                 feature_set_version=args.feature_set_version,
                 git_commit=args.git_commit,
+                security_mappings=_load_security_mappings(args.security_mappings),
+                taxonomy_registry=args.taxonomy_registry,
+                macro_source=args.macro_source,
+                macro_series_id=args.macro_series_id,
+                macro_geography=args.macro_geography,
+                macro_unit=args.macro_unit,
+                macro_frequency=args.macro_frequency,
             )
             artifact = validate_feature_batch(
                 manifest_path,
