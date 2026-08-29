@@ -22,6 +22,14 @@ from .catalog import (
     SecurityMapping,
     load_security_mappings,
 )
+from .documents import (
+    DocumentArtifactConflictError,
+    DocumentArtifactError,
+    DocumentArtifactValidationError,
+    publish_document,
+    read_document,
+    read_document_text,
+)
 from .feature_quality import FeatureQualityReportError, build_feature_quality_report
 from .fundamental_growth import (
     compute_fundamental_growth_features,
@@ -93,6 +101,9 @@ __all__ = [
     "ComputationPolicy",
     "DatasetSchemaError",
     "DatasetStatus",
+    "DocumentArtifactConflictError",
+    "DocumentArtifactError",
+    "DocumentArtifactValidationError",
     "FXObservationNotFound",
     "FXPolicyError",
     "FeatureBatchConflictError",
@@ -132,9 +143,12 @@ __all__ = [
     "membership_as_of",
     "next_trading_session",
     "publish_adjusted_prices",
+    "publish_document",
     "publish_feature_batch",
     "publish_fundamental_growth",
     "publish_macro_state",
+    "read_document",
+    "read_document_text",
     "read_feature_batch",
     "read_fundamental_growth_artifact",
     "read_macro_state_artifact",
