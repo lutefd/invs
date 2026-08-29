@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/research-status-report.schema.json",
+  "title": "Read-only research status report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "as_of", "active_hypotheses", "upcoming_reviews", "predictions"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "as_of": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "active_hypotheses": { "type": "array", "items": { "$ref": "#/$defs/hypothesisStatus" } },
+    "upcoming_reviews": { "type": "array", "items": { "$ref": "#/$defs/upcomingReview" } },
+    "predictions": { "type": "array", "items": { "$ref": "#/$defs/predictionStatus" } }
+  },
+  "$defs": {
+    "hypothesisStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hypothesis_id", "title", "status", "revision", "thesis", "horizon", "benchmark",
+        "decision_at", "review_at", "evidence_pack_id", "evidence_pack_sha256",
+        "evidence_count", "prediction_count", "measured_prediction_count"
+      ],
+      "properties": {
+        "hypothesis_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "title": { "type": "string", "minLength": 1 },
+        "status": { "const": "active" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "thesis": { "type": "string", "minLength": 1 },
+        "horizon": { "type": "string", "minLength": 1 },
+        "benchmark": { "type": "string", "minLength": 1 },
+        "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "review_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "evidence_pack_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "evidence_pack_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "evidence_count": { "type": "integer", "minimum": 0 },
+        "latest_evidence_at": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/utcTimestamp" }, { "type": "null" }]
+        },
+        "prediction_count": { "type": "integer", "minimum": 0 },
+        "measured_prediction_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "upcomingReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hypothesis_id", "title", "revision", "review_at"],
+      "properties": {
+        "hypothesis_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "title": { "type": "string", "minLength": 1 },
+        "revision": { "type": "integer", "minimum": 1 },
+        "review_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+      }
+    },
+    "predictionStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prediction_id", "hypothesis_id", "hypothesis_revision", "asset_or_universe",
+        "expected_direction", "expected_range", "horizon", "confidence", "created_at", "status"
+      ],
+      "properties": {
+        "prediction_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "hypothesis_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "hypothesis_revision": { "type": "integer", "minimum": 1 },
+        "asset_or_universe": { "type": "array", "minItems": 1 },
+        "expected_direction": { "type": "string", "minLength": 1 },
+        "expected_range": { "type": "object", "minProperties": 1 },
+        "horizon": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "created_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "frozen_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "status": { "enum": ["draft", "frozen", "measured", "invalidated"] },
+        "outcome_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "outcome_status": { "enum": ["measured", "unavailable", "invalid"] },
+        "measurement_policy": { "type": "string", "minLength": 1 },
+        "measured_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+      }
+    }
+  }
+}

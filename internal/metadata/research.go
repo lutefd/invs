@@ -968,8 +968,11 @@ func (r *Repository) AppendResearchHypothesisRevision(ctx context.Context, revis
 	if err != nil {
 		return ResearchHypothesisRevision{}, err
 	}
-	if revision.DecisionAt.IsZero() {
-		return ResearchHypothesisRevision{}, errors.New("hypothesis decision_at is required")
+	if revision.DecisionAt.IsZero() || revision.ReviewAt.IsZero() {
+		return ResearchHypothesisRevision{}, errors.New("hypothesis decision_at and review_at are required")
+	}
+	if !revision.ReviewAt.After(revision.DecisionAt) {
+		return ResearchHypothesisRevision{}, errors.New("hypothesis review_at must be after decision_at")
 	}
 	if revision.CreatedAt.IsZero() {
 		revision.CreatedAt = time.Now().UTC()
@@ -1010,8 +1013,8 @@ func insertResearchHypothesisRevision(ctx context.Context, exec interface {
 			HypothesisID, Thesis, Horizon, Benchmark, EvidencePackID, EvidencePackSHA256 string
 			Revision                                                                     int
 			CausalModel, Universe, Invalidation                                          json.RawMessage
-			DecisionAt, CreatedAt                                                        time.Time
-		}{revision.HypothesisID, revision.Thesis, revision.Horizon, revision.Benchmark, revision.EvidencePackID, revision.EvidencePackSHA256, revision.Revision, revision.CausalModel, revision.Universe, revision.Invalidation, revision.DecisionAt.UTC(), revision.CreatedAt.UTC()})
+			DecisionAt, ReviewAt, CreatedAt                                              time.Time
+		}{revision.HypothesisID, revision.Thesis, revision.Horizon, revision.Benchmark, revision.EvidencePackID, revision.EvidencePackSHA256, revision.Revision, revision.CausalModel, revision.Universe, revision.Invalidation, revision.DecisionAt.UTC(), revision.ReviewAt.UTC(), revision.CreatedAt.UTC()})
 		if err != nil {
 			return err
 		}
@@ -1020,10 +1023,10 @@ func insertResearchHypothesisRevision(ctx context.Context, exec interface {
 		return err
 	}
 	_, err := exec.Exec(ctx, `
-INSERT INTO research_hypothesis_revisions(hypothesis_id, revision, thesis, causal_model, horizon, benchmark, universe, invalidation_conditions, decision_at, evidence_pack_id, evidence_pack_sha256, created_at, record_hash)
-VALUES ($1::uuid, $2, $3, $4::jsonb, $5, $6, $7::jsonb, $8::jsonb, $9, $10::uuid, $11, $12, $13)`,
+INSERT INTO research_hypothesis_revisions(hypothesis_id, revision, thesis, causal_model, horizon, benchmark, universe, invalidation_conditions, decision_at, review_at, evidence_pack_id, evidence_pack_sha256, created_at, record_hash)
+VALUES ($1::uuid, $2, $3, $4::jsonb, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11::uuid, $12, $13, $14)`,
 		revision.HypothesisID, revision.Revision, revision.Thesis, causalModel, revision.Horizon, revision.Benchmark,
-		universe, invalidation, revision.DecisionAt.UTC(), revision.EvidencePackID, revision.EvidencePackSHA256, revision.CreatedAt.UTC(), revision.RecordHash)
+		universe, invalidation, revision.DecisionAt.UTC(), revision.ReviewAt.UTC(), revision.EvidencePackID, revision.EvidencePackSHA256, revision.CreatedAt.UTC(), revision.RecordHash)
 	return err
 }
 

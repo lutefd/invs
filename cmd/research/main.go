@@ -24,6 +24,15 @@ type closeHypothesisInput struct {
 	Invalidated  bool   `json:"invalidated"`
 }
 
+type themeSnapshotInput struct {
+	ThemeID    string    `json:"theme_id"`
+	DecisionAt time.Time `json:"decision_at"`
+}
+
+type statusReportInput struct {
+	AsOf time.Time `json:"as_of"`
+}
+
 func main() {
 	var databaseURL, operation, inputPath string
 	flag.StringVar(&databaseURL, "database-url", os.Getenv("DATABASE_URL"), "PostgreSQL URL")
@@ -114,6 +123,12 @@ func dispatch(ctx context.Context, repository *metadata.Repository, operation st
 			return nil, err
 		}
 		return map[string]string{"status": "seeded"}, nil
+	case "theme-snapshot":
+		var value themeSnapshotInput
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.GetResearchThemeSnapshot(ctx, value.ThemeID, value.DecisionAt)
 	case "theme-revision":
 		var value metadata.ResearchThemeRevision
 		if err := decodeInput(input, &value); err != nil {
@@ -239,6 +254,12 @@ func dispatch(ctx context.Context, repository *metadata.Repository, operation st
 			return nil, err
 		}
 		return repository.GetResearchPrediction(ctx, value.PredictionID)
+	case "status-report":
+		var value statusReportInput
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.GetResearchStatusReport(ctx, value.AsOf)
 	case "outcome":
 		var value metadata.ResearchPredictionOutcome
 		if err := decodeInput(input, &value); err != nil {

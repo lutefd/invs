@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -73,6 +73,10 @@ migrate: setup config
 		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT to_regclass('"'"'public.research_theme_indicators'"'"')"' | \
 		grep -qx 'research_theme_indicators' || \
 		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000013_research_theme_context.up.sql
+	@$(COMPOSE) exec -T postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT 1 FROM information_schema.columns WHERE table_schema='"'"'public'"'"' AND table_name='"'"'research_hypothesis_revisions'"'"' AND column_name='"'"'review_at'"'"'"' | \
+		grep -qx '1' || \
+		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000014_research_hypothesis_review_at.up.sql
 
 historical-truth-db-test: config
 	@scripts/test-historical-truth-db.sh
@@ -216,6 +220,22 @@ feature-report: migrate
 		$(if $(FEATURE_SET_VERSION),--feature-set-version "$(FEATURE_SET_VERSION)",) \
 		$(if $(FEATURE_REPORT_JSON),--json,) \
 		$(if $(FEATURE_REPORT_FAIL_ON_ISSUES),--fail-on-issues,)
+
+research-seed-theme: migrate
+	@$(COMPOSE) --profile collect run --rm --build \
+		-v "$(CURDIR)/fixtures/research/ai-infrastructure-theme.json:/tmp/ai-infrastructure-theme.json:ro" \
+		--entrypoint invs-research collector --operation seed-theme --input /tmp/ai-infrastructure-theme.json
+
+research-theme-snapshot: migrate
+	@test -n "$(THEME_ID)" || (echo "THEME_ID is required" >&2; exit 2)
+	@test -n "$(DECISION_AT)" || (echo "DECISION_AT is required" >&2; exit 2)
+	@printf '%s\n' '{"theme_id":"$(THEME_ID)","decision_at":"$(DECISION_AT)"}' | \
+		$(COMPOSE) --profile collect run --rm -T --build --entrypoint invs-research collector --operation theme-snapshot
+
+research-status-report: migrate
+	@test -n "$(AS_OF)" || (echo "AS_OF is required" >&2; exit 2)
+	@printf '%s\n' '{"as_of":"$(AS_OF)"}' | \
+		$(COMPOSE) --profile collect run --rm -T --build --entrypoint invs-research collector --operation status-report
 
 action-snapshot: config
 	@test -n "$(DATA_SOURCE_ID)" || (echo "DATA_SOURCE_ID is required" >&2; exit 2)

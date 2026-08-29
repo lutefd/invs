@@ -16,6 +16,7 @@
     "universe",
     "invalidation_conditions",
     "decision_at",
+    "review_at",
     "evidence_pack_id",
     "evidence_pack_sha256",
     "created_at"
@@ -41,6 +42,7 @@
       "items": { "type": "string", "minLength": 1 }
     },
     "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "review_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
     "evidence_pack_id": { "$ref": "common.schema.json#/$defs/uuid" },
     "evidence_pack_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
     "created_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }

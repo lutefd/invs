@@ -114,6 +114,19 @@ type ResearchThemeBundle struct {
 	Conditions    []ResearchThemeCondition          `json:"conditions"`
 }
 
+type ResearchThemeSnapshot struct {
+	SchemaVersion string                            `json:"schema_version"`
+	ThemeID       string                            `json:"theme_id"`
+	DecisionAt    time.Time                         `json:"decision_at"`
+	Themes        []ResearchThemeBundleTheme        `json:"themes"`
+	Entities      []ResearchEntity                  `json:"entities"`
+	Memberships   []ResearchThemeMembership         `json:"memberships"`
+	Relationships []ResearchThemeBundleRelationship `json:"relationships"`
+	Indicators    []ResearchThemeIndicator          `json:"indicators"`
+	FeatureRefs   []ResearchThemeFeatureRef         `json:"feature_refs"`
+	Conditions    []ResearchThemeCondition          `json:"conditions"`
+}
+
 type ResearchRelationship struct {
 	ID        string    `json:"id,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
@@ -235,6 +248,7 @@ type ResearchHypothesisRevision struct {
 	Universe           json.RawMessage `json:"universe"`
 	Invalidation       json.RawMessage `json:"invalidation_conditions"`
 	DecisionAt         time.Time       `json:"decision_at"`
+	ReviewAt           time.Time       `json:"review_at"`
 	EvidencePackID     string          `json:"evidence_pack_id"`
 	EvidencePackSHA256 string          `json:"evidence_pack_sha256"`
 	CreatedAt          time.Time       `json:"created_at,omitempty"`
@@ -282,4 +296,55 @@ type ResearchPredictionOutcome struct {
 	InputArtifactRefs json.RawMessage `json:"input_artifact_refs"`
 	CreatedAt         time.Time       `json:"created_at,omitempty"`
 	RecordHash        string          `json:"record_hash,omitempty"`
+}
+
+type ResearchHypothesisStatus struct {
+	HypothesisID            string     `json:"hypothesis_id"`
+	Title                   string     `json:"title"`
+	Status                  string     `json:"status"`
+	Revision                int        `json:"revision"`
+	Thesis                  string     `json:"thesis"`
+	Horizon                 string     `json:"horizon"`
+	Benchmark               string     `json:"benchmark"`
+	DecisionAt              time.Time  `json:"decision_at"`
+	ReviewAt                time.Time  `json:"review_at"`
+	EvidencePackID          string     `json:"evidence_pack_id"`
+	EvidencePackSHA256      string     `json:"evidence_pack_sha256"`
+	EvidenceCount           int        `json:"evidence_count"`
+	LatestEvidenceAt        *time.Time `json:"latest_evidence_at,omitempty"`
+	PredictionCount         int        `json:"prediction_count"`
+	MeasuredPredictionCount int        `json:"measured_prediction_count"`
+}
+
+type ResearchUpcomingReview struct {
+	HypothesisID string    `json:"hypothesis_id"`
+	Title        string    `json:"title"`
+	Revision     int       `json:"revision"`
+	ReviewAt     time.Time `json:"review_at"`
+}
+
+type ResearchPredictionStatus struct {
+	PredictionID       string          `json:"prediction_id"`
+	HypothesisID       string          `json:"hypothesis_id"`
+	HypothesisRevision int             `json:"hypothesis_revision"`
+	AssetOrUniverse    json.RawMessage `json:"asset_or_universe"`
+	ExpectedDirection  string          `json:"expected_direction"`
+	ExpectedRange      json.RawMessage `json:"expected_range"`
+	Horizon            string          `json:"horizon"`
+	Confidence         float64         `json:"confidence"`
+	CreatedAt          time.Time       `json:"created_at"`
+	FrozenAt           *time.Time      `json:"frozen_at,omitempty"`
+	Status             string          `json:"status"`
+	OutcomeID          string          `json:"outcome_id,omitempty"`
+	OutcomeStatus      string          `json:"outcome_status,omitempty"`
+	MeasurementPolicy  string          `json:"measurement_policy,omitempty"`
+	MeasuredAt         *time.Time      `json:"measured_at,omitempty"`
+}
+
+type ResearchStatusReport struct {
+	SchemaVersion    string                     `json:"schema_version"`
+	AsOf             time.Time                  `json:"as_of"`
+	ActiveHypotheses []ResearchHypothesisStatus `json:"active_hypotheses"`
+	UpcomingReviews  []ResearchUpcomingReview   `json:"upcoming_reviews"`
+	Predictions      []ResearchPredictionStatus `json:"predictions"`
 }
