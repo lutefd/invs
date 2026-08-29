@@ -6,8 +6,9 @@ FRED/BCB macro series, and bounded ALFRED historical vintages. It preserves sour
 Parquet through immutable manifests, registers operational and feature-artifact
 metadata in PostgreSQL, and publishes accepted latest-only price/macro projections
 for Grafana. It exposes canonical history through DuckDB/Jupyter and a closed,
-deterministic `market-basic` feature artifact engine. It intentionally does not
-include a strategy API, backtester, distributed queue, or live execution.
+deterministic `market-basic` and `market-momentum` feature artifact engine. It
+intentionally does not include a strategy API, backtester, distributed queue, or
+live execution.
 
 The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC,
 Yahoo, FRED, and BCB. Its raw run manifests and normalized evidence are retained in
@@ -124,6 +125,13 @@ envelope is an idempotent no-op; the catalog is not a second feature-value store
 read-only `make feature-report` path summarizes registered partition coverage and
 lineage from PostgreSQL without inspecting feature values; filesystem/hash
 reconciliation remains a separate operation.
+
+The controlled feature registry currently contains `market-basic` 1.0.0 and
+`market-momentum` 1.0.0. The latter consumes one point-in-time daily price series and
+publishes four close-return horizons, annualized 21-return volatility, and a trailing
+21-close maximum drawdown. Both families retain receipt-time price inputs as
+`installation_replay_only`; adding a feature family does not upgrade source fitness
+or introduce a strategy, signal, or model boundary.
 
 At source-run finalization, all candidate provenance is validated before candidates are
 collapsed to one winning price per security or macro observation per series. This keeps

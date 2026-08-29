@@ -115,7 +115,15 @@ It uses a repeatable-read PostgreSQL transaction and never reads feature values.
 report schema is `schemas/feature-catalog-report.schema.json`; a live collector-image
 probe covered first registration, idempotent retry, JSON output, and text output for a
 two-date batch. This still does not claim feature-level null reporting, new feature
-families, or the v0.3 exit gate.
+families beyond the first market/risk family, or the v0.3 exit gate.
+
+The first market/risk family is now implemented through the contract commit
+`dd450b3` and producer commit `941c6b5`. `market-momentum` 1.0.0 publishes four
+eligible-observation close returns, annualized trailing 21-return volatility, and
+trailing 21-close maximum drawdown with explicit warmup/null behavior. Its strict
+schemas, formulas, point-in-time boundary, and receipt-time `installation_replay_only`
+fitness are recorded in ADR 0012 and the
+[implementation acceptance note](acceptance/2026-08-29-market-momentum.md).
 
 ## Yahoo `.SA` source-admission verification
 
@@ -163,6 +171,9 @@ to close the v0.2 calendar gate. See the
 
 - Repository: `/home/luis/dev/invs`
 - Branch: `main`
+- Latest market-momentum contract boundary: `dd450b3` (`feat(registry): register market momentum feature set`)
+- Latest market-momentum producer boundary: `941c6b5` (`feat(features): add market momentum producer`)
+- Market-momentum implementation acceptance: [bounded Decimal producer, batch, and CLI checks](acceptance/2026-08-29-market-momentum.md)
 - Live-accepted ALFRED implementation boundary: `31378be` (`docs: record ALFRED milestone and roadmap`)
 - Latest provider-contract implementation boundary: `8f2680f` (`feat(provider): standardize downloaded resource results`)
 - Latest research-visibility implementation boundary: `806874a` (`feat(research): inspect filings and feature artifacts`)
@@ -790,8 +801,26 @@ The closed `market-basic` 1.0.0 registry contains exactly:
 - `range_1d`: high minus low; and
 - `volume`: selected volume, or null when unavailable.
 
+The closed `market-momentum` 1.0.0 registry contains exactly:
+
+- `return_1m`, `return_3m`, `return_6m`, and `return_12m`: close-to-close simple
+  returns over 21, 63, 126, and 252 eligible observations;
+- `realized_volatility_1m`: annualized sample standard deviation of the trailing 21
+  one-observation returns; and
+- `max_drawdown_1m`: the minimum running close-to-peak return across 21 eligible
+  closes.
+
+The strict contracts are
+[`feature-momentum-manifest.schema.json`](../schemas/feature-momentum-manifest.schema.json)
+and
+[`feature-momentum-observation.schema.json`](../schemas/feature-momentum-observation.schema.json).
+The maximum family warmup is 253 closes; shorter outputs become available at their
+own prerequisites, while missing required closes become typed nulls and invalid or
+zero-denominator calculations reject the partition.
+
 The engine exposes `compute_market_basic_features`, `publish_market_basic`,
-`build_market_basic_artifact`, `read_feature_artifact`,
+`build_market_basic_artifact`, `compute_market_momentum_features`,
+`publish_market_momentum`, `publish_feature_artifact`, `read_feature_artifact`,
 `validate_feature_artifact`, and `compute_input_fingerprint`.
 
 The current engine:
@@ -810,7 +839,9 @@ The current engine:
 - derives deterministic artifact identity from the complete input fingerprint and
   detects explicit identity conflicts;
 - rejects tampered parts, unknown versions/features, duplicate JSON keys, unlisted
-  files, hash mismatches, timing violations, and physical schema drift.
+  files, hash mismatches, timing violations, and physical schema drift. The generic
+reader dispatches to the strict momentum reader when the manifest declares
+`market-momentum` 1.0.0.
 
 The artifact reader follows the feature manifest, not recursive discovery. The
 dataset-level [batch manifest](../schemas/feature-batch-manifest.schema.json) and
@@ -991,6 +1022,15 @@ confirmed the idempotent second registration, verified complete JSON coverage an
 lineage (2/2 partitions and 2 feature rows), exercised text output, and removed all
 temporary feature files and catalog child rows afterward.
 
+The `market-momentum` implementation boundary through `941c6b5` passed the focused
+registry/producer/batch/CLI suite (15 tests), the full `make test` ladder (100 Python
+tests with Ruff), and strict schema validation for 24 JSON Schema documents. The
+focused acceptance used manifest-backed daily Parquet with 253 rows, independently
+recomputed all six outputs, verified per-output warmup, idempotent publication,
+tamper rejection, zero-denominator rejection, direct CLI dispatch, and batch dispatch.
+It is an implementation acceptance only: receipt-time price inputs remain
+`installation_replay_only`, and no v0.3 exit claim is made.
+
 The corporate-action boundary through `4751235` passed `make test` with 69 Python
 tests, `make historical-truth-db-test`, a clean isolated PostgreSQL publication,
 exact-key replays, supported as-of snapshot export, immutable adjustment replay, and
@@ -1058,13 +1098,13 @@ The following are not accidental omissions:
   identity resolution.
 - No distributed queue, scheduler, cloud object-store deployment, or production
   multi-user authorization.
-- Feature engine has a checked-in closed registry and a bounded `market-basic` batch
-  runner with one pinned `after_close_next_session` policy. A PostgreSQL catalog now
-  stores validated dataset-level batch metadata and lineage, and its read-only report
-  exposes catalog-level partition coverage. There are still no broader clock policies,
-  accepted market/risk feature families, feature-level null reporting, automatic
-  catalog reconciliation, strategy, backtester, portfolio, execution, labels,
-  training data, or ML behavior.
+- Feature engine has a checked-in closed registry and bounded `market-basic` and
+  `market-momentum` batch runners with one pinned `after_close_next_session` policy.
+  A PostgreSQL catalog now stores validated dataset-level batch metadata and lineage,
+  and its read-only report exposes catalog-level partition coverage. There are still
+  no broader clock policies, feature-level null reporting, automatic catalog
+  reconciliation, strategy, backtester, portfolio, execution, labels, training data,
+  or ML behavior.
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
 
@@ -1073,7 +1113,8 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d` and v0.2 at `0bfdc27`. The v0.3 entry registry and bounded resumable batch
 slice is committed through `f1792ad`; catalog registration is committed through
-`12fdf56`; catalog reporting is committed through `94a3bf0`. The next cohesive unit
-is an accepted market/risk feature family, followed by feature-level null reporting
-and clean-root multi-asset acceptance. Keep receipt-time prices installation-replay
-only, and leave v0.5 strategy/backtester behavior deferred.
+`12fdf56`; catalog reporting is committed through `94a3bf0`; and the first
+market/risk feature family is committed through `dd450b3` and `941c6b5`. The next
+cohesive units are feature-level null reporting and clean-root multi-asset
+acceptance. Keep receipt-time prices installation-replay only, and leave v0.5
+strategy/backtester behavior deferred.

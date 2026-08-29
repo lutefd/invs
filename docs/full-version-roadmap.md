@@ -102,10 +102,11 @@ The following baseline limitations drive the version order:
   outstanding.
 - SEC filing metadata is canonical and live-accepted for a bounded AAPL submissions
   slice; CVM CAD remains intentionally raw-only.
-- The feature engine has one bounded versioned registry, a dataset-level `market-basic`
-  runner, a PostgreSQL catalog for validated batches, and a read-only catalog
-  coverage/lineage report, but still lacks broad feature families, reviewed taxonomy
-  mappings, feature-level null reporting, and automatic catalog reconciliation.
+- The feature engine has a bounded versioned registry, dataset-level `market-basic`
+  and `market-momentum` runners, a PostgreSQL catalog for validated batches, and a
+  read-only catalog coverage/lineage report, but still lacks broader feature families,
+  reviewed taxonomy mappings, feature-level null reporting, and automatic catalog
+  reconciliation.
 - There is no theme graph, document-event pipeline, hypothesis ledger, backtester,
   portfolio engine, paper account, or live execution.
 
@@ -1937,7 +1938,8 @@ unsupported scope decisions. The next narrow queue is v0.3 feature-platform work
 The v0.3 entry registry and bounded resumable `market-basic` batch are implemented
 through `f1792ad`, and verified batch metadata is cataloged through `12fdf56` without
 copying feature rows. Catalog-level coverage/lineage reporting is implemented through
-`94a3bf0`; the next narrow unit is an accepted market/risk feature family, followed by
+`94a3bf0`. The first accepted market/risk family, `market-momentum` 1.0.0, is defined
+in ADR 0012 and implemented through `dd450b3` and `941c6b5`; it is followed by
 feature-level null reporting and clean-root multi-asset acceptance.
 The general backtester remains a later v0.5 boundary; the fastest path to the full
 platform is still to keep every later result explainable from a trusted historical

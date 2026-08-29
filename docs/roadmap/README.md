@@ -123,8 +123,11 @@ schedule, registry hash, input fitness, manifest/part lineage, and rejected
 partitions, while keeping receipt-time prices labelled `installation_replay_only`.
 The read-only catalog coverage/lineage report then landed in `03521c2`, `731b0b4`,
 and `94a3bf0`, with text/JSON output, per-decision coverage, and explicit lineage
-inspection. The next unaccepted cohesive unit is an accepted market/risk feature
-family; feature-level null reporting, broader feature families, and clean-root
+inspection. The first accepted market/risk family, `market-momentum` 1.0.0, landed
+through contract commit `dd450b3` and producer commit `941c6b5`; its exact formulas,
+warmup policy, and receipt-time fitness boundary are recorded in ADR 0012 and the
+[implementation acceptance note](../acceptance/2026-08-29-market-momentum.md).
+Feature-level null reporting, broader feature families, and clean-root multi-asset
 acceptance remain open.
 
 The common downloaded-resource result contract and provider failure-preservation

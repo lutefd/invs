@@ -840,7 +840,7 @@ local replay policies; they do not turn a current CAD snapshot into historical
 issuer state. Since CAD is currently raw-only, it is not a canonical filing
 row to query today.
 
-## 7. Publishing and validating market-basic features
+## 7. Publishing and validating deterministic market features
 
 The first feature registry is `market-basic` version `1.0.0`. It currently
 computes four exact-string-or-null fields for one security as of one decision
@@ -940,14 +940,53 @@ identity with changed content raises a conflict. Validation rejects hash
 mismatches, unsupported versions, malformed decimal strings, wrong physical
 types, duplicate JSON keys, missing listed parts, and unlisted files.
 
+### Publishing market-momentum
+
+The second registry entry is `market-momentum` version `1.0.0`, defined in
+[ADR 0012](adr/0012-market-momentum-feature-set.md) and backed by the strict
+[`feature-momentum-manifest.schema.json`](../schemas/feature-momentum-manifest.schema.json)
+and [`feature-momentum-observation.schema.json`](../schemas/feature-momentum-observation.schema.json)
+contracts. It consumes one point-in-time daily price series and publishes:
+
+- `return_1m`, `return_3m`, `return_6m`, and `return_12m`, using 21, 63, 126,
+  and 252 eligible observations respectively;
+- `realized_volatility_1m`, the annualized sample volatility of the trailing 21
+  one-observation returns; and
+- `max_drawdown_1m`, the minimum running close-to-peak return across the trailing
+  21 eligible closes.
+
+Each output is an exact decimal string or typed null until its own prerequisites
+exist. The full family requires 253 closes. A zero denominator or invalid price
+series rejects the partition. Like `market-basic`, its receipt-time price input is
+labelled `installation_replay_only`; this feature family does not make a historical
+public-availability claim.
+
+The same operator target selects the family explicitly:
+
+```sh
+make feature \
+  SECURITY_ID=469fc20f-7d4b-45bb-b827-05f8410e71aa \
+  DECISION_AT=2026-08-12T21:00:00Z \
+  CALENDAR_PIN=/data/calendar-pins/xnas.json \
+  FEATURE_SET=market-momentum \
+  FEATURE_SET_VERSION=1.0.0
+```
+
+For library use, call `publish_market_momentum` from
+`research.market_momentum`; the generic `read_feature_artifact` and
+`validate_feature_artifact` functions dispatch to its strict reader based on the
+manifest feature-set identity.
+
 ### Publishing a dataset-level batch
 
 The controlled registry is the checked-in
 `schemas/feature-set-registry.json`. Resolve feature sets by exact name and version;
 do not pass arbitrary Python functions or a latest-only PostgreSQL projection to a
-batch. The current `market-basic` registry explicitly labels receipt-time price
-inputs `installation_replay_only`; a batch does not upgrade that label into a
-historical public-availability claim.
+batch. The current registry explicitly labels receipt-time price inputs
+`installation_replay_only`; a batch does not upgrade that label into a historical
+public-availability claim. The batch target defaults to `market-basic`; pass
+`FEATURE_SET=market-momentum FEATURE_SET_VERSION=1.0.0` to use the second registered
+producer.
 
 Create an explicit universe snapshot and decision schedule. Both files are strict
 JSON objects:
@@ -971,9 +1010,9 @@ make feature-batch \
 ```
 
 The batch command partitions by decision timestamp and security, publishes each
-partition as an immutable `market-basic` child artifact, and installs one batch
-manifest only after the children validate. Missing input partitions are retained in
-the manifest's `rejected` list with a reason and detail. Repeating the same command
+partition as an immutable child artifact for the selected feature set, and installs
+one batch manifest only after the children validate. Missing input partitions are
+retained in the manifest's `rejected` list with a reason and detail. Repeating the same command
 with the same normalized manifests, registry, universe, schedule, and calendar
 reuses the child artifacts and returns the same batch manifest; a changed input or
 registry fingerprint creates a different batch identity.
@@ -983,11 +1022,11 @@ Validate a batch independently from inside the Jupyter container:
 ```sh
 make feature-batch-validate \
   FEATURE_REGISTRY=/absolute/path/to/schemas/feature-set-registry.json \
-  BATCH_MANIFEST=/data/features/batches/market-basic/1.0.0/batch-<uuid>/manifest.json
+  BATCH_MANIFEST=/data/features/batches/<feature-set>/<version>/batch-<uuid>/manifest.json
 ```
 
 The batch manifest is stored under
-`data/features/batches/market-basic/1.0.0/batch-<uuid>/manifest.json`. It records
+`data/features/batches/<feature-set>/<version>/batch-<uuid>/manifest.json`. It records
 the registry hash, exact universe fingerprint, sorted decision schedule, calendar
 pin, input fitness, selected input manifest/part hashes, child output part hashes,
 row count, and accepted/rejected partition summary. Feature rows remain in the
@@ -1222,8 +1261,12 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   eligible under `filings_as_of`.
 - A deterministic `market-basic` artifact with exact decimal/null outputs and
   reproducible input lineage.
+- A deterministic `market-momentum` artifact with explicit multi-horizon warmup,
+  exact decimal/null outputs, and reproducible input lineage.
 - A deterministic dataset-level `market-basic` batch over an explicit security list
   and decision schedule, including accepted input fitness labels and explicit rejects.
+- A deterministic dataset-level `market-momentum` batch over the same explicit
+  security-list and decision-schedule boundary.
 - Which validated dataset-level feature batches are cataloged in PostgreSQL, their
   input-fitness labels, decision/universe definitions, and accepted child hashes.
 - Which cataloged batch partitions are complete, partial, empty, or inconsistent by
@@ -1244,11 +1287,11 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   identity/listing integration, coverage, terms, and historical-fitness acceptance
   remain pending.
 - Feature-value null reasons, stale-input attribution, or source-contribution quality
-  reporting; a catalog-level coverage/lineage report now exists. Broad market/risk
-  feature families, backtest, strategy signal, portfolio, forecast, ML model,
+  reporting; a catalog-level coverage/lineage report now exists. Broader market/risk
+  feature families beyond `market-momentum`, backtest, strategy signal, portfolio, forecast, ML model,
   execution order, and performance claims also remain out of scope. The catalog
-  indexes only validated dataset-level batches, and the feature engine is deliberately
-  only the first deterministic market-basic registry.
+  indexes only validated dataset-level batches, and the feature engine remains a
+  deliberately small closed registry.
 - A historical identity relationship solely from today's YAML universe mapping.
 - A latest fundamental snapshot in PostgreSQL; canonical fundamentals remain in
   Parquet, while PostgreSQL latest-only projections currently cover prices and
