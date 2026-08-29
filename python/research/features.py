@@ -305,8 +305,10 @@ def _canonical_json(value: Mapping[str, Any]) -> bytes:
 def compute_input_fingerprint(manifest: Mapping[str, Any]) -> str:
     """Compute the ADR 0005 SHA-256 input-selection fingerprint.
 
-    Only the fields in the ADR envelope participate.  The two lineage
-    arrays are sorted by ``(path, sha256)`` before canonical JSON encoding.
+    Only the fields in the ADR envelope participate. The two lineage arrays
+    are sorted by ``(path, sha256)`` before canonical JSON encoding. New
+    feature families may add the reviewed ``taxonomy_mapping_sha256`` field;
+    legacy market artifacts omit it and retain their original fingerprint.
     """
     required = {
         "calendar_pin",
@@ -335,6 +337,8 @@ def compute_input_fingerprint(manifest: Mapping[str, Any]) -> str:
             key=lambda item: (item["path"], item["sha256"]),
         ),
     }
+    if "taxonomy_mapping_sha256" in manifest:
+        envelope["taxonomy_mapping_sha256"] = manifest["taxonomy_mapping_sha256"]
     return _sha256_bytes(_canonical_json(envelope))
 
 
@@ -1095,6 +1099,14 @@ def read_feature_artifact(manifest_path: str | Path) -> ValidatedFeatureArtifact
         from .market_momentum import read_market_momentum_artifact
 
         return read_market_momentum_artifact(path)
+    if document.get("feature_set") == "fundamental-growth":
+        from .fundamental_growth import read_fundamental_growth_artifact
+
+        return read_fundamental_growth_artifact(path)
+    if document.get("feature_set") == "macro-state":
+        from .macro_state import read_macro_state_artifact
+
+        return read_macro_state_artifact(path)
     return _read_market_basic_artifact(path)
 
 
@@ -1253,6 +1265,13 @@ def publish_feature_artifact(
     created_at: str | datetime | None = None,
     feature_set: str = FEATURE_SET,
     feature_set_version: str = FEATURE_SET_VERSION,
+    issuer_id: str | UUID | None = None,
+    taxonomy_registry: Any = None,
+    macro_source: str | None = None,
+    macro_series_id: str | None = None,
+    macro_geography: str | None = None,
+    macro_unit: str | None = None,
+    macro_frequency: str | None = None,
 ) -> Path:
     """Publish one artifact through the closed feature-set producer registry."""
     if (feature_set, feature_set_version) == (FEATURE_SET, FEATURE_SET_VERSION):
@@ -1292,6 +1311,62 @@ def publish_feature_artifact(
             created_at=created_at,
             feature_set=feature_set,
             feature_set_version=feature_set_version,
+        )
+    if (feature_set, feature_set_version) == ("fundamental-growth", "1.0.0"):
+        from .fundamental_growth import DEFAULT_TAXONOMY_REGISTRY, publish_fundamental_growth
+
+        if issuer_id is None:
+            raise FeatureArtifactError("fundamental-growth requires issuer_id")
+        return publish_fundamental_growth(
+            catalog,
+            decision_at=decision_at,
+            security_id=security_id,
+            issuer_id=issuer_id,
+            taxonomy_registry=(
+                DEFAULT_TAXONOMY_REGISTRY if taxonomy_registry is None else taxonomy_registry
+            ),
+            calendar_pin=calendar_pin,
+            features_root=features_root,
+            computation_delay_seconds=computation_delay_seconds,
+            artifact_id=artifact_id,
+            generator_version=(
+                "python-fundamental-growth-1.0.0"
+                if generator_version is None
+                else generator_version
+            ),
+            git_commit=git_commit,
+            created_at=created_at,
+        )
+    if (feature_set, feature_set_version) == ("macro-state", "1.0.0"):
+        from .macro_state import (
+            DEFAULT_FREQUENCY,
+            DEFAULT_GEOGRAPHY,
+            DEFAULT_SERIES_ID,
+            DEFAULT_SOURCE,
+            DEFAULT_UNIT,
+            publish_macro_state,
+        )
+
+        return publish_macro_state(
+            catalog,
+            decision_at=decision_at,
+            security_id=security_id,
+            calendar_pin=calendar_pin,
+            source=DEFAULT_SOURCE if macro_source is None else macro_source,
+            series_id=DEFAULT_SERIES_ID if macro_series_id is None else macro_series_id,
+            geography=DEFAULT_GEOGRAPHY if macro_geography is None else macro_geography,
+            unit=DEFAULT_UNIT if macro_unit is None else macro_unit,
+            frequency=DEFAULT_FREQUENCY if macro_frequency is None else macro_frequency,
+            features_root=features_root,
+            computation_delay_seconds=computation_delay_seconds,
+            artifact_id=artifact_id,
+            generator_version=(
+                "python-macro-state-1.0.0"
+                if generator_version is None
+                else generator_version
+            ),
+            git_commit=git_commit,
+            created_at=created_at,
         )
     raise FeatureArtifactError(
         f"no deterministic producer is registered for {feature_set!r} {feature_set_version!r}"

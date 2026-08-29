@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-fundamental-observation.schema.json",
+  "title": "FundamentalGrowthFeatureObservation",
+  "description": "One point-in-time row in an immutable fundamental-growth feature artifact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "feature_set", "feature_set_version", "security_id", "issuer_id",
+    "decision_at", "input_available_at", "computation_delay_seconds", "available_at",
+    "input_fingerprint", "taxonomy_mapping_sha256", "artifact", "features"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.1.0" },
+    "feature_set": { "const": "fundamental-growth" },
+    "feature_set_version": { "const": "1.0.0" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "issuer_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "input_available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "computation_delay_seconds": { "type": "integer", "minimum": 0 },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "taxonomy_mapping_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "artifact": { "$ref": "feature-manifest.schema.json#/$defs/artifactMetadata" },
+    "features": {
+      "type": "object", "additionalProperties": false,
+      "required": ["revenue", "revenue_growth_yoy", "operating_margin"],
+      "properties": {
+        "revenue": { "$ref": "#/$defs/decimalOrNull" },
+        "revenue_growth_yoy": { "$ref": "#/$defs/decimalOrNull" },
+        "operating_margin": { "$ref": "#/$defs/decimalOrNull" }
+      }
+    }
+  },
+  "$defs": {
+    "decimalOrNull": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/decimal" }, { "type": "null" }]
+    }
+  }
+}

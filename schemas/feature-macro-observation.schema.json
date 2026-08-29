@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-macro-observation.schema.json",
+  "title": "MacroStateFeatureObservation",
+  "description": "One point-in-time row in an immutable macro-state feature artifact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "feature_set", "feature_set_version", "security_id", "source",
+    "series_id", "geography", "unit", "frequency", "decision_at", "input_available_at",
+    "computation_delay_seconds", "available_at", "input_fingerprint", "artifact", "features"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.1.0" },
+    "feature_set": { "const": "macro-state" },
+    "feature_set_version": { "const": "1.0.0" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "source": { "type": "string", "minLength": 1 },
+    "series_id": { "type": "string", "minLength": 1 },
+    "geography": { "type": "string", "minLength": 1 },
+    "unit": { "type": "string", "minLength": 1 },
+    "frequency": { "type": "string", "minLength": 1 },
+    "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "input_available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "computation_delay_seconds": { "type": "integer", "minimum": 0 },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "artifact": { "$ref": "feature-manifest.schema.json#/$defs/artifactMetadata" },
+    "features": {
+      "type": "object", "additionalProperties": false,
+      "required": ["macro_level", "macro_change_yoy"],
+      "properties": {
+        "macro_level": { "$ref": "#/$defs/decimalOrNull" },
+        "macro_change_yoy": { "$ref": "#/$defs/decimalOrNull" }
+      }
+    }
+  },
+  "$defs": {
+    "decimalOrNull": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/decimal" }, { "type": "null" }]
+    }
+  }
+}
