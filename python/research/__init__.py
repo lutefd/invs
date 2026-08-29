@@ -30,6 +30,18 @@ from .documents import (
     read_document,
     read_document_text,
 )
+from .events import (
+    EVENT_TYPES,
+    EventProposalConflictError,
+    EventProposalError,
+    EventProposalValidationError,
+    build_event_proposal,
+    metadata_revision_input,
+    read_event_proposal,
+    review_event_proposal,
+    verify_source_spans,
+    write_event_proposal,
+)
 from .feature_quality import FeatureQualityReportError, build_feature_quality_report
 from .fundamental_growth import (
     compute_fundamental_growth_features,
@@ -91,6 +103,7 @@ from .taxonomy import (
 )
 
 __all__ = [
+    "EVENT_TYPES",
     "FX_POLICY_VERSION",
     "AdjustmentArtifactConflictError",
     "AdjustmentArtifactError",
@@ -104,6 +117,9 @@ __all__ = [
     "DocumentArtifactConflictError",
     "DocumentArtifactError",
     "DocumentArtifactValidationError",
+    "EventProposalConflictError",
+    "EventProposalError",
+    "EventProposalValidationError",
     "FXObservationNotFound",
     "FXPolicyError",
     "FeatureBatchConflictError",
@@ -125,6 +141,7 @@ __all__ = [
     "TaxonomyRegistry",
     "TaxonomyRegistryError",
     "after_close_execution_session",
+    "build_event_proposal",
     "build_feature_quality_report",
     "calendar_fingerprint",
     "calendar_manifest_as_of",
@@ -141,6 +158,7 @@ __all__ = [
     "load_security_mappings",
     "load_taxonomy_registry",
     "membership_as_of",
+    "metadata_revision_input",
     "next_trading_session",
     "publish_adjusted_prices",
     "publish_document",
@@ -149,9 +167,11 @@ __all__ = [
     "publish_macro_state",
     "read_document",
     "read_document_text",
+    "read_event_proposal",
     "read_feature_batch",
     "read_fundamental_growth_artifact",
     "read_macro_state_artifact",
+    "review_event_proposal",
     "security_identifier_as_of",
     "trading_session_at",
     "universe_as_of",
@@ -159,4 +179,6 @@ __all__ = [
     "validate_feature_batch",
     "validate_fundamental_growth_artifact",
     "validate_macro_state_artifact",
+    "verify_source_spans",
+    "write_event_proposal",
 ]
