@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-quality-report.schema.json",
+  "title": "FeatureQualityReport",
+  "description": "A read-only feature-level coverage, null-quality, freshness, and lineage report.",
+  "$comment": "The report explains immutable feature-batch outputs and their selected canonical/raw lineage. It never becomes a feature-value store.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_version",
+    "batch",
+    "coverage",
+    "features",
+    "null_cases",
+    "rejected_cases",
+    "stale_inputs"
+  ],
+  "properties": {
+    "report_version": { "const": "1.0.0" },
+    "batch": { "$ref": "#/$defs/batch" },
+    "coverage": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/coverage" }
+    },
+    "features": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/featureSummary" }
+    },
+    "null_cases": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nullCase" }
+    },
+    "rejected_cases": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/rejectedCase" }
+    },
+    "stale_inputs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/staleInput" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "fieldName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\\\u0000].*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "batch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batch_id",
+        "feature_set",
+        "feature_set_version",
+        "manifest_path",
+        "registry_sha256"
+      ],
+      "properties": {
+        "batch_id": { "$ref": "#/$defs/uuid" },
+        "feature_set": { "$ref": "#/$defs/identifier" },
+        "feature_set_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "manifest_path": { "type": "string", "minLength": 1 },
+        "registry_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "lineageRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "partRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^part-[0-9a-f]{64}\\.parquet$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifests", "parts", "raw_locators", "sources", "input_row_count"],
+      "properties": {
+        "manifests": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/lineageRef" }
+        },
+        "parts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/partRef" }
+        },
+        "raw_locators": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "sources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "input_row_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_at",
+        "feature_name",
+        "universe_size",
+        "accepted_count",
+        "rejected_count",
+        "present_count",
+        "null_count",
+        "stale_count"
+      ],
+      "properties": {
+        "decision_at": { "$ref": "#/$defs/utcTimestamp" },
+        "feature_name": { "$ref": "#/$defs/fieldName" },
+        "universe_size": { "type": "integer", "minimum": 1 },
+        "accepted_count": { "type": "integer", "minimum": 0 },
+        "rejected_count": { "type": "integer", "minimum": 0 },
+        "present_count": { "type": "integer", "minimum": 0 },
+        "null_count": { "type": "integer", "minimum": 0 },
+        "stale_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "reasonCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "count"],
+      "properties": {
+        "reason": { "$ref": "#/$defs/identifier" },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "sourceCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "count"],
+      "properties": {
+        "source": { "$ref": "#/$defs/identifier" },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "featureSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature_name", "present_count", "null_count", "null_reasons", "source_contribution"],
+      "properties": {
+        "feature_name": { "$ref": "#/$defs/fieldName" },
+        "present_count": { "type": "integer", "minimum": 0 },
+        "null_count": { "type": "integer", "minimum": 0 },
+        "null_reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/reasonCount" }
+        },
+        "source_contribution": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sourceCount" }
+        }
+      }
+    },
+    "nullCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_id", "decision_at", "feature_name", "reason", "detail", "lineage"],
+      "properties": {
+        "security_id": { "$ref": "#/$defs/uuid" },
+        "decision_at": { "$ref": "#/$defs/utcTimestamp" },
+        "feature_name": { "$ref": "#/$defs/fieldName" },
+        "reason": { "$ref": "#/$defs/identifier" },
+        "detail": { "type": "string", "minLength": 1 },
+        "lineage": { "$ref": "#/$defs/lineage" }
+      }
+    },
+    "rejectedCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_id", "decision_at", "reason", "detail", "lineage"],
+      "properties": {
+        "security_id": { "$ref": "#/$defs/uuid" },
+        "decision_at": { "$ref": "#/$defs/utcTimestamp" },
+        "reason": { "$ref": "#/$defs/identifier" },
+        "detail": { "type": "string", "minLength": 1 },
+        "lineage": { "$ref": "#/$defs/lineage" }
+      }
+    },
+    "staleInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "security_id",
+        "decision_at",
+        "input_available_at",
+        "age_seconds",
+        "lineage"
+      ],
+      "properties": {
+        "security_id": { "$ref": "#/$defs/uuid" },
+        "decision_at": { "$ref": "#/$defs/utcTimestamp" },
+        "input_available_at": { "$ref": "#/$defs/utcTimestamp" },
+        "age_seconds": { "type": "integer", "minimum": 0 },
+        "lineage": { "$ref": "#/$defs/lineage" }
+      }
+    }
+  }
+}

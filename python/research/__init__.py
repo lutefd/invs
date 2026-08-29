@@ -22,6 +22,7 @@ from .catalog import (
     SecurityMapping,
     load_security_mappings,
 )
+from .feature_quality import FeatureQualityReportError, build_feature_quality_report
 from .fundamental_growth import (
     compute_fundamental_growth_features,
     publish_fundamental_growth,
@@ -98,6 +99,7 @@ __all__ = [
     "FeatureBatchError",
     "FeatureBatchValidationError",
     "FeatureOutput",
+    "FeatureQualityReportError",
     "FeatureRegistry",
     "FeatureRegistryError",
     "FeatureSetDefinition",
@@ -112,6 +114,7 @@ __all__ = [
     "TaxonomyRegistry",
     "TaxonomyRegistryError",
     "after_close_execution_session",
+    "build_feature_quality_report",
     "calendar_fingerprint",
     "calendar_manifest_as_of",
     "canonical_fx_observation",
