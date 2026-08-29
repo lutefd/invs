@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -128,6 +129,17 @@ func TestBuildFeatureArtifactCatalogReportSortsAndAggregates(t *testing.T) {
 	}
 	if report.Summary.CompleteArtifacts != 1 || report.Summary.PartialArtifacts != 1 || report.Summary.RejectedPartitions != 1 || report.Summary.RowCount != 7 {
 		t.Fatalf("report summary = %+v", report.Summary)
+	}
+}
+
+func TestBuildFeatureArtifactCatalogReportUsesEmptyArrays(t *testing.T) {
+	report := BuildFeatureArtifactCatalogReport(time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC), FeatureArtifactCatalogFilter{}, []FeatureArtifactCatalogArtifact{})
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), `"artifacts":null`) {
+		t.Fatalf("empty report encoded a null artifacts value: %s", encoded)
 	}
 }
 

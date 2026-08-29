@@ -513,7 +513,8 @@ func BuildFeatureArtifactCatalogReport(generatedAt time.Time, filter FeatureArti
 	} else {
 		generatedAt = generatedAt.UTC()
 	}
-	ordered := append([]FeatureArtifactCatalogArtifact(nil), artifacts...)
+	ordered := make([]FeatureArtifactCatalogArtifact, len(artifacts))
+	copy(ordered, artifacts)
 	sort.Slice(ordered, func(i, j int) bool {
 		if ordered[i].FeatureSet != ordered[j].FeatureSet {
 			return ordered[i].FeatureSet < ordered[j].FeatureSet
