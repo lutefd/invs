@@ -32,6 +32,7 @@ def _write_registry(tmp_path: Path, document: str | dict) -> Path:
 def test_checked_in_registry_resolves_market_basic_and_fingerprints_exact_bytes() -> None:
     registry = load_feature_registry(REGISTRY_PATH)
     definition = registry.resolve("market-basic", "1.0.0")
+    momentum = registry.resolve("market-momentum", "1.0.0")
 
     assert registry.registry_version == "1.0.0"
     assert registry.registry_sha256 == hashlib.sha256(REGISTRY_PATH.read_bytes()).hexdigest()
@@ -43,6 +44,19 @@ def test_checked_in_registry_resolves_market_basic_and_fingerprints_exact_bytes(
     assert definition.computation.delay_seconds == 0
     assert definition.outputs[0].nullable is False
     assert definition.outputs[1].nullable is True
+    assert momentum.feature_names == (
+        "return_1m",
+        "return_3m",
+        "return_6m",
+        "return_12m",
+        "realized_volatility_1m",
+        "max_drawdown_1m",
+    )
+    assert momentum.lookback.minimum_observations == 253
+    assert momentum.lookback.warmup_policy == "null_until_available"
+    assert momentum.calendar.required is True
+    assert momentum.calendar.pin_required is True
+    assert momentum.outputs[-1].value_type == "decimal_string_or_null"
 
 
 def test_unknown_feature_set_and_version_fail_closed() -> None:

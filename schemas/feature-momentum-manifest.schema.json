@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-momentum-manifest.schema.json",
+  "title": "DeterministicMarketMomentumFeatureManifest",
+  "description": "The immutable publication manifest for one deterministic market-momentum artifact.",
+  "$comment": "A manifest is the only reader pointer for a market-momentum artifact. It records the exact selected normalized input manifests and parts, the point-in-time build boundary, and content-named output part hashes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_version",
+    "feature_set",
+    "feature_set_version",
+    "feature_names",
+    "artifact",
+    "calendar_pin",
+    "decision_at",
+    "input_available_at",
+    "computation_delay_seconds",
+    "available_at",
+    "input_fingerprint",
+    "selected_input_manifests",
+    "selected_input_parts",
+    "row_count",
+    "parts"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.1.0" },
+    "manifest_version": { "const": "1.1.0" },
+    "feature_set": { "const": "market-momentum" },
+    "feature_set_version": { "const": "1.0.0" },
+    "feature_names": {
+      "const": [
+        "return_1m",
+        "return_3m",
+        "return_6m",
+        "return_12m",
+        "realized_volatility_1m",
+        "max_drawdown_1m"
+      ]
+    },
+    "artifact": { "$ref": "#/$defs/artifactMetadata" },
+    "calendar_pin": { "$ref": "#/$defs/calendarPin" },
+    "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "input_available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "computation_delay_seconds": { "type": "integer", "minimum": 0 },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "selected_input_manifests": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/selectedInputManifest" }
+    },
+    "selected_input_parts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/selectedInputPart" }
+    },
+    "row_count": { "type": "integer", "minimum": 0 },
+    "parts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/featurePart" }
+    }
+  },
+  "$defs": {
+    "artifactMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "artifact_version",
+        "generator_version",
+        "git_commit",
+        "created_at"
+      ],
+      "properties": {
+        "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "artifact_version": { "const": "1.1.0" },
+        "generator_version": { "type": "string", "minLength": 1 },
+        "git_commit": {
+          "oneOf": [
+            { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+            { "const": "unknown" }
+          ]
+        },
+        "created_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+      }
+    },
+    "calendarPin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_source_id",
+        "mic",
+        "calendar_version",
+        "session_fingerprint",
+        "calendar_available_at",
+        "decision_clock_policy"
+      ],
+      "properties": {
+        "data_source_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "mic": { "$ref": "common.schema.json#/$defs/mic" },
+        "calendar_version": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+        },
+        "session_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "calendar_available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "decision_clock_policy": { "const": "after_close_next_session" }
+      }
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\\\u0000].*$"
+    },
+    "selectedInputManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "selectedInputPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^part-[0-9a-f]{64}\\.parquet$"
+        },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "featurePart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "row_count"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^part-[0-9a-f]{64}\\.parquet$"
+        },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "row_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

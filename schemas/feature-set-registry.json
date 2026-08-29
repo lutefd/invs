@@ -85,6 +85,98 @@
         "version": "python-market-basic-1.1.0",
         "implementation": "research.features.publish_market_basic"
       }
+    },
+    {
+      "feature_set": "market-momentum",
+      "feature_set_version": "1.0.0",
+      "description": "Daily multi-horizon close returns with trailing realized volatility and maximum drawdown.",
+      "entity_type": "security",
+      "decision_frequency": "daily",
+      "lookback": {
+        "unit": "observations",
+        "minimum_observations": 253,
+        "warmup_policy": "null_until_available"
+      },
+      "inputs": [
+        {
+          "dataset": "prices",
+          "contract_version": "1.0.0",
+          "required_fields": [
+            "security_id",
+            "interval",
+            "price_basis",
+            "currency",
+            "observed_at",
+            "available_at",
+            "close"
+          ],
+          "selection_mode": "point_in_time",
+          "selection_policy": "available_at_and_observed_at",
+          "availability_field": "available_at",
+          "observed_field": "observed_at",
+          "historical_fitness": "installation_replay_only",
+          "availability_policy": "conservative_receipt_time"
+        }
+      ],
+      "calendar": {
+        "required": true,
+        "scope": "exchange",
+        "pin_required": true,
+        "decision_clock_policy": "after_close_next_session"
+      },
+      "null_policy": {
+        "mode": "typed_null",
+        "reason_vocabulary": [
+          "insufficient_history",
+          "missing_close"
+        ]
+      },
+      "computation": {
+        "delay_seconds": 0,
+        "availability_rule": "max_selected_input_available_at_plus_delay"
+      },
+      "outputs": [
+        {
+          "name": "return_1m",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Close-to-close simple return over the previous 21 eligible observations, or null during warmup."
+        },
+        {
+          "name": "return_3m",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Close-to-close simple return over the previous 63 eligible observations, or null during warmup."
+        },
+        {
+          "name": "return_6m",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Close-to-close simple return over the previous 126 eligible observations, or null during warmup."
+        },
+        {
+          "name": "return_12m",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Close-to-close simple return over the previous 252 eligible observations, or null during warmup."
+        },
+        {
+          "name": "realized_volatility_1m",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Annualized sample standard deviation of the trailing 21 one-observation close returns, or null during warmup."
+        },
+        {
+          "name": "max_drawdown_1m",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Largest peak-to-trough simple return across the trailing 21 eligible closes, or null during warmup."
+        }
+      ],
+      "generator": {
+        "version": "python-market-momentum-1.0.0",
+        "implementation": "research.market_momentum.publish_market_momentum"
+      }
     }
   ]
 }

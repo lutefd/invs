@@ -14,6 +14,9 @@ manifest-backed Parquet and callers must resolve a feature set by exact name and
 version. `feature-catalog-report.schema.json` defines the read-only coverage and
 lineage report for registered dataset-level feature batches; it contains catalog
 metadata and hashes, never feature values.
+`feature-momentum-manifest.schema.json` and `feature-momentum-observation.schema.json`
+define the strict manifest and row contracts for the registered `market-momentum`
+feature set, including its six decimal-or-null outputs.
 
 ## Normalized publication boundary
 

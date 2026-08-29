@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-momentum-observation.schema.json",
+  "title": "MarketMomentumFeatureObservation",
+  "description": "One point-in-time row in the immutable market-momentum feature artifact.",
+  "$comment": "Every output is an exact decimal string or null. The observation carries the selected input boundary and must be read through its feature-momentum manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "feature_set",
+    "feature_set_version",
+    "security_id",
+    "decision_at",
+    "input_available_at",
+    "computation_delay_seconds",
+    "available_at",
+    "input_fingerprint",
+    "artifact",
+    "features"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.1.0" },
+    "feature_set": { "const": "market-momentum" },
+    "feature_set_version": { "const": "1.0.0" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "input_available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "computation_delay_seconds": { "type": "integer", "minimum": 0 },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "artifact": {
+      "$ref": "feature-momentum-manifest.schema.json#/$defs/artifactMetadata"
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "return_1m",
+        "return_3m",
+        "return_6m",
+        "return_12m",
+        "realized_volatility_1m",
+        "max_drawdown_1m"
+      ],
+      "properties": {
+        "return_1m": { "$ref": "#/$defs/featureValue" },
+        "return_3m": { "$ref": "#/$defs/featureValue" },
+        "return_6m": { "$ref": "#/$defs/featureValue" },
+        "return_12m": { "$ref": "#/$defs/featureValue" },
+        "realized_volatility_1m": { "$ref": "#/$defs/featureValue" },
+        "max_drawdown_1m": { "$ref": "#/$defs/featureValue" }
+      }
+    }
+  },
+  "$defs": {
+    "featureValue": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/decimal" },
+        { "type": "null" }
+      ]
+    }
+  }
+}
