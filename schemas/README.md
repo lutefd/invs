@@ -5,6 +5,14 @@ normalized records. `common.schema.json` owns shared lossless scalar and provena
 definitions. All entity schemas reject unknown fields and pin a major contract with
 `schema_version`.
 
+`feature-set-registry.schema.json` and the checked-in
+`feature-set-registry.json` describe the reviewed feature-set allowlist. Registry
+entries pin their required canonical inputs, historical-fitness labels, calendar and
+decision-clock policy, lookback, null behavior, computation delay, output types, and
+generator implementation. The registry is planning metadata; feature rows remain in
+manifest-backed Parquet and callers must resolve a feature set by exact name and
+version.
+
 ## Normalized publication boundary
 
 Canonical normalized Parquet is published through a versioned `manifest.json` for each

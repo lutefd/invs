@@ -1,0 +1,90 @@
+{
+  "registry_version": "1.0.0",
+  "entries": [
+    {
+      "feature_set": "market-basic",
+      "feature_set_version": "1.0.0",
+      "description": "Daily close, one-day return, daily range, and volume for one security.",
+      "entity_type": "security",
+      "decision_frequency": "daily",
+      "lookback": {
+        "unit": "observations",
+        "minimum_observations": 2,
+        "warmup_policy": "null_until_available"
+      },
+      "inputs": [
+        {
+          "dataset": "prices",
+          "contract_version": "1.0.0",
+          "required_fields": [
+            "security_id",
+            "interval",
+            "price_basis",
+            "currency",
+            "observed_at",
+            "available_at",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "has_volume"
+          ],
+          "selection_mode": "point_in_time",
+          "selection_policy": "available_at_and_observed_at",
+          "availability_field": "available_at",
+          "observed_field": "observed_at",
+          "historical_fitness": "installation_replay_only",
+          "availability_policy": "conservative_receipt_time"
+        }
+      ],
+      "calendar": {
+        "required": true,
+        "scope": "exchange",
+        "pin_required": true,
+        "decision_clock_policy": "after_close_next_session"
+      },
+      "null_policy": {
+        "mode": "typed_null",
+        "reason_vocabulary": [
+          "insufficient_history",
+          "missing_value",
+          "missing_volume"
+        ]
+      },
+      "computation": {
+        "delay_seconds": 0,
+        "availability_rule": "max_selected_input_available_at_plus_delay"
+      },
+      "outputs": [
+        {
+          "name": "close",
+          "value_type": "decimal_string",
+          "nullable": false,
+          "description": "The latest eligible daily close in the selected price basis."
+        },
+        {
+          "name": "return_1d",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Close-to-close simple return, or null without a prior eligible close."
+        },
+        {
+          "name": "range_1d",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Daily high minus low, or null when a range input is unavailable."
+        },
+        {
+          "name": "volume",
+          "value_type": "decimal_string_or_null",
+          "nullable": true,
+          "description": "Daily volume when the source explicitly provides it."
+        }
+      ],
+      "generator": {
+        "version": "python-market-basic-1.1.0",
+        "implementation": "research.features.publish_market_basic"
+      }
+    }
+  ]
+}

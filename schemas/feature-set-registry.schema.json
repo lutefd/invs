@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-set-registry.schema.json",
+  "title": "FeatureSetRegistry",
+  "description": "The reviewed, closed registry of versioned feature-set contracts.",
+  "$comment": "Registry entries describe feature semantics and required historical inputs. They do not store feature rows or permit runtime discovery of arbitrary code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["registry_version", "entries"],
+  "properties": {
+    "registry_version": { "const": "1.0.0" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/featureSet" }
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "fieldName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "featureSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feature_set",
+        "feature_set_version",
+        "description",
+        "entity_type",
+        "decision_frequency",
+        "lookback",
+        "inputs",
+        "calendar",
+        "null_policy",
+        "computation",
+        "outputs",
+        "generator"
+      ],
+      "properties": {
+        "feature_set": { "$ref": "#/$defs/identifier" },
+        "feature_set_version": { "$ref": "#/$defs/version" },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_type": {
+          "type": "string",
+          "enum": ["security", "issuer", "macro_series", "cross_asset"]
+        },
+        "decision_frequency": {
+          "type": "string",
+          "enum": ["daily", "weekly", "monthly"]
+        },
+        "lookback": { "$ref": "#/$defs/lookback" },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/input" }
+        },
+        "calendar": { "$ref": "#/$defs/calendar" },
+        "null_policy": { "$ref": "#/$defs/nullPolicy" },
+        "computation": { "$ref": "#/$defs/computation" },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/output" }
+        },
+        "generator": { "$ref": "#/$defs/generator" }
+      }
+    },
+    "lookback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "minimum_observations", "warmup_policy"],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "enum": ["observations", "sessions", "calendar_periods"]
+        },
+        "minimum_observations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "warmup_policy": {
+          "type": "string",
+          "enum": ["null_until_available", "reject_until_available"]
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset",
+        "contract_version",
+        "required_fields",
+        "selection_mode",
+        "selection_policy",
+        "availability_field",
+        "observed_field",
+        "historical_fitness",
+        "availability_policy"
+      ],
+      "properties": {
+        "dataset": { "$ref": "#/$defs/identifier" },
+        "contract_version": { "$ref": "#/$defs/version" },
+        "required_fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/fieldName" }
+        },
+        "selection_mode": { "const": "point_in_time" },
+        "selection_policy": {
+          "type": "string",
+          "enum": ["available_at_and_observed_at", "available_at_only"]
+        },
+        "availability_field": { "const": "available_at" },
+        "observed_field": {
+          "oneOf": [
+            { "const": "observed_at" },
+            { "type": "null" }
+          ]
+        },
+        "historical_fitness": {
+          "type": "string",
+          "enum": [
+            "backtest_safe",
+            "current_research_only",
+            "installation_replay_only",
+            "unsupported"
+          ]
+        },
+        "availability_policy": {
+          "type": "string",
+          "enum": [
+            "exact_publication",
+            "source_declared",
+            "conservative_receipt_time",
+            "current_snapshot",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "calendar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "scope", "pin_required", "decision_clock_policy"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "scope": {
+          "type": "string",
+          "enum": ["exchange", "issuer", "none"]
+        },
+        "pin_required": { "type": "boolean" },
+        "decision_clock_policy": {
+          "type": "string",
+          "enum": ["after_close_next_session", "none"]
+        }
+      }
+    },
+    "nullPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "reason_vocabulary"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["typed_null", "reject_row", "reject_entity"]
+        },
+        "reason_vocabulary": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        }
+      }
+    },
+    "computation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delay_seconds", "availability_rule"],
+      "properties": {
+        "delay_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "availability_rule": {
+          "const": "max_selected_input_available_at_plus_delay"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value_type", "nullable", "description"],
+      "properties": {
+        "name": { "$ref": "#/$defs/fieldName" },
+        "value_type": {
+          "type": "string",
+          "enum": ["decimal_string", "decimal_string_or_null", "boolean", "string"]
+        },
+        "nullable": { "type": "boolean" },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "implementation"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "implementation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
