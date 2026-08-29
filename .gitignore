@@ -12,9 +12,11 @@ logs/
 data/raw/**
 data/normalized/**
 data/features/**
+data/research/**
 !data/raw/.gitkeep
 !data/normalized/.gitkeep
 !data/features/.gitkeep
+!data/research/.gitkeep
 
 # PostgreSQL and Grafana state
 data/postgres/
