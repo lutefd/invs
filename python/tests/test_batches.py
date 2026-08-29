@@ -14,6 +14,7 @@ from research.batches import (
     read_feature_batch,
 )
 from research.catalog import ResearchCatalog
+from research.feature_cli import main as feature_cli_main
 from research.registry import load_feature_registry
 
 SECURITY_ONE = "469fc20f-7d4b-45bb-b827-05f8410e71aa"
@@ -218,3 +219,57 @@ def test_batch_fails_closed_when_a_child_part_is_tampered(tmp_path: Path) -> Non
     )
     with pytest.raises(FeatureBatchValidationError):
         read_feature_batch(batch, features_root=features_root)
+
+
+def test_batch_cli_publishes_and_validates_explicit_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_root = tmp_path / "data"
+    _write_prices(data_root, SECURITY_ONE, _rows(0))
+    features_root = data_root / "features"
+    universe_path = tmp_path / "universe.json"
+    schedule_path = tmp_path / "schedule.json"
+    calendar_path = tmp_path / "calendar.json"
+    universe_path.write_text(json.dumps({"security_ids": [SECURITY_ONE]}), encoding="utf-8")
+    schedule_path.write_text(
+        json.dumps({"decision_ats": ["2025-01-02T23:00:00Z"]}), encoding="utf-8"
+    )
+    calendar_path.write_text(json.dumps(CALENDAR_PIN), encoding="utf-8")
+
+    assert feature_cli_main(
+        [
+            "batch-publish",
+            "--data-root",
+            str(data_root),
+            "--features-root",
+            str(features_root),
+            "--registry",
+            str(REGISTRY_PATH),
+            "--universe",
+            str(universe_path),
+            "--schedule",
+            str(schedule_path),
+            "--calendar-pin",
+            str(calendar_path),
+            "--git-commit",
+            "0" * 40,
+        ]
+    ) == 0
+    published = json.loads(capsys.readouterr().out)
+    assert published["action"] == "published"
+    assert published["accepted_partitions"] == 1
+
+    assert feature_cli_main(
+        [
+            "batch-validate",
+            "--manifest",
+            published["manifest_path"],
+            "--features-root",
+            str(features_root),
+            "--registry",
+            str(REGISTRY_PATH),
+        ]
+    ) == 0
+    validated = json.loads(capsys.readouterr().out)
+    assert validated["action"] == "validated"
+    assert validated["batch_id"] == published["batch_id"]

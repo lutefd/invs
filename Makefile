@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate feature-batch feature-batch-validate action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -114,6 +114,37 @@ feature-validate: config
 	@test -n "$(FEATURE_MANIFEST)" || (echo "FEATURE_MANIFEST is required" >&2; exit 2)
 	@$(COMPOSE) run --rm --no-deps jupyter python -m research.feature_cli validate \
 		--manifest "$(FEATURE_MANIFEST)"
+
+feature-batch: config
+	@test -f "$(or $(FEATURE_REGISTRY),$(CURDIR)/schemas/feature-set-registry.json)" || (echo "FEATURE_REGISTRY is required" >&2; exit 2)
+	@test -f "$(BATCH_UNIVERSE)" || (echo "BATCH_UNIVERSE is required" >&2; exit 2)
+	@test -f "$(BATCH_SCHEDULE)" || (echo "BATCH_SCHEDULE is required" >&2; exit 2)
+	@test -f "$(CALENDAR_PIN)" || (echo "CALENDAR_PIN is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps \
+		-v "$(or $(FEATURE_REGISTRY),$(CURDIR)/schemas/feature-set-registry.json):/tmp/feature-set-registry.json:ro" \
+		-v "$(BATCH_UNIVERSE):/tmp/feature-universe.json:ro" \
+		-v "$(BATCH_SCHEDULE):/tmp/feature-schedule.json:ro" \
+		-v "$(CALENDAR_PIN):/tmp/calendar-pin.json:ro" \
+		jupyter python -m research.feature_cli batch-publish \
+			--data-root /data \
+			--features-root /data/features \
+			--registry /tmp/feature-set-registry.json \
+			--universe /tmp/feature-universe.json \
+			--schedule /tmp/feature-schedule.json \
+			--calendar-pin /tmp/calendar-pin.json \
+			--feature-set "$(or $(FEATURE_SET),market-basic)" \
+			--feature-set-version "$(or $(FEATURE_SET_VERSION),1.0.0)" \
+			--git-commit "$(or $(INVS_GIT_COMMIT),unknown)"
+
+feature-batch-validate: config
+	@test -n "$(BATCH_MANIFEST)" || (echo "BATCH_MANIFEST is required" >&2; exit 2)
+	@test -f "$(or $(FEATURE_REGISTRY),$(CURDIR)/schemas/feature-set-registry.json)" || (echo "FEATURE_REGISTRY is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps \
+		-v "$(or $(FEATURE_REGISTRY),$(CURDIR)/schemas/feature-set-registry.json):/tmp/feature-set-registry.json:ro" \
+		jupyter python -m research.feature_cli batch-validate \
+			--manifest "$(BATCH_MANIFEST)" \
+			--features-root /data/features \
+			--registry /tmp/feature-set-registry.json
 
 action-snapshot: config
 	@test -n "$(DATA_SOURCE_ID)" || (echo "DATA_SOURCE_ID is required" >&2; exit 2)
