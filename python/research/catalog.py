@@ -55,19 +55,21 @@ class SecurityMapping:
 
 @dataclass(frozen=True)
 class PointInTimeInputs:
-    """Price inputs and provenance selected at one explicit decision timestamp.
+    """Point-in-time inputs and provenance selected at one explicit timestamp.
 
-    ``frame`` is ordered by observation time and keeps ``close_value`` as the
-    canonical exact decimal string. ``maximum_input_availability`` is the
-    latest ``available_at`` in the returned frame, or ``None`` when no input is
-    eligible.
+    ``frame`` keeps canonical exact decimal strings and manifest/part lineage.
+    The dataset-specific entity identifiers are populated when applicable.
+    ``maximum_input_availability`` is the latest ``available_at`` in the
+    returned frame, or ``None`` when no input is eligible.
     """
 
     frame: Any
     maximum_input_availability: Any
     dataset: str
-    security_id: str
+    security_id: str | None
     decision_at: str
+    issuer_id: str | None = None
+    series_id: str | None = None
 
     @property
     def max_available_at(self) -> Any:
@@ -760,89 +762,281 @@ class ResearchCatalog:
         self,
         *,
         decision_at: str,
-        security_id: str,
+        security_id: str | None = None,
         dataset: str = "prices",
+        issuer_id: str | None = None,
+        source: str | None = None,
+        concept: str | None = None,
+        taxonomy: str | None = None,
+        unit: str | None = None,
+        currency: str | None = None,
+        series_id: str | None = None,
+        geography: str | None = None,
+        frequency: str | None = None,
     ) -> PointInTimeInputs:
-        """Return exact-string price inputs known at ``decision_at``.
+        """Return exact-string point-in-time inputs known at ``decision_at``.
 
-        The API deliberately takes an explicit ``security_id`` rather than a
-        current YAML mapping. Only ``prices`` is supported for now; other
-        dataset names fail closed until their historical identity and
-        availability contracts are implemented.
+        Prices require ``security_id``. Fundamentals require ``issuer_id`` and
+        ``concept``; macros require ``series_id``. Optional source and semantic
+        selectors are exact filters, never fuzzy taxonomy matches. Every
+        supported dataset returns the selected row-to-manifest/part lineage.
         """
-        if dataset != "prices":
-            raise ValueError(
-                f"unsupported point_in_time_inputs dataset {dataset!r}; "
-                "only 'prices' is currently supported"
-            )
+        if dataset not in {"prices", "fundamentals", "macroeconomics"}:
+            raise ValueError(f"unsupported point_in_time_inputs dataset {dataset!r}")
         if decision_at is None or (isinstance(decision_at, str) and not decision_at.strip()):
             raise ValueError("point_in_time_inputs requires an explicit decision_at")
-        if not isinstance(security_id, str) or not security_id:
-            raise ValueError("point_in_time_inputs requires an explicit security_id")
 
-        parameters: dict[str, object] = {
-            "decision_at": decision_at,
-            "security_id": security_id,
-        }
-        sql = f"""
-            WITH eligible AS (
-                SELECT *
-                FROM {_quote_identifier("_prices_lineage")}
-                WHERE security_id = $security_id
-                  AND available_at IS NOT NULL
-                  AND observed_at IS NOT NULL
-                  AND available_at <= CAST($decision_at AS TIMESTAMPTZ)
-                  AND observed_at <= CAST($decision_at AS TIMESTAMPTZ)
-            ),
-            selected AS (
-                SELECT *
-                FROM eligible
-                QUALIFY row_number() OVER (
-                    PARTITION BY source, security_id, interval, price_basis, observed_at
-                    ORDER BY
-                        available_at DESC,
-                        ingested_at DESC,
-                        raw_payload_hash DESC NULLS LAST,
-                        manifest_path DESC,
-                        part_path DESC
-                ) = 1
-            )
-            SELECT
-                source,
-                security_id,
-                interval,
-                price_basis,
-                currency,
-                observed_at,
-                CAST(observed_at AS DATE) AS trading_date,
-                observed_precision,
-                published_at,
-                has_published_at,
-                published_precision,
-                available_at,
-                ingested_at,
-                close AS close_value,
-                raw_payload_hash,
-                data_source_id,
-                ingestion_run_id,
-                raw_record_locator,
-                normalizer_version,
-                manifest_path,
-                part_path,
-                part_sha256
-            FROM selected
-            ORDER BY
-                observed_at,
-                source,
-                interval,
-                price_basis,
-                available_at,
-                ingested_at,
-                raw_payload_hash NULLS LAST,
-                manifest_path,
-                part_path,
-                raw_record_locator
-        """
+        parameters: dict[str, object] = {"decision_at": decision_at}
+        if dataset == "prices":
+            if not isinstance(security_id, str) or not security_id:
+                raise ValueError("prices point_in_time_inputs requires an explicit security_id")
+            parameters["security_id"] = security_id
+            sql = f"""
+                WITH eligible AS (
+                    SELECT *
+                    FROM {_quote_identifier("_prices_lineage")}
+                    WHERE security_id = $security_id
+                      AND available_at IS NOT NULL
+                      AND observed_at IS NOT NULL
+                      AND available_at <= CAST($decision_at AS TIMESTAMPTZ)
+                      AND observed_at <= CAST($decision_at AS TIMESTAMPTZ)
+                ),
+                selected AS (
+                    SELECT *
+                    FROM eligible
+                    QUALIFY row_number() OVER (
+                        PARTITION BY source, security_id, interval, price_basis, observed_at
+                        ORDER BY
+                            available_at DESC,
+                            ingested_at DESC,
+                            raw_payload_hash DESC NULLS LAST,
+                            manifest_path DESC,
+                            part_path DESC
+                    ) = 1
+                )
+                SELECT
+                    source,
+                    security_id,
+                    interval,
+                    price_basis,
+                    currency,
+                    observed_at,
+                    CAST(observed_at AS DATE) AS trading_date,
+                    observed_precision,
+                    published_at,
+                    has_published_at,
+                    published_precision,
+                    available_at,
+                    ingested_at,
+                    close AS close_value,
+                    raw_payload_hash,
+                    data_source_id,
+                    ingestion_run_id,
+                    raw_record_locator,
+                    normalizer_version,
+                    manifest_path,
+                    part_path,
+                    part_sha256
+                FROM selected
+                ORDER BY
+                    observed_at,
+                    source,
+                    interval,
+                    price_basis,
+                    available_at,
+                    ingested_at,
+                    raw_payload_hash NULLS LAST,
+                    manifest_path,
+                    part_path,
+                    raw_record_locator
+            """
+        elif dataset == "fundamentals":
+            if not isinstance(issuer_id, str) or not issuer_id:
+                raise ValueError(
+                    "fundamentals point_in_time_inputs requires an explicit issuer_id"
+                )
+            if not isinstance(concept, str) or not concept:
+                raise ValueError(
+                    "fundamentals point_in_time_inputs requires an explicit concept"
+                )
+            parameters.update({"issuer_id": issuer_id, "concept": concept})
+            filters = ["issuer_id = $issuer_id", "concept = $concept"]
+            for name, value in (
+                ("source", source),
+                ("taxonomy", taxonomy),
+                ("unit", unit),
+                ("currency", currency),
+            ):
+                if value is not None:
+                    if not isinstance(value, str) or not value:
+                        raise ValueError(f"fundamentals selector {name} must be non-empty")
+                    parameters[name] = value
+                    filters.append(f"{name} = ${name}")
+            sql = f"""
+                WITH eligible AS (
+                    SELECT *
+                    FROM {_quote_identifier("_fundamentals_lineage")}
+                    WHERE {' AND '.join(filters)}
+                      AND available_at IS NOT NULL
+                      AND observed_at IS NOT NULL
+                      AND period_end IS NOT NULL
+                      AND available_at <= CAST($decision_at AS TIMESTAMPTZ)
+                      AND observed_at <= CAST($decision_at AS TIMESTAMPTZ)
+                      AND period_end <= CAST($decision_at AS DATE)
+                ),
+                selected AS (
+                    SELECT *
+                    FROM eligible
+                    QUALIFY row_number() OVER (
+                        PARTITION BY
+                            source, issuer_id, security_id, taxonomy, concept,
+                            unit, currency, period_end, fiscal_period, frame
+                        ORDER BY
+                            available_at DESC,
+                            revision DESC,
+                            published_at DESC,
+                            accession_number DESC,
+                            ingested_at DESC,
+                            raw_payload_hash DESC NULLS LAST,
+                            manifest_path DESC,
+                            part_path DESC
+                    ) = 1
+                )
+                SELECT
+                    source,
+                    issuer_id,
+                    NULLIF(security_id, '') AS security_id,
+                    taxonomy,
+                    concept,
+                    unit,
+                    NULLIF(currency, '') AS currency,
+                    observed_at,
+                    observed_precision,
+                    published_at,
+                    published_precision,
+                    available_at,
+                    ingested_at,
+                    period_start,
+                    period_end,
+                    fiscal_period,
+                    frame,
+                    value AS value_text,
+                    has_value,
+                    revision,
+                    accession_number,
+                    form,
+                    fiscal_year,
+                    raw_payload_hash,
+                    data_source_id,
+                    ingestion_run_id,
+                    raw_record_locator,
+                    normalizer_version,
+                    manifest_path,
+                    part_path,
+                    part_sha256
+                FROM selected
+                ORDER BY
+                    period_end,
+                    fiscal_period,
+                    source,
+                    available_at,
+                    revision,
+                    published_at,
+                    ingested_at,
+                    raw_payload_hash NULLS LAST,
+                    manifest_path,
+                    part_path,
+                    raw_record_locator
+            """
+        else:
+            if not isinstance(series_id, str) or not series_id:
+                raise ValueError(
+                    "macroeconomics point_in_time_inputs requires an explicit series_id"
+                )
+            parameters["series_id"] = series_id
+            filters = ["series_id = $series_id"]
+            for name, value in (
+                ("source", source),
+                ("geography", geography),
+                ("frequency", frequency),
+                ("unit", unit),
+            ):
+                if value is not None:
+                    if not isinstance(value, str) or not value:
+                        raise ValueError(f"macroeconomics selector {name} must be non-empty")
+                    parameters[name] = value
+                    filters.append(f"{name} = ${name}")
+            sql = f"""
+                WITH eligible AS (
+                    SELECT *
+                    FROM {_quote_identifier("_macroeconomics_lineage")}
+                    WHERE {' AND '.join(filters)}
+                      AND available_at IS NOT NULL
+                      AND observed_at IS NOT NULL
+                      AND available_at <= CAST($decision_at AS TIMESTAMPTZ)
+                      AND observed_at <= CAST($decision_at AS TIMESTAMPTZ)
+                      AND (NOT has_vintage_at OR vintage_at <= CAST($decision_at AS TIMESTAMPTZ))
+                ),
+                selected AS (
+                    SELECT *
+                    FROM eligible
+                    QUALIFY row_number() OVER (
+                        PARTITION BY
+                            source, series_id, geography, unit, frequency,
+                            seasonal_adjustment, observed_at
+                        ORDER BY
+                            available_at DESC,
+                            revision DESC,
+                            vintage_at DESC NULLS LAST,
+                            published_at DESC,
+                            ingested_at DESC,
+                            raw_payload_hash DESC NULLS LAST,
+                            manifest_path DESC,
+                            part_path DESC
+                    ) = 1
+                )
+                SELECT
+                    source,
+                    series_id,
+                    geography,
+                    unit,
+                    frequency,
+                    NULLIF(seasonal_adjustment, '') AS seasonal_adjustment,
+                    has_seasonal_adjustment,
+                    observed_at,
+                    CAST(observed_at AS DATE) AS observation_date,
+                    observed_precision,
+                    published_at,
+                    published_precision,
+                    available_at,
+                    ingested_at,
+                    value AS value_text,
+                    has_value,
+                    revision,
+                    vintage_at,
+                    has_vintage_at,
+                    raw_payload_hash,
+                    data_source_id,
+                    ingestion_run_id,
+                    raw_record_locator,
+                    normalizer_version,
+                    manifest_path,
+                    part_path,
+                    part_sha256
+                FROM selected
+                ORDER BY
+                    observed_at,
+                    source,
+                    revision,
+                    available_at,
+                    vintage_at NULLS LAST,
+                    published_at,
+                    ingested_at,
+                    raw_payload_hash NULLS LAST,
+                    manifest_path,
+                    part_path,
+                    raw_record_locator
+            """
         frame = self.connection.execute(sql, parameters).fetchdf()
         maximum_input_availability = (
             None if frame.empty else frame["available_at"].max()
@@ -853,6 +1047,8 @@ class ResearchCatalog:
             dataset=dataset,
             security_id=security_id,
             decision_at=str(decision_at),
+            issuer_id=issuer_id,
+            series_id=series_id,
         )
 
     def filings_as_of(

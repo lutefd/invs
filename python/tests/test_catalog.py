@@ -489,6 +489,57 @@ def test_point_in_time_inputs_returns_empty_for_missing_data(tmp_path: Path) -> 
     assert missing_security.maximum_input_availability is None
 
 
+def test_point_in_time_inputs_selects_fundamental_and_macro_lineage(tmp_path: Path) -> None:
+    root = tmp_path / "normalized"
+    fundamental_manifest = _write_fundamentals(root)
+    macro_manifest = _write_macro(root)
+    catalog = ResearchCatalog(tmp_path).register()
+
+    fundamental = catalog.point_in_time_inputs(
+        decision_at="2025-02-01T00:00:00Z",
+        dataset="fundamentals",
+        issuer_id=ISSUER_ID,
+        source="sec",
+        taxonomy="us-gaap",
+        concept="Revenue",
+        unit="USD",
+        currency="USD",
+    )
+    macro = catalog.point_in_time_inputs(
+        decision_at="2025-02-01T00:00:00Z",
+        dataset="macroeconomics",
+        source="fred",
+        series_id="GDP",
+        geography="US",
+        frequency="quarterly",
+        unit="Index",
+    )
+
+    assert fundamental.frame["value_text"].tolist() == ["11.000000000000000001"]
+    assert fundamental.frame["manifest_path"].tolist() == [str(fundamental_manifest.resolve())]
+    assert fundamental.frame["part_sha256"].notna().all()
+    assert macro.frame["value_text"].tolist() == ["2.100000000000000001"]
+    assert macro.frame["manifest_path"].tolist() == [str(macro_manifest.resolve())]
+    assert str(fundamental.maximum_input_availability) == "2025-01-20 12:00:00+00:00"
+    assert str(macro.maximum_input_availability) == "2025-01-15 13:00:00+00:00"
+
+
+def test_point_in_time_inputs_requires_dataset_specific_selectors(tmp_path: Path) -> None:
+    catalog = ResearchCatalog(tmp_path).register()
+
+    with pytest.raises(ValueError, match="issuer_id"):
+        catalog.point_in_time_inputs(
+            decision_at="2025-01-01T00:00:00Z",
+            dataset="fundamentals",
+            concept="Revenue",
+        )
+    with pytest.raises(ValueError, match="series_id"):
+        catalog.point_in_time_inputs(
+            decision_at="2025-01-01T00:00:00Z",
+            dataset="macroeconomics",
+        )
+
+
 def test_point_in_time_inputs_requires_decision_at_and_rejects_unsupported_dataset(
     tmp_path: Path,
 ) -> None:
@@ -499,8 +550,7 @@ def test_point_in_time_inputs_requires_decision_at_and_rejects_unsupported_datas
     with pytest.raises(ValueError, match="unsupported"):
         catalog.point_in_time_inputs(
             decision_at="2025-01-01T00:00:00Z",
-            security_id=SECURITY_ID,
-            dataset="fundamentals",
+            dataset="unknown",
         )
 
 
