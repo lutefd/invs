@@ -116,11 +116,13 @@ the bounded path and remains unadmitted for unattended raw retention.
 v0.3 is now **in progress**. ADR 0010 and the checked-in strict feature-set
 registry landed in `1a951e5` and `1f8f270`; the bounded resumable dataset-level
 `market-basic` batch manifest and its operator CLI landed in `a8c2302` and
-`f1792ad`. The batch records an explicit security list, decision schedule, registry
-hash, input fitness, manifest/part lineage, and rejected partitions, while keeping
-receipt-time prices labelled `installation_replay_only`. The next unaccepted
-cohesive unit is PostgreSQL feature-artifact catalog metadata; v0.3's broader
-feature families and clean-root acceptance remain open.
+`f1792ad`. The PostgreSQL feature-artifact catalog then landed through `12fdf56`,
+including migrations, input-fitness lineage, strict collector registration, and a
+universe-lineage correction. The batch records an explicit security list, decision
+schedule, registry hash, input fitness, manifest/part lineage, and rejected
+partitions, while keeping receipt-time prices labelled `installation_replay_only`.
+The next unaccepted cohesive unit is a read-only catalog coverage/lineage report;
+v0.3's broader feature families and clean-root acceptance remain open.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook

@@ -98,6 +98,16 @@ list, decision schedule, registry hash, accepted historical-fitness label
 parts, and rejected partitions. This is a v0.3 entry boundary, not the complete
 feature-platform exit gate.
 
+The next catalog slice is now implemented through `5e580d2` (feature-artifact
+metadata), `3d63d21` (input-fitness lineage), `14d5a5f` (the operator collector),
+and `f800527` (universe-lineage correction), with the decision recorded in ADR 0011
+at `12fdf56`. The bounded `make feature-catalog` path revalidates an immutable batch
+and its child manifests/parts, then records one PostgreSQL registration envelope with
+decision points, universe members, selected inputs, fitness labels, and accepted
+partition pointers. Feature rows remain in Parquet; repeated registration of the same
+envelope is an idempotent no-op. This still does not claim coverage reporting, new
+feature families, or the v0.3 exit gate.
+
 ## Yahoo `.SA` source-admission verification
 
 The bounded live verification is recorded in the
@@ -800,10 +810,14 @@ security/decision partitions by reusing those immutable child artifacts. A batch
 reproducible from its registry hash, universe fingerprint, calendar pin, schedule,
 input manifests/parts, and output child hashes. Missing input partitions are recorded
 as explicit rejects; a rerun validates and reuses the same child artifacts. The
-feature artifact catalog, broader feature families, coverage reporting, and clean-root
-multi-asset acceptance remain future work. The engine is intentionally not yet a
-collector stage, strategy API, backtester, portfolio constructor, label/training
-pipeline, or ML model registry.
+feature artifact catalog now provides a PostgreSQL discovery and lineage envelope for
+validated dataset-level batches. It stores registry/input/universe/calendar metadata,
+input-fitness labels, and accepted child pointers, but not feature rows. The catalog
+does not yet provide read-side coverage/null reporting, automatic reconciliation, or
+child-artifact discovery independent of a batch registration. Broader feature families
+and clean-root multi-asset acceptance remain future work. The engine is intentionally
+not yet a collector stage, strategy API, backtester, portfolio constructor,
+label/training pipeline, or ML model registry.
 
 The bounded engine documentation has been aligned without broadening its scope.
 
@@ -893,6 +907,8 @@ The supported research path is:
    derived feature.
 5. Use `publish_market_basic(...)` to create an immutable feature artifact under
    `data/features` and `read_feature_artifact(...)` to validate it later.
+6. Use `make feature-catalog BATCH_MANIFEST=/data/features/batches/.../manifest.json`
+   to validate and register a completed dataset-level batch in PostgreSQL.
 
 Run the notebook non-interactively with `make notebook`. It now inspects CVM
 filings and an existing feature artifact in separate empty-safe sections; neither
@@ -944,6 +960,15 @@ returned zero findings from reconciliation against the restored data root.
 The v0.2 contract/fixture slice at `4d483ac` passed `make test`: Go tests and vet,
 18 JSON Schema documents, and 58 Python tests including the exact-boundary identity,
 membership, calendar, and decision-clock fixtures.
+
+The v0.3 feature-catalog continuation through `12fdf56` additionally passed `make test`
+(94 Python tests with Ruff), the full Go test/vet suite, strict schema validation for
+21 JSON Schema documents, `docker compose config --quiet`, collector image build,
+`make migrate`, and the historical-truth database replay harness. A live temporary
+batch published from the real DuckDB catalog was registered twice through the
+collector image: the first registration inserted one artifact with one input-fitness
+row and one accepted partition, while the second returned `already_present`. The
+temporary database row and feature files were removed after the probe.
 
 The corporate-action boundary through `4751235` passed `make test` with 69 Python
 tests, `make historical-truth-db-test`, a clean isolated PostgreSQL publication,
@@ -1013,10 +1038,11 @@ The following are not accidental omissions:
 - No distributed queue, scheduler, cloud object-store deployment, or production
   multi-user authorization.
 - Feature engine has a checked-in closed registry and a bounded `market-basic` batch
-  runner with one pinned `after_close_next_session` policy. It still has no feature
-  artifact catalog, broader clock policies, accepted market/risk feature families,
-  coverage/null reporting, strategy, backtester, portfolio, execution, labels,
-  training data, or ML behavior.
+  runner with one pinned `after_close_next_session` policy. A PostgreSQL catalog now
+  stores validated dataset-level batch metadata and lineage, but there are still no
+  broader clock policies, accepted market/risk feature families, coverage/null
+  reporting, automatic catalog reconciliation, strategy, backtester, portfolio,
+  execution, labels, training data, or ML behavior.
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
 
@@ -1024,7 +1050,8 @@ The following are not accidental omissions:
 
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d` and v0.2 at `0bfdc27`. The v0.3 entry registry and bounded resumable batch
-slice are committed through `f1792ad`. The next cohesive unit is feature-artifact
-catalog metadata: register verified batch manifests in PostgreSQL without copying
-feature rows, while keeping receipt-time prices installation-replay only and leaving
-v0.5 strategy/backtester behavior deferred.
+slice is committed through `f1792ad`; catalog registration is committed through
+`12fdf56`. The next cohesive unit is a read-only catalog coverage/lineage report over
+registered batches, followed by accepted market/risk feature families. Keep receipt-
+time prices installation-replay only, and leave v0.5 strategy/backtester behavior
+deferred.

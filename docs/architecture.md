@@ -3,11 +3,11 @@
 This is the first actively developed v1/v0 foundation. The first vertical slice
 collects daily US equity prices, SEC company metadata and fundamentals, current
 FRED/BCB macro series, and bounded ALFRED historical vintages. It preserves source bytes, publishes canonical
-Parquet through immutable manifests, registers operational metadata in PostgreSQL,
-and publishes accepted latest-only price/macro projections for Grafana. It exposes
-canonical history through DuckDB/Jupyter and a closed, deterministic `market-basic`
-feature artifact engine. It intentionally does not include a strategy API, backtester,
-distributed queue, or live execution.
+Parquet through immutable manifests, registers operational and feature-artifact
+metadata in PostgreSQL, and publishes accepted latest-only price/macro projections
+for Grafana. It exposes canonical history through DuckDB/Jupyter and a closed,
+deterministic `market-basic` feature artifact engine. It intentionally does not
+include a strategy API, backtester, distributed queue, or live execution.
 
 The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC,
 Yahoo, FRED, and BCB. Its raw run manifests and normalized evidence are retained in
@@ -76,10 +76,14 @@ SEC / FRED / ALFRED / BCB / B3 / Yahoo / CVM provider
             v
  atomic manifest publication
             |
-       +----+----+
-       |         |
-       v         v
- DuckDB/Jupyter  PostgreSQL latest-only projections -> Grafana
+       +-------------+-----------------+
+       |                               |
+       v                               v
+ DuckDB/Jupyter              PostgreSQL metadata
+                              |              |
+                              v              v
+                    latest-only -> Grafana   feature-artifact
+                                             catalog metadata/lineage
 ```
 
 ## Responsibilities
@@ -90,7 +94,7 @@ SEC / FRED / ALFRED / BCB / B3 / Yahoo / CVM provider
 | Source adapter | vendor request/response types | canonical storage layout |
 | Validator/normalizer | semantic checks and canonical conversion | network requests |
 | Raw store | immutable bytes, hashes, atomic put/get | vendor parsing |
-| PostgreSQL | identity, versioned mappings, source/run metadata, latest-only operational projections | canonical history and bulk daily observations |
+| PostgreSQL | identity, versioned mappings, source/run metadata, latest-only operational projections, feature-artifact discovery and lineage metadata | canonical history, bulk daily observations, and feature rows |
 | Parquet writer | immutable content-named analytical parts and manifests | operational leases and latest-only projections |
 | Research | DuckDB queries, notebooks, deterministic feature artifacts | direct vendor calls, strategy execution |
 
@@ -108,6 +112,15 @@ then atomically installs `manifest.json` as the commit pointer. A manifest is th
 canonical reader boundary: readers enumerate manifests for known datasets, verify the
 manifest, row counts, and part hashes, and read only its listed parts. They never use
 `data.parquet`, arbitrary unlisted Parquet files, or `**/*.parquet` discovery.
+
+Feature batch publication follows the same immutable boundary but is driven from
+DuckDB/Python rather than a collector. The batch runner selects explicit,
+manifest-backed inputs, publishes child feature artifacts, and installs a dataset-level
+batch manifest only after the children validate. The `make feature-catalog` operator
+path validates that registry, batch manifest, child manifests, and listed output parts
+again before registering a small metadata and lineage envelope in PostgreSQL. Feature
+values remain in the referenced Parquet parts, and repeating registration of the same
+envelope is an idempotent no-op; the catalog is not a second feature-value store.
 
 At source-run finalization, all candidate provenance is validated before candidates are
 collapsed to one winning price per security or macro observation per series. This keeps
@@ -127,11 +140,14 @@ snapshot data.
 
 Fresh PostgreSQL volumes apply the forward migrations in order: `000001_core_metadata`,
 `000002_latest_observation_snapshots`, `000003_observed_precision`,
-`000004_run_inputs`, `000005_nullable_macro_snapshot_value`, and
-`000006_historical_truth`, `000007_corporate_actions`, and
-`000008_price_basis`. Existing initialized volumes use `make migrate`, which
-conditionally applies missing changes in order; its schema checks make rerunning the
-command idempotent. `000001` is the base schema created during volume initialization.
+`000004_run_inputs`, `000005_nullable_macro_snapshot_value`, `000006_historical_truth`,
+`000007_corporate_actions`, `000008_price_basis`, `000009_nullable_price_publication`,
+`000010_feature_artifacts`, and `000011_feature_artifact_input_fitness`. Existing
+initialized volumes use `make migrate`, which conditionally applies missing changes in
+order; its schema checks make rerunning the command idempotent. `000001` is the base
+schema created during volume initialization. Migrations 000010 and 000011 store only
+feature-batch discovery, lineage, and input-fitness metadata; feature rows remain in
+manifest-backed Parquet.
 
 ## Point-in-time query boundary
 
@@ -201,10 +217,16 @@ implementation-neutral so an S3-compatible RawStore can replace the filesystem.
   manifest, which is distinct from unmanaged pre-contract data.
 - Orphan queued/running runs require explicit operator cancellation and a reason.
 - Every normalized row traces to a raw SHA-256 and ingestion run.
+- Every cataloged feature batch traces to its registry, selected input manifests and
+  parts, explicit universe and decision points, input-fitness labels, and immutable
+  child output hashes.
 - All instants are UTC; source-local parsing is explicit.
 - New source kinds are data values, not database migrations. Run status remains a
   closed enum because it participates in checked lifecycle invariants.
 
 Detailed rationale is recorded in [ADR 0001](adr/0001-storage-boundaries.md),
 [ADR 0002](adr/0002-point-in-time-semantics.md), [ADR 0003](adr/0003-canonical-domain-models.md),
-and [ADR 0004](adr/0004-failure-and-idempotency.md).
+and [ADR 0004](adr/0004-failure-and-idempotency.md). Feature publication and catalog
+boundaries are further specified by [ADR 0005](adr/0005-deterministic-feature-artifacts.md),
+[ADR 0010](adr/0010-versioned-feature-set-registry.md), and
+[ADR 0011](adr/0011-feature-artifact-catalog.md).

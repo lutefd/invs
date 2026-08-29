@@ -64,6 +64,9 @@ not systems to replace:
   `market-basic` batch manifest. The batch records its explicit universe, decision
   schedule, registry/input fingerprints, accepted input fitness, child output parts,
   and rejected partitions; receipt-time prices remain `installation_replay_only`.
+- A PostgreSQL catalog for validated dataset-level feature batches. It stores the
+  registry/input/universe/calendar envelope, input-fitness labels, decision points,
+  and accepted child manifest/part lineage while keeping feature rows in Parquet.
 - Grafana pipeline-health and latest-snapshot dashboards.
 - A validation surface built around Go tests and vet, schema validation, Python tests
   and Ruff, notebook execution, dashboard SQL smoke tests, image builds, migration
@@ -97,9 +100,10 @@ The following baseline limitations drive the version order:
   outstanding.
 - SEC filing metadata is canonical and live-accepted for a bounded AAPL submissions
   slice; CVM CAD remains intentionally raw-only.
-- The feature engine has one bounded versioned registry and a dataset-level
-  `market-basic` runner, but still lacks a PostgreSQL artifact catalog, broad feature
-  families, reviewed taxonomy mappings, and coverage/lineage reporting.
+- The feature engine has one bounded versioned registry, a dataset-level `market-basic`
+  runner, and a PostgreSQL catalog for validated batches, but still lacks broad feature
+  families, reviewed taxonomy mappings, read-side coverage/lineage reporting, and
+  automatic catalog reconciliation.
 - There is no theme graph, document-event pipeline, hypothesis ledger, backtester,
   portfolio engine, paper account, or live execution.
 
@@ -801,15 +805,17 @@ why any row is null, stale, rejected, or unavailable.
 
 ### 3. Feature artifact catalog
 
-- Register small artifact metadata in PostgreSQL: artifact ID/version, feature set,
-  decision range, universe fingerprint, input fingerprint, output manifest/hash,
-  generator Git commit, status, and timestamps.
-- Keep feature rows in Parquet. PostgreSQL is for discovery, lineage, run state, and
-  operator queries only.
-- Catalog registration occurs after immutable publication and is reconciliable if a
-  process dies between stores.
-- Expose lineage from a feature row to selected canonical manifests and from the batch
-  to its universe/calendar definitions.
+The first bounded catalog slice is implemented. It registers small artifact metadata
+in PostgreSQL: artifact ID/version, feature set, decision range, universe fingerprint,
+input fingerprint, output manifest/hash, generator Git commit, status, and timestamps.
+It also stores decision points, ordered universe members, selected canonical input
+manifest/part hashes, input-fitness labels, and accepted child partition pointers.
+
+Feature rows remain in Parquet. PostgreSQL is for discovery, lineage, run state, and
+operator queries only. Registration happens after immutable publication is revalidated
+and is idempotent for the same complete envelope; same-identity conflicts fail closed.
+The current slice does not yet expose read-side coverage/null reporting, automatic
+orphan repair, or child-artifact discovery independent of a batch registration.
 
 ### 4. Initial feature families
 
@@ -905,14 +911,15 @@ ever-growing object.
 
 ## Suggested commit slices
 
-1. `docs(adr): define versioned feature-set registry`
-2. `feat(features): publish batch feature manifests`
-3. `feat(metadata): catalog feature artifacts`
-4. `feat(features): add market momentum and risk set`
-5. `feat(features): add reviewed fundamental mappings`
-6. `feat(features): add growth and quality set`
-7. `feat(features): add macro state set`
-8. `feat(research): inspect feature coverage and lineage`
+1. `docs(adr): define versioned feature-set registry` (`1a951e5`)
+2. `feat(features): publish batch feature manifests` (`a8c2302`, `f1792ad`)
+3. `feat(metadata): catalog feature artifacts` (`5e580d2`, `3d63d21`, `14d5a5f`,
+   `f800527`, `12fdf56`)
+4. `feat(research): inspect feature coverage and lineage`
+5. `feat(features): add market momentum and risk set`
+6. `feat(features): add reviewed fundamental mappings`
+7. `feat(features): add growth and quality set`
+8. `feat(features): add macro state set`
 9. `test(acceptance): reproduce multi-asset feature datasets`
 
 ## Explicit non-goals
@@ -1923,8 +1930,9 @@ bounded identity, membership, calendar, price, action, FX, macro, and SEC filing
 chains, verifies 16 pinned evidence artifacts, and preserves installation-replay and
 unsupported scope decisions. The next narrow queue is v0.3 feature-platform work.
 The v0.3 entry registry and bounded resumable `market-basic` batch are implemented
-through `f1792ad`; the next narrow unit is to catalog verified batch metadata in
-PostgreSQL without copying feature rows.
+through `f1792ad`, and verified batch metadata is cataloged through `12fdf56` without
+copying feature rows. The next narrow unit is a read-only catalog coverage/lineage
+report, followed by accepted market/risk feature families.
 The general backtester remains a later v0.5 boundary; the fastest path to the full
 platform is still to keep every later result explainable from a trusted historical
 input boundary.

@@ -39,6 +39,12 @@ The report checks:
   selected normalized input manifest/part, including the required calendar pin
   and its input-fingerprint contribution.
 
+The report currently validates feature files and their selected inputs, but it does
+not yet compare PostgreSQL `feature_artifacts` registrations with the feature root.
+For a published dataset-level batch, run `make feature-catalog` after the filesystem
+checks; that command revalidates the batch and registers its metadata idempotently.
+Automatic catalog orphan repair remains a later v0.3 slice.
+
 The report never cancels a run, deletes an orphan, or rewrites evidence. If an
 active run is confirmed orphaned, use the existing explicit collector command
 with an exact identity and reason:
@@ -75,6 +81,7 @@ The backup contains:
 
 - a plain PostgreSQL dump from the running Compose database;
 - `immutable/raw/`, `immutable/normalized/`, and `immutable/features/`;
+- the PostgreSQL feature-artifact catalog rows that describe any registered batches;
 - `backup-manifest.txt` with file sizes and SHA-256 hashes;
 - the effective Git commit and a SHA-256 fingerprint of
   `INVS_CONFIG_FILE` (the configuration itself is not copied).

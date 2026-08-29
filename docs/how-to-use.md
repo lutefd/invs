@@ -993,6 +993,29 @@ pin, input fitness, selected input manifest/part hashes, child output part hashe
 row count, and accepted/rejected partition summary. Feature rows remain in the
 child Parquet artifacts; PostgreSQL is not used as a feature-row store.
 
+### Cataloging a validated dataset-level batch
+
+Register a completed batch after its manifest and child parts have been validated:
+
+```sh
+make feature-catalog \
+  BATCH_MANIFEST=/data/features/batches/market-basic/1.0.0/batch-<uuid>/manifest.json
+```
+
+The target runs `feature-batch-validate` inside Jupyter, applies the same strict
+filesystem checks in the collector image, and then writes the catalog registration to
+PostgreSQL. It stores the batch identity, registry and input fingerprints, calendar
+pin, decision points, universe members, input-fitness labels, and accepted child
+manifest/part pointers. Feature values remain in Parquet. The path is relative to
+`/data/features` inside Compose, and the database URL comes from the configured
+Compose environment; do not pass a host-only path to the container.
+
+Registration is idempotent: repeating the command for the same immutable batch returns
+`already_present: true`. A changed registration under the same batch identity fails as
+a conflict. The current catalog boundary is dataset-level and published-status only;
+it does not yet provide a read-side coverage report, automatic orphan repair, or
+feature-row queries from PostgreSQL.
+
 ## 8. Notebook and Grafana
 
 Execute the empty-safe vertical-slice notebook in a disposable Jupyter process:
@@ -1167,6 +1190,8 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   reproducible input lineage.
 - A deterministic dataset-level `market-basic` batch over an explicit security list
   and decision schedule, including accepted input fitness labels and explicit rejects.
+- Which validated dataset-level feature batches are cataloged in PostgreSQL, their
+  input-fitness labels, decision/universe definitions, and accepted child hashes.
 - Current latest-only operational coverage and projection health in Grafana.
 
 ### It cannot honestly answer yet
@@ -1182,9 +1207,10 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   candidate price bridge but not as security-master evidence, while official B3
   identity/listing integration, coverage, terms, and historical-fitness acceptance
   remain pending.
-- A feature-artifact catalog, broad market/risk feature family, backtest, strategy signal, portfolio, forecast, ML model, execution order,
-  or performance claim. The feature engine is deliberately only the first
-  deterministic market-basic registry.
+- A catalog coverage/null report, broad market/risk feature family, backtest, strategy
+  signal, portfolio, forecast, ML model, execution order, or performance claim. The
+  catalog currently indexes only validated dataset-level batches, and the feature
+  engine is deliberately only the first deterministic market-basic registry.
 - A historical identity relationship solely from today's YAML universe mapping.
 - A latest fundamental snapshot in PostgreSQL; canonical fundamentals remain in
   Parquet, while PostgreSQL latest-only projections currently cover prices and
