@@ -66,7 +66,9 @@ not systems to replace:
   and rejected partitions; receipt-time prices remain `installation_replay_only`.
 - A PostgreSQL catalog for validated dataset-level feature batches. It stores the
   registry/input/universe/calendar envelope, input-fitness labels, decision points,
-  and accepted child manifest/part lineage while keeping feature rows in Parquet.
+  and accepted child manifest/part lineage while keeping feature rows in Parquet. A
+  read-only report exposes catalog-level coverage and lineage without reading feature
+  values.
 - Grafana pipeline-health and latest-snapshot dashboards.
 - A validation surface built around Go tests and vet, schema validation, Python tests
   and Ruff, notebook execution, dashboard SQL smoke tests, image builds, migration
@@ -101,9 +103,9 @@ The following baseline limitations drive the version order:
 - SEC filing metadata is canonical and live-accepted for a bounded AAPL submissions
   slice; CVM CAD remains intentionally raw-only.
 - The feature engine has one bounded versioned registry, a dataset-level `market-basic`
-  runner, and a PostgreSQL catalog for validated batches, but still lacks broad feature
-  families, reviewed taxonomy mappings, read-side coverage/lineage reporting, and
-  automatic catalog reconciliation.
+  runner, a PostgreSQL catalog for validated batches, and a read-only catalog
+  coverage/lineage report, but still lacks broad feature families, reviewed taxonomy
+  mappings, feature-level null reporting, and automatic catalog reconciliation.
 - There is no theme graph, document-event pipeline, hypothesis ledger, backtester,
   portfolio engine, paper account, or live execution.
 
@@ -814,8 +816,10 @@ manifest/part hashes, input-fitness labels, and accepted child partition pointer
 Feature rows remain in Parquet. PostgreSQL is for discovery, lineage, run state, and
 operator queries only. Registration happens after immutable publication is revalidated
 and is idempotent for the same complete envelope; same-identity conflicts fail closed.
-The current slice does not yet expose read-side coverage/null reporting, automatic
-orphan repair, or child-artifact discovery independent of a batch registration.
+The read-only `make feature-report` command exposes catalog-level coverage, per-decision
+unaccounted partitions, input fitness, and manifest/part lineage. It does not inspect
+feature values, report feature-level null reasons, repair orphans, or discover child
+artifacts independent of a batch registration.
 
 ### 4. Initial feature families
 
@@ -915,7 +919,8 @@ ever-growing object.
 2. `feat(features): publish batch feature manifests` (`a8c2302`, `f1792ad`)
 3. `feat(metadata): catalog feature artifacts` (`5e580d2`, `3d63d21`, `14d5a5f`,
    `f800527`, `12fdf56`)
-4. `feat(research): inspect feature coverage and lineage`
+4. `feat(metadata): add read-only feature catalog reports` (`03521c2`, `731b0b4`,
+   `94a3bf0`)
 5. `feat(features): add market momentum and risk set`
 6. `feat(features): add reviewed fundamental mappings`
 7. `feat(features): add growth and quality set`
@@ -1931,8 +1936,9 @@ chains, verifies 16 pinned evidence artifacts, and preserves installation-replay
 unsupported scope decisions. The next narrow queue is v0.3 feature-platform work.
 The v0.3 entry registry and bounded resumable `market-basic` batch are implemented
 through `f1792ad`, and verified batch metadata is cataloged through `12fdf56` without
-copying feature rows. The next narrow unit is a read-only catalog coverage/lineage
-report, followed by accepted market/risk feature families.
+copying feature rows. Catalog-level coverage/lineage reporting is implemented through
+`94a3bf0`; the next narrow unit is an accepted market/risk feature family, followed by
+feature-level null reporting and clean-root multi-asset acceptance.
 The general backtester remains a later v0.5 boundary; the fastest path to the full
 platform is still to keep every later result explainable from a trusted historical
 input boundary.

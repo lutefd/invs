@@ -121,8 +121,11 @@ including migrations, input-fitness lineage, strict collector registration, and 
 universe-lineage correction. The batch records an explicit security list, decision
 schedule, registry hash, input fitness, manifest/part lineage, and rejected
 partitions, while keeping receipt-time prices labelled `installation_replay_only`.
-The next unaccepted cohesive unit is a read-only catalog coverage/lineage report;
-v0.3's broader feature families and clean-root acceptance remain open.
+The read-only catalog coverage/lineage report then landed in `03521c2`, `731b0b4`,
+and `94a3bf0`, with text/JSON output, per-decision coverage, and explicit lineage
+inspection. The next unaccepted cohesive unit is an accepted market/risk feature
+family; feature-level null reporting, broader feature families, and clean-root
+acceptance remain open.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook

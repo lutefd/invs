@@ -105,8 +105,17 @@ at `12fdf56`. The bounded `make feature-catalog` path revalidates an immutable b
 and its child manifests/parts, then records one PostgreSQL registration envelope with
 decision points, universe members, selected inputs, fitness labels, and accepted
 partition pointers. Feature rows remain in Parquet; repeated registration of the same
-envelope is an idempotent no-op. This still does not claim coverage reporting, new
-feature families, or the v0.3 exit gate.
+envelope is an idempotent no-op.
+
+The catalog reporting continuation is now implemented through `03521c2`, `731b0b4`,
+and `94a3bf0`. The read-only `make feature-report` path emits text or a versioned JSON
+report with complete/partial/empty/inconsistent coverage status, expected versus
+accepted partitions by decision timestamp, input fitness, and manifest/part lineage.
+It uses a repeatable-read PostgreSQL transaction and never reads feature values. The
+report schema is `schemas/feature-catalog-report.schema.json`; a live collector-image
+probe covered first registration, idempotent retry, JSON output, and text output for a
+two-date batch. This still does not claim feature-level null reporting, new feature
+families, or the v0.3 exit gate.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -812,12 +821,14 @@ input manifests/parts, and output child hashes. Missing input partitions are rec
 as explicit rejects; a rerun validates and reuses the same child artifacts. The
 feature artifact catalog now provides a PostgreSQL discovery and lineage envelope for
 validated dataset-level batches. It stores registry/input/universe/calendar metadata,
-input-fitness labels, and accepted child pointers, but not feature rows. The catalog
-does not yet provide read-side coverage/null reporting, automatic reconciliation, or
-child-artifact discovery independent of a batch registration. Broader feature families
-and clean-root multi-asset acceptance remain future work. The engine is intentionally
-not yet a collector stage, strategy API, backtester, portfolio constructor,
-label/training pipeline, or ML model registry.
+input-fitness labels, and accepted child pointers, but not feature rows. The
+`make feature-report` read path adds catalog-level coverage and lineage inspection,
+including per-decision unaccounted partition counts, but does not inspect feature
+values or compare catalog rows with the feature root. `make reconcile` remains the
+filesystem/hash check, and automatic catalog reconciliation, feature-level null
+reporting, broader feature families, and clean-root multi-asset acceptance remain
+future work. The engine is intentionally not yet a collector stage, strategy API,
+backtester, portfolio constructor, label/training pipeline, or ML model registry.
 
 The bounded engine documentation has been aligned without broadening its scope.
 
@@ -909,6 +920,8 @@ The supported research path is:
    `data/features` and `read_feature_artifact(...)` to validate it later.
 6. Use `make feature-catalog BATCH_MANIFEST=/data/features/batches/.../manifest.json`
    to validate and register a completed dataset-level batch in PostgreSQL.
+7. Use `make feature-report` to inspect registered batch coverage and lineage in
+   text or JSON form without loading feature values into PostgreSQL.
 
 Run the notebook non-interactively with `make notebook`. It now inspects CVM
 filings and an existing feature artifact in separate empty-safe sections; neither
@@ -969,6 +982,14 @@ batch published from the real DuckDB catalog was registered twice through the
 collector image: the first registration inserted one artifact with one input-fitness
 row and one accepted partition, while the second returned `already_present`. The
 temporary database row and feature files were removed after the probe.
+
+The read-only catalog-report continuation through `94a3bf0` passed the focused and full
+Go test suites, Go vet, strict schema validation for 22 JSON Schema documents,
+`git diff --check`, and a rebuilt collector image containing `invs-feature-report`.
+The live collector-image probe registered a temporary two-date `market-basic` batch,
+confirmed the idempotent second registration, verified complete JSON coverage and
+lineage (2/2 partitions and 2 feature rows), exercised text output, and removed all
+temporary feature files and catalog child rows afterward.
 
 The corporate-action boundary through `4751235` passed `make test` with 69 Python
 tests, `make historical-truth-db-test`, a clean isolated PostgreSQL publication,
@@ -1039,10 +1060,11 @@ The following are not accidental omissions:
   multi-user authorization.
 - Feature engine has a checked-in closed registry and a bounded `market-basic` batch
   runner with one pinned `after_close_next_session` policy. A PostgreSQL catalog now
-  stores validated dataset-level batch metadata and lineage, but there are still no
-  broader clock policies, accepted market/risk feature families, coverage/null
-  reporting, automatic catalog reconciliation, strategy, backtester, portfolio,
-  execution, labels, training data, or ML behavior.
+  stores validated dataset-level batch metadata and lineage, and its read-only report
+  exposes catalog-level partition coverage. There are still no broader clock policies,
+  accepted market/risk feature families, feature-level null reporting, automatic
+  catalog reconciliation, strategy, backtester, portfolio, execution, labels,
+  training data, or ML behavior.
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
 
@@ -1051,7 +1073,7 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d` and v0.2 at `0bfdc27`. The v0.3 entry registry and bounded resumable batch
 slice is committed through `f1792ad`; catalog registration is committed through
-`12fdf56`. The next cohesive unit is a read-only catalog coverage/lineage report over
-registered batches, followed by accepted market/risk feature families. Keep receipt-
-time prices installation-replay only, and leave v0.5 strategy/backtester behavior
-deferred.
+`12fdf56`; catalog reporting is committed through `94a3bf0`. The next cohesive unit
+is an accepted market/risk feature family, followed by feature-level null reporting
+and clean-root multi-asset acceptance. Keep receipt-time prices installation-replay
+only, and leave v0.5 strategy/backtester behavior deferred.

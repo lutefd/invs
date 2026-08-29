@@ -120,7 +120,10 @@ batch manifest only after the children validate. The `make feature-catalog` oper
 path validates that registry, batch manifest, child manifests, and listed output parts
 again before registering a small metadata and lineage envelope in PostgreSQL. Feature
 values remain in the referenced Parquet parts, and repeating registration of the same
-envelope is an idempotent no-op; the catalog is not a second feature-value store.
+envelope is an idempotent no-op; the catalog is not a second feature-value store. The
+read-only `make feature-report` path summarizes registered partition coverage and
+lineage from PostgreSQL without inspecting feature values; filesystem/hash
+reconciliation remains a separate operation.
 
 At source-run finalization, all candidate provenance is validated before candidates are
 collapsed to one winning price per security or macro observation per series. This keeps

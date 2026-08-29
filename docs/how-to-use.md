@@ -1012,9 +1012,43 @@ Compose environment; do not pass a host-only path to the container.
 
 Registration is idempotent: repeating the command for the same immutable batch returns
 `already_present: true`. A changed registration under the same batch identity fails as
-a conflict. The current catalog boundary is dataset-level and published-status only;
-it does not yet provide a read-side coverage report, automatic orphan repair, or
-feature-row queries from PostgreSQL.
+a conflict. The catalog boundary is dataset-level and published-status only; it does
+not provide feature-row queries or automatic orphan repair from PostgreSQL.
+
+### Reading catalog coverage and lineage
+
+Inspect all registered feature batches in text form:
+
+```sh
+make feature-report
+```
+
+Apply the usual feature-set filters and request the machine-readable report when
+needed:
+
+```sh
+make feature-report \
+  FEATURE_SET=market-basic \
+  FEATURE_SET_VERSION=1.0.0 \
+  FEATURE_REPORT_JSON=1
+
+make feature-report \
+  FEATURE_ARTIFACT_ID=<artifact-uuid> \
+  FEATURE_REPORT_FAIL_ON_ISSUES=1
+```
+
+The report is read-only and contains catalog metadata, input-fitness labels, hashes,
+and explicit lineage; it never loads feature values into PostgreSQL. Each artifact is
+classified as `complete`, `partial`, `empty`, or `inconsistent`. The per-decision
+coverage rows show expected, accepted, unaccounted, and accepted-row counts. An
+inconsistent artifact indicates a catalog relationship or count problem and makes
+`FEATURE_REPORT_FAIL_ON_ISSUES=1` exit with status 1. A partial artifact can be valid
+when the batch manifest explicitly rejected input partitions. The JSON contract is
+defined by `schemas/feature-catalog-report.schema.json`.
+
+This is catalog-level coverage, not a feature-value/null-quality report. It does not
+infer rejected security IDs, read Parquet values, or compare PostgreSQL registrations
+with the feature root; use `make reconcile` for filesystem and hash checks.
 
 ## 8. Notebook and Grafana
 
@@ -1192,6 +1226,8 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   and decision schedule, including accepted input fitness labels and explicit rejects.
 - Which validated dataset-level feature batches are cataloged in PostgreSQL, their
   input-fitness labels, decision/universe definitions, and accepted child hashes.
+- Which cataloged batch partitions are complete, partial, empty, or inconsistent by
+  decision timestamp, including unaccounted partition counts and accepted row counts.
 - Current latest-only operational coverage and projection health in Grafana.
 
 ### It cannot honestly answer yet
@@ -1207,10 +1243,12 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   candidate price bridge but not as security-master evidence, while official B3
   identity/listing integration, coverage, terms, and historical-fitness acceptance
   remain pending.
-- A catalog coverage/null report, broad market/risk feature family, backtest, strategy
-  signal, portfolio, forecast, ML model, execution order, or performance claim. The
-  catalog currently indexes only validated dataset-level batches, and the feature
-  engine is deliberately only the first deterministic market-basic registry.
+- Feature-value null reasons, stale-input attribution, or source-contribution quality
+  reporting; a catalog-level coverage/lineage report now exists. Broad market/risk
+  feature families, backtest, strategy signal, portfolio, forecast, ML model,
+  execution order, and performance claims also remain out of scope. The catalog
+  indexes only validated dataset-level batches, and the feature engine is deliberately
+  only the first deterministic market-basic registry.
 - A historical identity relationship solely from today's YAML universe mapping.
 - A latest fundamental snapshot in PostgreSQL; canonical fundamentals remain in
   Parquet, while PostgreSQL latest-only projections currently cover prices and

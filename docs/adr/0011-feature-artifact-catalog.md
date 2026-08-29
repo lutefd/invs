@@ -72,11 +72,14 @@ invent them when publication or validation fails.
 - The registration path duplicates selected manifest metadata, but the duplication is
   deliberate: it makes discovery and historical-fitness review transactional while
   preserving Parquet as the feature-value boundary.
-- A future coverage/reporting reader can build on the stored decision, universe,
-  fitness, and partition rows without changing the feature-value contract.
+- The read-only `make feature-report` path builds on the stored decision, universe,
+  fitness, and partition rows to report catalog-level coverage and lineage without
+  changing the feature-value contract. It does not inspect feature values or reconcile
+  catalog registrations with the feature root.
 
 ## Non-goals
 
 This ADR does not add recursive feature discovery, a feature-store service, row-level
-feature storage in PostgreSQL, automatic orphan repair, coverage dashboards, new
-feature families, labels, strategies, backtests, portfolios, execution, or ML.
+feature storage in PostgreSQL, automatic orphan repair, feature-level null reporting,
+coverage dashboards, new feature families, labels, strategies, backtests, portfolios,
+execution, or ML.

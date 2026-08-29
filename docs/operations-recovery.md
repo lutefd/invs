@@ -39,11 +39,13 @@ The report checks:
   selected normalized input manifest/part, including the required calendar pin
   and its input-fingerprint contribution.
 
-The report currently validates feature files and their selected inputs, but it does
-not yet compare PostgreSQL `feature_artifacts` registrations with the feature root.
-For a published dataset-level batch, run `make feature-catalog` after the filesystem
-checks; that command revalidates the batch and registers its metadata idempotently.
-Automatic catalog orphan repair remains a later v0.3 slice.
+The report validates feature files and their selected inputs, but it does not compare
+PostgreSQL `feature_artifacts` registrations with the feature root. For a published
+dataset-level batch, run `make feature-catalog` after the filesystem checks; that
+command revalidates the batch and registers its metadata idempotently. To inspect the
+registered metadata without reading feature values, use the separate read-only
+`make feature-report` command. Automatic catalog orphan repair and cross-store
+reconciliation remain later v0.3 work.
 
 The report never cancels a run, deletes an orphan, or rewrites evidence. If an
 active run is confirmed orphaned, use the existing explicit collector command
@@ -131,8 +133,9 @@ go run ./cmd/reconcile \
 
 For a restored catalog check, mount the restored data read-only into Jupyter and
 inspect `ResearchCatalog.status()`; use the restored feature manifest with
-`read_feature_artifact()`. Dashboard smoke checks must target the restored
-database, not the original application database.
+`read_feature_artifact()`, then run `make feature-report` against the restored
+PostgreSQL state. Dashboard smoke checks must target the restored database, not the
+original application database.
 
 ## Daily host schedule
 
