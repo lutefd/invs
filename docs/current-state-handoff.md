@@ -148,6 +148,31 @@ The v0.3 scope is complete. Valuation, broader taxonomy coverage, feature notebo
 Grafana freshness panels, automatic orphan repair, strategies, and backtesting remain
 later roadmap boundaries.
 
+## v0.4 completion boundary
+
+The v0.4 theme-intelligence and hypothesis-loop gate is now accepted on 2026-08-29.
+The implementation chain added ADR 0015 and the append-only research schema in
+`4752a5d`, the PostgreSQL repository in `8b9e4e7`, immutable document artifacts in
+`a64e86e`, reviewed event proposals in `cb64fd5`, point-in-time evidence packs and
+memo round trips in `17cbbc2`, theme context references in `a84a2b2`, and the
+reviewed AI-infrastructure fixture in `161a23e`. The metadata CLI and read models
+landed in `897e7d8` and `b6d6bd3`; policy-pinned measurement and contract hardening
+landed in `a486240` and `cb93e52`.
+
+The acceptance boundary at `3ac61e1` runs `make research-acceptance` against a fresh
+temporary database. It seeds seven reviewed theme nodes and six relationships,
+reconstructs the decision-date snapshot, retains a raw/text document pair, rejects
+one bad event proposal and accepts one correct proposal, rejects a future evidence
+reference, round-trips a memo, freezes a bounded prediction, rejects direct frozen
+mutation, and measures the later outcome under a pinned policy. Database checks also
+cover relationship validity, revision gaps, append-only revisions, and review
+authorization. The deterministic snapshot correction is `0b97702`.
+
+The exact evidence and validation ladder are recorded in the
+[v0.4 hypothesis-loop acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md).
+The v0.4 scope is complete. Strategies, backtesting, portfolio construction, paper
+trading, and live execution remain later roadmap boundaries.
+
 ## Yahoo `.SA` source-admission verification
 
 The bounded live verification is recorded in the
@@ -195,6 +220,12 @@ to close the v0.2 calendar gate. See the
 - Repository: `/home/luis/dev/invs`
 - Branch: `main`
 - v0.3 status: complete; see [the v0.3 acceptance report](acceptance/2026-08-29-v0.3-feature-platform.md)
+- v0.4 status: complete; see [the v0.4 acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md)
+- Latest v0.4 acceptance boundary: `3ac61e1` (`test(acceptance): prove v0.4 hypothesis loop`)
+- Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
+- v0.4 operator path: `make research-acceptance`
+- Latest v0.4 read/report boundary: `b6d6bd3` (`feat(metadata): add point-in-time research read models`)
+- Latest v0.4 theme fixture boundary: `161a23e` (`feat(theme): add reviewed ai infrastructure reference`)
 - Latest v0.3 implementation boundary: `c126d39` (`feat(features): support multi-dataset feature batches`)
 - Latest v0.3 reporting boundary: `0454d0e` (`fix(reporting): apply decision clocks to lineage analysis`)
 - Latest v0.3 acceptance boundary: `5fc3783` (`test(acceptance): prove v0.3 multi-asset replay`)
@@ -903,7 +934,7 @@ The committed safe starter configuration is
 [config/config.example.yaml](../config/config.example.yaml). Yahoo and FRED are
 enabled by default; SEC, BCB, and CVM are disabled. `make setup` creates untracked,
 private `.env` and `config/config.local.yaml` files and creates `data/raw`,
-`data/normalized`, and `data/features`.
+`data/normalized`, `data/features`, and `data/research`.
 
 ### Start and migrate
 
@@ -980,6 +1011,11 @@ The supported research path is:
    to validate and register a completed dataset-level batch in PostgreSQL.
 7. Use `make feature-report` to inspect registered batch coverage and lineage in
    text or JSON form without loading feature values into PostgreSQL.
+8. Use `make research-theme-snapshot THEME_ID=... DECISION_AT=...` to reconstruct
+   the reviewed theme at an explicit cutoff and `make research-status-report
+   AS_OF=...` to inspect active hypotheses, reviews, predictions, and outcomes.
+9. Use `make research-acceptance` to reproduce the isolated v0.4 theme-backed
+   hypothesis loop and its fail-closed database probes.
 
 Run the notebook non-interactively with `make notebook`. It now inspects CVM
 filings and an existing feature artifact in separate empty-safe sections; neither
@@ -1132,6 +1168,11 @@ The following are not accidental omissions:
   coverage, typed nulls, freshness, rejects, source contribution, and raw locators.
   Automatic catalog reconciliation, strategy, backtester, portfolio, execution,
   labels, training data, and ML behavior remain later boundaries.
+- v0.4 is complete at `3ac61e1`: reviewed AI-infrastructure theme context, immutable
+  document/text artifacts, human-reviewed event proposals, point-in-time evidence
+  packs, memo export/import, append-only hypotheses, frozen predictions, and pinned
+  outcomes are accepted. Research files under `data/research` are included in the
+  backup/restore path; see the [v0.4 acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md).
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
 
@@ -1139,6 +1180,7 @@ The following are not accidental omissions:
 
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d` and v0.2 at `0bfdc27`; v0.3 is accepted at
-`5fc3783` with reporting correction `0454d0e`. Keep receipt-time prices
-installation-replay only, and leave v0.4 theme/hypothesis work and v0.5
-strategy/backtester behavior deferred.
+`5fc3783` with reporting correction `0454d0e`; v0.4 is accepted at `3ac61e1`.
+Keep receipt-time prices installation-replay only. The next smallest cohesive
+boundary is v0.5 point-in-time backtesting; strategy/backtester behavior remains
+deferred until that version's contracts and acceptance gate are implemented.

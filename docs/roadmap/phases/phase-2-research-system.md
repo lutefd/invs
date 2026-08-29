@@ -28,14 +28,17 @@ outcomes.
 
 ## Phase gate checklist
 
-- [ ] Multi-asset feature batches reproduce in a clean root.
-- [ ] Batch interruption resumes without duplicate or conflicting partitions.
-- [ ] Feature nulls/rejections are explained through exact lineage.
-- [ ] A later filing or macro vintage changes only later eligible feature snapshots.
-- [ ] Theme relationships carry evidence, confidence, validity, and revisions.
-- [ ] Extracted events retain document hashes and source locators.
-- [ ] Frozen predictions cannot be rewritten.
-- [ ] One hypothesis is reconstructed exactly at its decision date and later measured.
+- [x] Multi-asset feature batches reproduce in a clean root.
+- [x] Batch interruption resumes without duplicate or conflicting partitions.
+- [x] Feature nulls/rejections are explained through exact lineage.
+- [x] A later filing or macro vintage changes only later eligible feature snapshots.
+- [x] Theme relationships carry evidence, confidence, validity, and revisions.
+- [x] Extracted events retain document hashes and source locators.
+- [x] Frozen predictions cannot be rewritten.
+- [x] One hypothesis is reconstructed exactly at its decision date and later measured.
+
+The Phase 2 gate is accepted on 2026-08-29. The v0.3 and v0.4 acceptance reports
+provide the feature replay and complete theme-backed hypothesis-loop evidence.
 
 ## Stop conditions
 

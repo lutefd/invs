@@ -45,7 +45,9 @@ dataset-level batch, run `make feature-catalog` after the filesystem checks; tha
 command revalidates the batch and registers its metadata idempotently. To inspect the
 registered metadata without reading feature values, use the separate read-only
 `make feature-report` command. Automatic catalog orphan repair and cross-store
-reconciliation remain later v0.3 work.
+reconciliation remain later operations work. Research document, event, evidence-pack,
+and memo files are covered by the backup manifest and their own content/hash
+validators; `make research-acceptance` exercises the complete local research path.
 
 The report never cancels a run, deletes an orphan, or rewrites evidence. If an
 active run is confirmed orphaned, use the existing explicit collector command

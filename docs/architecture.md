@@ -7,8 +7,10 @@ Parquet through immutable manifests, registers operational and feature-artifact
 metadata in PostgreSQL, and publishes accepted latest-only price/macro projections
 for Grafana. It exposes canonical history through DuckDB/Jupyter and a closed,
 deterministic `market-basic`, `market-momentum`, `fundamental-growth`, and
-`macro-state` feature artifact engine. It
-intentionally does not include a strategy API, backtester, distributed queue, or
+`macro-state` feature artifact engine. The accepted v0.4 slice adds reviewed theme
+context, immutable document/text artifacts, source-spanned event proposals, evidence
+packs, an append-only hypothesis ledger, frozen predictions, and pinned outcomes.
+It intentionally does not include a strategy API, backtester, distributed queue, or
 live execution.
 
 The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC,
@@ -162,12 +164,17 @@ Fresh PostgreSQL volumes apply the forward migrations in order: `000001_core_met
 `000002_latest_observation_snapshots`, `000003_observed_precision`,
 `000004_run_inputs`, `000005_nullable_macro_snapshot_value`, `000006_historical_truth`,
 `000007_corporate_actions`, `000008_price_basis`, `000009_nullable_price_publication`,
-`000010_feature_artifacts`, and `000011_feature_artifact_input_fitness`. Existing
-initialized volumes use `make migrate`, which conditionally applies missing changes in
-order; its schema checks make rerunning the command idempotent. `000001` is the base
-schema created during volume initialization. Migrations 000010 and 000011 store only
-feature-batch discovery, lineage, and input-fitness metadata; feature rows remain in
-manifest-backed Parquet.
+`000010_feature_artifacts`, `000011_feature_artifact_input_fitness`,
+`000012_research_workspace`, `000013_research_theme_context`, and
+`000014_research_hypothesis_review_at`. Existing initialized volumes use
+`make migrate`, which conditionally applies missing changes in order; its schema
+checks make rerunning the command idempotent. `000001` is the base schema created
+during volume initialization. Migrations 000010 and 000011 store only feature-batch
+discovery, lineage, and input-fitness metadata; feature rows remain in
+manifest-backed Parquet. Migrations 000012 through 000014 store append-only research
+identity, revisions, review state, point-in-time theme context, and hypothesis review
+dates; document bytes, extracted text, evidence packs, event artifacts, and memos
+remain content-addressed files under `data/research`.
 
 ## Point-in-time query boundary
 
@@ -189,6 +196,11 @@ convenience mode:
   operational projection. Yahoo backfills likewise provide only the provider data
   returned and collected at ingestion time; chart OHLC and volume are classified as
   `split_adjusted`, not raw corporate-action inputs.
+- `invs-research theme-snapshot` reconstructs the reviewed theme tree, memberships,
+  relationships, indicators, feature references, and invalidation conditions using
+  explicit `recorded_at` and validity cutoffs. `invs-research status-report` is a
+  read-only projection of active hypothesis revisions, evidence freshness, upcoming
+  reviews, predictions, and measured outcomes.
 
 Macro latest-row selection uses the same total order as PostgreSQL finalization:
 `observed_at DESC`, `revision DESC`, `available_at DESC`, `ingested_at DESC`, then
@@ -203,6 +215,10 @@ data/raw/<source>/year=YYYY/month=MM/day=DD/<sha256>.<ext>
 data/raw/runs/<source>/<ingestion-run-id>/manifest.json
 data/normalized/<dataset>/source=<source>/<entity-key>=<value>/manifest.json
 data/normalized/<dataset>/source=<source>/<entity-key>=<value>/part-<sha256>.parquet
+data/research/documents/document-<document-id>/manifest.json
+data/research/evidence-packs/pack-<pack-id>.json
+data/research/events/proposal-<proposal-id>/revision-<revision>.json
+data/research/memos/memo-<memo-id>.{json,md}
 ```
 
 The normalized manifest carries schema/provenance metadata, partition identity, total
@@ -252,4 +268,5 @@ boundaries are further specified by [ADR 0005](adr/0005-deterministic-feature-ar
 [ADR 0011](adr/0011-feature-artifact-catalog.md),
 [ADR 0012](adr/0012-market-momentum-feature-set.md),
 [ADR 0013](adr/0013-fundamental-and-macro-feature-sets.md), and
-[ADR 0014](adr/0014-feature-quality-and-replay-acceptance.md).
+[ADR 0014](adr/0014-feature-quality-and-replay-acceptance.md), and
+[ADR 0015](adr/0015-theme-evidence-and-hypothesis-ledger.md).

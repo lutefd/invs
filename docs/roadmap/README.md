@@ -58,8 +58,9 @@ v0.1 is accepted at `63d479d`, and v0.2 is accepted at `0bfdc27`. The retained
 [US/Brazil point-in-time bias audit](../acceptance/2026-08-24-v0.2-point-in-time-bias-audit.md)
 passes 13 exact boundary probes and verifies 16 evidence artifacts while keeping
 receipt-time prices installation-replay only and unsupported actions blocking. The
-next planned version is v0.3; no strategy or backtester scope was pulled into the
-v0.2 exit work. The historical-contract slice in `4d483ac` added ADRs 0006 and 0007,
+v0.3 and v0.4 gates are now accepted; the next planned version is v0.5 point-in-time
+backtesting. No strategy or backtester scope was pulled into the v0.2 exit work. The
+historical-contract slice in `4d483ac` added ADRs 0006 and 0007,
 strict identity/listing/membership/calendar schemas, and executable synthetic
 US/Brazil fixtures. The durable publication/resolution boundary and PostgreSQL migration
 harness landed in `d963180`; this establishes a tested storage/API boundary but
@@ -113,22 +114,23 @@ The official B3 COTAHIST follow-up is accepted in the
 It publishes exact ticker+ISIN-allowlisted, unadjusted PETZ3 prices from a closed
 annual archive with receipt-time availability. Yahoo `.SA` is no longer required by
 the bounded path and remains unadmitted for unattended raw retention.
-v0.3 is now **in progress**. ADR 0010 and the checked-in strict feature-set
-registry landed in `1a951e5` and `1f8f270`; the bounded resumable dataset-level
-`market-basic` batch manifest and its operator CLI landed in `a8c2302` and
-`f1792ad`. The PostgreSQL feature-artifact catalog then landed through `12fdf56`,
-including migrations, input-fitness lineage, strict collector registration, and a
-universe-lineage correction. The batch records an explicit security list, decision
-schedule, registry hash, input fitness, manifest/part lineage, and rejected
-partitions, while keeping receipt-time prices labelled `installation_replay_only`.
-The read-only catalog coverage/lineage report then landed in `03521c2`, `731b0b4`,
-and `94a3bf0`, with text/JSON output, per-decision coverage, and explicit lineage
-inspection. The first accepted market/risk family, `market-momentum` 1.0.0, landed
-through contract commit `dd450b3` and producer commit `941c6b5`; its exact formulas,
-warmup policy, and receipt-time fitness boundary are recorded in ADR 0012 and the
-[implementation acceptance note](../acceptance/2026-08-29-market-momentum.md).
-Feature-level null reporting, broader feature families, and clean-root multi-asset
-acceptance remain open.
+v0.3 is **accepted** at `5fc3783`. Its feature-platform acceptance covers the
+reviewed taxonomy, three point-in-time feature families, interrupted multi-dataset
+replay, ALFRED revision boundaries, strict schemas, and fail-closed lineage
+tampering probes; see the [v0.3 acceptance report](../acceptance/2026-08-29-v0.3-feature-platform.md).
+Receipt-time prices remain labelled `installation_replay_only`.
+
+v0.4 is **accepted** at `3ac61e1`. The repository now has a reviewed
+AI-infrastructure theme, immutable document/text artifacts, source-spanned event
+proposals with human review, point-in-time evidence packs and memo round trips, an
+append-only hypothesis ledger, frozen predictions, pinned measurement outcomes, and
+read-only theme/status reports. The isolated acceptance reconstructs one complete
+theme-backed research loop and verifies the required fail-closed mutations; see the
+[v0.4 hypothesis-loop acceptance report](../acceptance/2026-08-29-v0.4-hypothesis-loop.md).
+
+Feature-level null reporting, broader taxonomy coverage, strategies, backtesting,
+portfolio construction, paper trading, and live execution remain later roadmap
+boundaries.
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook
@@ -147,5 +149,5 @@ the PETZ3 lifecycle/membership proof plus the combined Brazil audit are accepted
 Broad long-history coverage remains outside the admitted boundary. Yahoo remains a
 separate, unadmitted price-bridge candidate.
 
-General strategy/backtest implementation remains sequenced after the feature and
-hypothesis phases even though the v0.2 historical-truth gate now passes.
+General strategy/backtest implementation remains sequenced after the accepted
+feature and hypothesis phases.

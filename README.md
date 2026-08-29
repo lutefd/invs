@@ -9,6 +9,12 @@ The operator recovery procedure is in [docs/operations-recovery.md](docs/operati
 
 The current accepted vertical slice covers Yahoo daily prices, SEC company facts, FRED macro series, and BCB SGS macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; run finalization publishes accepted price/macro candidates to those projections in the same PostgreSQL transaction that closes the run. A partial run may publish successful entities while a parse-error entity publishes no snapshot.
 
+The accepted v0.4 research workspace adds a reviewed AI-infrastructure theme,
+immutable document/text artifacts, human-reviewed event proposals, point-in-time
+evidence packs, append-only hypotheses, frozen predictions, and pinned measured
+outcomes. Reproduce its local end-to-end acceptance with `make research-acceptance`;
+see the [v0.4 hypothesis-loop report](docs/acceptance/2026-08-29-v0.4-hypothesis-loop.md).
+
 ## Requirements
 
 - Docker Engine with Compose v2

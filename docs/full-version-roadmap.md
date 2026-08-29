@@ -3,8 +3,8 @@
 ## Status and purpose
 
 This document scopes the work from the current foundation to a complete personal
-research and paper-trading platform. It is an execution plan, not a claim that the
-listed versions already exist and not a commitment to ship every possible data
+research and paper-trading platform. It is an execution plan, not a claim that
+future versions already exist and not a commitment to ship every possible data
 source.
 
 For day-to-day execution, use the separate
@@ -17,16 +17,17 @@ Planning snapshot:
 - Planning date: 2026-08-12.
 - Repository: `/home/luis/dev/invs`.
 - Committed baseline used for the broad version scoping: `9168105`
-  (`docs: record post-handoff continuation`). Later ALFRED work is tracked through
-  the v0.2 execution file and is not called accepted until its version gates pass.
-- The implementation boundary described by
-  [current-state-handoff.md](current-state-handoff.md) is `742e5ae`
-  (`feat(features): publish deterministic market artifacts`).
+  (`docs: record post-handoff continuation`). Later work is tracked through the
+  version execution files and is not called accepted until its version gates pass.
+- The planning snapshot's implementation boundary described by
+  [current-state-handoff.md](current-state-handoff.md) was `742e5ae`
+  (`feat(features): publish deterministic market artifacts`); the current accepted
+  v0.4 boundary is `3ac61e1`.
 - The post-handoff continuation also includes the supported feature operator command
   at `e581c5d`, aligned feature documentation at `37e8812`, and the retained
   `market-basic` operator acceptance report at `b7dcac3`.
-- `v0.1` through `v1.0` below are proposed planning labels. They are not existing Git
-  tags or promises of backward compatibility.
+- `v0.1` through `v1.0` below are planning labels, not existing Git tags or promises
+  of backward compatibility; accepted status is recorded in the execution index.
 - The target date for a useful full version is April 2027. The dates in this document
   are sequencing windows, not fixed deadlines.
 
@@ -69,6 +70,9 @@ not systems to replace:
   and accepted child manifest/part lineage while keeping feature rows in Parquet. A
   read-only report exposes catalog-level coverage and lineage without reading feature
   values.
+- A reviewed v0.4 AI-infrastructure theme, immutable research document/text
+  artifacts, source-spanned event proposals, point-in-time evidence packs, memo
+  export/import, append-only hypotheses, frozen predictions, and pinned outcomes.
 - Grafana pipeline-health and latest-snapshot dashboards.
 - A validation surface built around Go tests and vet, schema validation, Python tests
   and Ruff, notebook execution, dashboard SQL smoke tests, image builds, migration
@@ -107,8 +111,10 @@ The following baseline limitations drive the version order:
   catalog for validated batches, and separate read-only catalog and feature-quality
   reports. The v0.3 multi-asset clean-root acceptance is complete; automatic catalog
   reconciliation remains a later operations boundary.
-- There is no theme graph, document-event pipeline, hypothesis ledger, backtester,
-  portfolio engine, paper account, or live execution.
+- The v0.4 theme graph, document-event pipeline, append-only hypothesis ledger,
+  evidence-pack/memo path, read-only status reports, and pinned prediction outcomes
+  are accepted through the [v0.4 hypothesis-loop report](acceptance/2026-08-29-v0.4-hypothesis-loop.md).
+- There is no backtester, portfolio engine, paper account, or live execution.
 
 ## Source-selection discovery: Brazilian market data
 
@@ -1122,6 +1128,10 @@ v0.4 is complete when one theme-backed thesis can be reconstructed exactly as it
 known at its decision date, its frozen prediction cannot be rewritten, and its later
 outcome is calculated from pinned data and policy versions.
 
+v0.4 is complete at `3ac61e1`. The exact acceptance drill and full validation ladder
+are recorded in
+[`2026-08-29-v0.4-hypothesis-loop.md`](acceptance/2026-08-29-v0.4-hypothesis-loop.md).
+
 ---
 
 # v0.5 — Point-in-Time Backtesting and Experiment Tracking
@@ -1940,17 +1950,12 @@ A version is not done because its happy path runs once. It is done when:
 
 ## First execution queue
 
-v0.1 and v0.2 are accepted. The retained 13-probe US/Brazil audit integrates the
-bounded identity, membership, calendar, price, action, FX, macro, and SEC filing
-chains, verifies 16 pinned evidence artifacts, and preserves installation-replay and
-unsupported scope decisions. The next narrow queue is v0.3 feature-platform work.
-The v0.3 entry registry and bounded resumable `market-basic` batch are implemented
-through `f1792ad`, and verified batch metadata is cataloged through `12fdf56` without
-copying feature rows. Catalog-level coverage/lineage reporting is implemented through
-`94a3bf0`. The accepted market/risk family, `market-momentum` 1.0.0, is defined in
-ADR 0012 and implemented through `dd450b3` and `941c6b5`. The reviewed taxonomy and
-fundamental/macro families, decision-clock-aware feature-quality report, and
-20-security clean-root replay are accepted through `53fe4fe`, `eee7fe1`, `54a00d2`,
-`0454d0e`, and `5fc3783`; see the v0.3 acceptance report. The general backtester
-remains a later v0.5 boundary; the fastest path to the full platform is still to
-keep every later result explainable from a trusted historical input boundary.
+v0.1, v0.2, v0.3, and v0.4 are accepted. The retained 13-probe US/Brazil audit
+integrates the bounded identity, membership, calendar, price, action, FX, macro, and
+SEC filing chains, verifies 16 pinned evidence artifacts, and preserves
+installation-replay and unsupported scope decisions. The v0.3 feature platform is
+accepted through `5fc3783`; the v0.4 theme and hypothesis loop is accepted through
+`3ac61e1`; see their acceptance reports. The next narrow queue is v0.5
+point-in-time backtesting. The general backtester remains outside the accepted
+boundary until its strategy inputs, execution clocks, costs, and experiment lineage
+are independently specified and validated.

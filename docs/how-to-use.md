@@ -1167,6 +1167,44 @@ This is catalog-level coverage, not a feature-value/null-quality report. It does
 infer rejected security IDs, read Parquet values, or compare PostgreSQL registrations
 with the feature root; use `make reconcile` for filesystem and hash checks.
 
+### Theme snapshots and the hypothesis loop
+
+The v0.4 research workspace keeps reviewed themes, immutable document artifacts,
+derived event proposals, evidence packs, hypothesis revisions, predictions, and
+measurement outcomes in PostgreSQL metadata plus content-addressed local artifacts.
+Seed the reviewed fixture or use the metadata CLI with explicit JSON payloads:
+
+```sh
+make research-seed-theme
+
+make research-theme-snapshot \
+  THEME_ID=10000000-0000-4000-8000-000000000001 \
+  DECISION_AT=2026-08-29T12:00:00Z
+
+make research-status-report AS_OF=2026-09-30T21:00:00Z
+```
+
+The snapshot applies `recorded_at` and validity cutoffs and returns only the latest
+reviewed theme revisions, memberships, relationships, indicators, feature
+references, and invalidation conditions available at the decision time. The status
+report is read-only and summarizes active hypothesis revisions, evidence freshness,
+prediction state, upcoming reviews, and measured outcomes. The underlying CLI
+operations are `invs-research create-document`, `raw-artifact`, `text-artifact`,
+`create-event-proposal`, `event-revision`, `register-pack`, `create-hypothesis`,
+`hypothesis-revision`, `hypothesis-evidence`, `create-prediction`,
+`freeze-prediction`, `outcome`, and `close-hypothesis`.
+
+Reproduce the complete local acceptance loop, including migration replay, review
+authorization, future-reference rejection, frozen-prediction immutability, and
+memo export/import:
+
+```sh
+make research-acceptance
+```
+
+The exact accepted boundary and generated artifact IDs are recorded in the
+[v0.4 hypothesis-loop acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md).
+
 ## 8. Notebook and Grafana
 
 Execute the empty-safe vertical-slice notebook in a disposable Jupyter process:
