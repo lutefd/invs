@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/feature-batch-manifest.schema.json",
+  "title": "FeatureBatchManifest",
+  "description": "The immutable dataset-level manifest for a deterministic feature batch.",
+  "$comment": "A batch manifest points to independently immutable feature artifacts. It records the exact registry, universe, schedule, input selections, output partitions, and explicit rejects.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_version",
+    "feature_set",
+    "feature_set_version",
+    "registry_sha256",
+    "batch",
+    "calendar_pin",
+    "decision_schedule",
+    "universe",
+    "computation_delay_seconds",
+    "input_fitness",
+    "input_fingerprint",
+    "selected_input_manifests",
+    "selected_input_parts",
+    "row_count",
+    "parts",
+    "rejected",
+    "run_summary"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "manifest_version": { "const": "1.0.0" },
+    "feature_set": { "$ref": "feature-set-registry.schema.json#/$defs/identifier" },
+    "feature_set_version": { "$ref": "feature-set-registry.schema.json#/$defs/version" },
+    "registry_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "batch": { "$ref": "#/$defs/batchMetadata" },
+    "calendar_pin": {
+      "$ref": "feature-manifest.schema.json#/$defs/calendarPin"
+    },
+    "decision_schedule": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+    },
+    "universe": { "$ref": "#/$defs/universe" },
+    "computation_delay_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "input_fitness": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/inputFitness" }
+    },
+    "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "selected_input_manifests": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/selectedInputManifest" }
+    },
+    "selected_input_parts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/selectedInputPart" }
+    },
+    "row_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "parts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/part" }
+    },
+    "rejected": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/rejectedPartition" }
+    },
+    "run_summary": { "$ref": "#/$defs/runSummary" }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\\\u0000].*$"
+    },
+    "batchMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batch_id",
+        "artifact_version",
+        "generator_version",
+        "git_commit",
+        "created_at"
+      ],
+      "properties": {
+        "batch_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "artifact_version": { "const": "1.0.0" },
+        "generator_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "git_commit": {
+          "oneOf": [
+            { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+            { "const": "unknown" }
+          ]
+        },
+        "created_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+      }
+    },
+    "universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "security_ids", "fingerprint"],
+      "properties": {
+        "kind": { "const": "explicit_security_list" },
+        "security_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "fingerprint": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "inputFitness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset", "historical_fitness", "availability_policy"],
+      "properties": {
+        "dataset": { "$ref": "#/$defs/identifier" },
+        "historical_fitness": {
+          "type": "string",
+          "enum": [
+            "backtest_safe",
+            "current_research_only",
+            "installation_replay_only",
+            "unsupported"
+          ]
+        },
+        "availability_policy": {
+          "type": "string",
+          "enum": [
+            "exact_publication",
+            "source_declared",
+            "conservative_receipt_time",
+            "current_snapshot",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "selectedInputManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "selectedInputPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^part-[0-9a-f]{64}\\.parquet$"
+        },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "security_id",
+        "decision_at",
+        "artifact_id",
+        "manifest_path",
+        "manifest_sha256",
+        "part_path",
+        "part_sha256",
+        "row_count"
+      ],
+      "properties": {
+        "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "manifest_path": { "$ref": "#/$defs/relativePath" },
+        "manifest_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "part_path": { "$ref": "#/$defs/relativePath" },
+        "part_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "row_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "rejectedPartition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_id", "decision_at", "reason", "detail"],
+      "properties": {
+        "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "reason": { "$ref": "#/$defs/identifier" },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "runSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested_partitions",
+        "accepted_partitions",
+        "rejected_partitions",
+        "row_count",
+        "status"
+      ],
+      "properties": {
+        "requested_partitions": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "accepted_partitions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected_partitions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "row_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": { "const": "completed" }
+      }
+    }
+  }
+}

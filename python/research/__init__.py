@@ -7,6 +7,14 @@ from .adjustments import (
     publish_adjusted_prices,
     validate_adjustment_artifact,
 )
+from .batches import (
+    FeatureBatchConflictError,
+    FeatureBatchError,
+    FeatureBatchValidationError,
+    publish_feature_batch,
+    read_feature_batch,
+    validate_feature_batch,
+)
 from .catalog import (
     DatasetSchemaError,
     DatasetStatus,
@@ -68,6 +76,9 @@ __all__ = [
     "DatasetStatus",
     "FXObservationNotFound",
     "FXPolicyError",
+    "FeatureBatchConflictError",
+    "FeatureBatchError",
+    "FeatureBatchValidationError",
     "FeatureOutput",
     "FeatureRegistry",
     "FeatureRegistryError",
@@ -94,8 +105,11 @@ __all__ = [
     "membership_as_of",
     "next_trading_session",
     "publish_adjusted_prices",
+    "publish_feature_batch",
+    "read_feature_batch",
     "security_identifier_as_of",
     "trading_session_at",
     "universe_as_of",
     "validate_adjustment_artifact",
+    "validate_feature_batch",
 ]
