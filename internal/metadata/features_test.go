@@ -20,6 +20,7 @@ func testFeatureArtifactRegistration() FeatureArtifactRegistration {
 		DecisionPoints:             []FeatureArtifactDecisionPoint{{Ordinal: 1, DecisionAt: secondDecision}, {Ordinal: 0, DecisionAt: firstDecision}},
 		UniverseFingerprint:        strings.Repeat("2", 64),
 		Universe:                   []FeatureArtifactUniverseMember{{Ordinal: 1, SecurityID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}, {Ordinal: 0, SecurityID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc"}},
+		InputFitness:               []FeatureArtifactInputFitness{{Dataset: "prices", HistoricalFitness: "installation_replay_only", AvailabilityPolicy: "conservative_receipt_time"}},
 		InputFingerprint:           strings.Repeat("3", 64),
 		InputRefs:                  []FeatureArtifactInputRef{{Kind: FeatureArtifactInputPart, Path: "prices/part-b", SHA256: strings.Repeat("5", 64)}, {Kind: FeatureArtifactInputManifest, Path: "prices/manifest.json", SHA256: strings.Repeat("4", 64)}},
 		OutputManifestPath:         "batches/market-basic/1.0.0/batch-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/manifest.json",

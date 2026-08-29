@@ -25,6 +25,12 @@ const (
 	FeatureArtifactInputPart     FeatureArtifactInputKind = "part"
 )
 
+type FeatureArtifactInputFitness struct {
+	Dataset            string `json:"dataset"`
+	HistoricalFitness  string `json:"historical_fitness"`
+	AvailabilityPolicy string `json:"availability_policy"`
+}
+
 // FeatureArtifactInputRef is a selected canonical manifest or part referenced
 // by a registered feature batch. The path is relative to the feature root.
 type FeatureArtifactInputRef struct {
@@ -73,6 +79,7 @@ type FeatureArtifactRegistration struct {
 	DecisionPoints             []FeatureArtifactDecisionPoint  `json:"decision_points"`
 	UniverseFingerprint        string                          `json:"universe_fingerprint"`
 	Universe                   []FeatureArtifactUniverseMember `json:"universe"`
+	InputFitness               []FeatureArtifactInputFitness   `json:"input_fitness"`
 	InputFingerprint           string                          `json:"input_fingerprint"`
 	InputRefs                  []FeatureArtifactInputRef       `json:"input_refs"`
 	OutputManifestPath         string                          `json:"output_manifest_path"`
@@ -274,6 +281,33 @@ func (r FeatureArtifactRegistration) normalized() (FeatureArtifactRegistration, 
 		universeIDs[universe[index].SecurityID] = struct{}{}
 	}
 	r.Universe = universe
+
+	inputFitness := make([]FeatureArtifactInputFitness, len(r.InputFitness))
+	copy(inputFitness, r.InputFitness)
+	if len(inputFitness) == 0 {
+		return FeatureArtifactRegistration{}, errors.New("input_fitness must not be empty")
+	}
+	for index := range inputFitness {
+		inputFitness[index].Dataset = strings.TrimSpace(inputFitness[index].Dataset)
+		inputFitness[index].HistoricalFitness = strings.TrimSpace(inputFitness[index].HistoricalFitness)
+		inputFitness[index].AvailabilityPolicy = strings.TrimSpace(inputFitness[index].AvailabilityPolicy)
+		if err := requireFeatureArtifactIdentifier(inputFitness[index].Dataset, fmt.Sprintf("input_fitness[%d].dataset", index)); err != nil {
+			return FeatureArtifactRegistration{}, err
+		}
+		if inputFitness[index].HistoricalFitness != "backtest_safe" && inputFitness[index].HistoricalFitness != "current_research_only" && inputFitness[index].HistoricalFitness != "installation_replay_only" && inputFitness[index].HistoricalFitness != "unsupported" {
+			return FeatureArtifactRegistration{}, fmt.Errorf("input_fitness[%d].historical_fitness %q is unsupported", index, inputFitness[index].HistoricalFitness)
+		}
+		if inputFitness[index].AvailabilityPolicy != "exact_publication" && inputFitness[index].AvailabilityPolicy != "source_declared" && inputFitness[index].AvailabilityPolicy != "conservative_receipt_time" && inputFitness[index].AvailabilityPolicy != "current_snapshot" && inputFitness[index].AvailabilityPolicy != "unknown" {
+			return FeatureArtifactRegistration{}, fmt.Errorf("input_fitness[%d].availability_policy %q is unsupported", index, inputFitness[index].AvailabilityPolicy)
+		}
+	}
+	sort.Slice(inputFitness, func(i, j int) bool { return inputFitness[i].Dataset < inputFitness[j].Dataset })
+	for index := 1; index < len(inputFitness); index++ {
+		if inputFitness[index].Dataset == inputFitness[index-1].Dataset {
+			return FeatureArtifactRegistration{}, fmt.Errorf("input_fitness dataset %s is duplicated", inputFitness[index].Dataset)
+		}
+	}
+	r.InputFitness = inputFitness
 
 	inputRefs := make([]FeatureArtifactInputRef, len(r.InputRefs))
 	copy(inputRefs, r.InputRefs)
@@ -529,6 +563,11 @@ func insertFeatureArtifactLineage(ctx context.Context, tx pgx.Tx, registration F
 	for _, input := range registration.InputRefs {
 		if _, err := tx.Exec(ctx, `INSERT INTO feature_artifact_input_refs(artifact_id,input_kind,path,sha256) VALUES($1::uuid,$2,$3,$4)`, registration.ArtifactID, input.Kind, input.Path, input.SHA256); err != nil {
 			return fmt.Errorf("insert feature artifact input %s: %w", input.Path, err)
+		}
+	}
+	for _, fitness := range registration.InputFitness {
+		if _, err := tx.Exec(ctx, `INSERT INTO feature_artifact_input_fitness(artifact_id,dataset,historical_fitness,availability_policy) VALUES($1::uuid,$2,$3,$4)`, registration.ArtifactID, fitness.Dataset, fitness.HistoricalFitness, fitness.AvailabilityPolicy); err != nil {
+			return fmt.Errorf("insert feature artifact input fitness %s: %w", fitness.Dataset, err)
 		}
 	}
 	for _, partition := range registration.Partitions {
