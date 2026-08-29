@@ -1033,7 +1033,7 @@ def _validate_part_table(
     return result
 
 
-def read_feature_artifact(manifest_path: str | Path) -> ValidatedFeatureArtifact:
+def _read_market_basic_artifact(manifest_path: str | Path) -> ValidatedFeatureArtifact:
     """Read and validate one manifest and exactly its listed Parquet parts.
 
     The reader never recursively discovers parts.  It also rejects unexpected
@@ -1083,6 +1083,19 @@ def read_feature_artifact(manifest_path: str | Path) -> ValidatedFeatureArtifact
             f"feature manifest row_count {document['row_count']} does not match Parquet rows {len(observations)}"
         )
     return ValidatedFeatureArtifact(path, document, tuple(observations), tuple(part_paths))
+
+
+def read_feature_artifact(manifest_path: str | Path) -> ValidatedFeatureArtifact:
+    """Read one supported feature manifest and exactly its listed parts."""
+    path = Path(manifest_path).expanduser().resolve()
+    if path.name != "manifest.json" or not path.is_file():
+        return _read_market_basic_artifact(path)
+    document = _read_json(path, label="feature manifest")
+    if document.get("feature_set") == "market-momentum":
+        from .market_momentum import read_market_momentum_artifact
+
+        return read_market_momentum_artifact(path)
+    return _read_market_basic_artifact(path)
 
 
 def validate_feature_artifact(manifest_path: str | Path) -> ValidatedFeatureArtifact:
@@ -1226,6 +1239,65 @@ def publish_market_basic(
     return manifest_path
 
 
+def publish_feature_artifact(
+    catalog: ResearchCatalog,
+    *,
+    decision_at: str | datetime,
+    security_id: str | UUID,
+    calendar_pin: Mapping[str, Any],
+    features_root: str | Path = _DEFAULT_FEATURE_ROOT,
+    computation_delay_seconds: int = 0,
+    artifact_id: str | UUID | None = None,
+    generator_version: str | None = None,
+    git_commit: str = "unknown",
+    created_at: str | datetime | None = None,
+    feature_set: str = FEATURE_SET,
+    feature_set_version: str = FEATURE_SET_VERSION,
+) -> Path:
+    """Publish one artifact through the closed feature-set producer registry."""
+    if (feature_set, feature_set_version) == (FEATURE_SET, FEATURE_SET_VERSION):
+        return publish_market_basic(
+            catalog,
+            decision_at=decision_at,
+            security_id=security_id,
+            calendar_pin=calendar_pin,
+            features_root=features_root,
+            computation_delay_seconds=computation_delay_seconds,
+            artifact_id=artifact_id,
+            generator_version=(
+                DEFAULT_GENERATOR_VERSION if generator_version is None else generator_version
+            ),
+            git_commit=git_commit,
+            created_at=created_at,
+            feature_set=feature_set,
+            feature_set_version=feature_set_version,
+        )
+    if (feature_set, feature_set_version) == ("market-momentum", "1.0.0"):
+        from .market_momentum import publish_market_momentum
+
+        return publish_market_momentum(
+            catalog,
+            decision_at=decision_at,
+            security_id=security_id,
+            calendar_pin=calendar_pin,
+            features_root=features_root,
+            computation_delay_seconds=computation_delay_seconds,
+            artifact_id=artifact_id,
+            generator_version=(
+                "python-market-momentum-1.0.0"
+                if generator_version is None
+                else generator_version
+            ),
+            git_commit=git_commit,
+            created_at=created_at,
+            feature_set=feature_set,
+            feature_set_version=feature_set_version,
+        )
+    raise FeatureArtifactError(
+        f"no deterministic producer is registered for {feature_set!r} {feature_set_version!r}"
+    )
+
+
 def build_market_basic_artifact(*args: Any, **kwargs: Any) -> Path:
     """Alias for callers that name the operation as an artifact build."""
     return publish_market_basic(*args, **kwargs)
@@ -1247,6 +1319,7 @@ __all__ = [
     "compute_input_fingerprint",
     "compute_market_basic_features",
     "input_fingerprint",
+    "publish_feature_artifact",
     "publish_market_basic",
     "read_feature_artifact",
     "validate_feature_artifact",

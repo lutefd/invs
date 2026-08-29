@@ -115,6 +115,8 @@ feature: config
 		--security-id "$(SECURITY_ID)" \
 		--decision-at "$(DECISION_AT)" \
 		--calendar-pin "$(CALENDAR_PIN)" \
+		--feature-set "$(or $(FEATURE_SET),market-basic)" \
+		--feature-set-version "$(or $(FEATURE_SET_VERSION),1.0.0)" \
 		--computation-delay-seconds "$(or $(FEATURE_DELAY),0)" \
 		--git-commit "$(or $(INVS_GIT_COMMIT),unknown)"
 

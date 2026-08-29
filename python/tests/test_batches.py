@@ -190,6 +190,34 @@ def test_batch_is_deterministic_resumable_and_lineage_complete(tmp_path: Path) -
     assert first.stat().st_mtime_ns == first_mtime
 
 
+def test_market_momentum_batch_uses_registered_producer(tmp_path: Path) -> None:
+    features_root = tmp_path / "features"
+    registry = load_feature_registry(REGISTRY_PATH)
+    batch = publish_feature_batch(
+        _catalog(tmp_path),
+        registry=registry,
+        security_ids=[SECURITY_ONE],
+        decision_ats=["2025-01-03T23:00:00Z"],
+        calendar_pin=CALENDAR_PIN,
+        features_root=features_root,
+        feature_set="market-momentum",
+        feature_set_version="1.0.0",
+        git_commit="0" * 40,
+    )
+
+    artifact = read_feature_batch(batch, features_root=features_root, registry=registry)
+    assert artifact.manifest["feature_set"] == "market-momentum"
+    assert artifact.manifest["run_summary"]["accepted_partitions"] == 1
+    assert artifact.observations[0]["features"] == {
+        "return_1m": None,
+        "return_3m": None,
+        "return_6m": None,
+        "return_12m": None,
+        "realized_volatility_1m": None,
+        "max_drawdown_1m": None,
+    }
+
+
 def test_batch_records_missing_security_as_explicit_rejection(tmp_path: Path) -> None:
     features_root = tmp_path / "features"
     batch = publish_feature_batch(

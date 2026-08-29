@@ -17,7 +17,7 @@ from .features import (
     FeatureArtifactValidationError,
     _canonical_timestamp,
     _canonical_uuid,
-    publish_market_basic,
+    publish_feature_artifact,
     read_feature_artifact,
 )
 from .registry import FeatureRegistry, FeatureRegistryError
@@ -662,12 +662,8 @@ def publish_feature_batch(
         definition = registry.resolve(feature_set, feature_set_version)
     except FeatureRegistryError as error:
         raise FeatureBatchError(str(error)) from error
-    if (feature_set, feature_set_version) != ("market-basic", "1.0.0"):
-        raise FeatureBatchError(
-            f"no deterministic batch producer is registered for {feature_set!r} {feature_set_version!r}"
-        )
     if definition.required_datasets != ("prices",):
-        raise FeatureBatchError("market-basic batch requires the prices input contract")
+        raise FeatureBatchError(f"{feature_set} batch requires the prices input contract")
     if not isinstance(git_commit, str) or not (git_commit == "unknown" or _GIT_COMMIT_PATTERN.fullmatch(git_commit)):
         raise FeatureBatchError("git_commit must be a lower-case SHA-1 or 'unknown'")
 
@@ -685,7 +681,7 @@ def publish_feature_batch(
     for decision_at in canonical_schedule:
         for security_id in canonical_security_ids:
             try:
-                child_path = publish_market_basic(
+                child_path = publish_feature_artifact(
                     catalog,
                     decision_at=decision_at,
                     security_id=security_id,
@@ -694,6 +690,8 @@ def publish_feature_batch(
                     computation_delay_seconds=definition.computation.delay_seconds,
                     generator_version=definition.generator.version,
                     git_commit=git_commit,
+                    feature_set=feature_set,
+                    feature_set_version=feature_set_version,
                 )
                 child = read_feature_artifact(child_path)
             except (FeatureArtifactConflictError, FeatureArtifactValidationError):
@@ -712,7 +710,9 @@ def publish_feature_batch(
             child_manifest = child.manifest
             child_part = child_manifest["parts"]
             if len(child_part) != 1:
-                raise FeatureBatchError("market-basic child artifact must contain one output part")
+                raise FeatureBatchError(
+                    f"{feature_set} child artifact must contain one output part"
+                )
             part = child_part[0]
             manifest_relative = _relative_path(child_path, root=root, field="child manifest")
             part_relative = _relative_path(child.part_paths[0], root=root, field="child part")

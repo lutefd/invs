@@ -17,7 +17,7 @@ from .batches import (
 from .catalog import DatasetSchemaError, ResearchCatalog
 from .features import (
     FeatureArtifactError,
-    publish_market_basic,
+    publish_feature_artifact,
     validate_feature_artifact,
 )
 from .registry import FeatureRegistryError, load_feature_registry
@@ -74,6 +74,8 @@ def _parser() -> argparse.ArgumentParser:
     publish.add_argument("--features-root", default="/data/features")
     publish.add_argument("--security-id", required=True)
     publish.add_argument("--decision-at", required=True)
+    publish.add_argument("--feature-set", default="market-basic")
+    publish.add_argument("--feature-set-version", default="1.0.0")
     publish.add_argument(
         "--calendar-pin",
         required=True,
@@ -154,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "publish":
             catalog = ResearchCatalog(args.data_root).register()
-            manifest_path = publish_market_basic(
+            manifest_path = publish_feature_artifact(
                 catalog,
                 decision_at=args.decision_at,
                 security_id=args.security_id,
@@ -162,6 +164,8 @@ def main(argv: list[str] | None = None) -> int:
                 features_root=args.features_root,
                 computation_delay_seconds=args.computation_delay_seconds,
                 git_commit=args.git_commit,
+                feature_set=args.feature_set,
+                feature_set_version=args.feature_set_version,
             )
             artifact = validate_feature_artifact(manifest_path)
             result = _summary(artifact, action="published")
