@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status reconcile backup backup-validate backup-or-validate restore release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-reproduction workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-reproduction workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -118,6 +118,9 @@ daily-cycle: setup config
 ops-status: setup config
 	@scripts/ops-status.sh
 
+security-check:
+	@scripts/security-check.sh
+
 reconcile: setup config
 	@$(COMPOSE) --profile collect run --rm collector reconcile --data-root /data --fail-on-issues
 
@@ -141,6 +144,9 @@ restore: config
 	@test -n "$(BACKUP_DIR)" || (echo "BACKUP_DIR is required" >&2; exit 2)
 	@test -n "$(RESTORE_DIR)" || (echo "RESTORE_DIR is required" >&2; exit 2)
 	@scripts/restore.sh "$(BACKUP_DIR)" "$(RESTORE_DIR)" $(if $(RESTORE_DB),--database-name $(RESTORE_DB),)
+
+backup-restore-acceptance:
+	@scripts/test-backup-restore.sh
 
 release-validate: config
 	@$(COMPOSE) run --rm --no-deps --build \
@@ -357,7 +363,7 @@ bias-audit-validate:
 	@PYTHONPATH=python/research python3 python/research/bias_audit_cli.py validate \
 		--manifest "$(AUDIT_MANIFEST)"
 
-test: config release-validate
+test: config release-validate security-check backup-restore-acceptance
 	@go test ./...
 	@go vet ./...
 	@python3 schemas/validate_schemas.py

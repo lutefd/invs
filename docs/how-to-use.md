@@ -1444,12 +1444,18 @@ The complete backup, clean-root restore, and host-level daily schedule are in
 [the recovery runbook](operations-recovery.md).
 
 ```sh
+make security-check
+make backup-restore-acceptance
 make backup BACKUP_DIR=/path/to/new/backup
 make restore BACKUP_DIR=/path/to/backup RESTORE_DIR=/tmp/invs-restore RESTORE_DB=restore_invs
 ```
 
-The restore command refuses existing destinations and only creates a database
-whose name starts with `restore_`, so the application database is not replaced.
+The security check enforces the loopback/authentication and local-secret baseline.
+The backup/restore acceptance is a disposable file-integrity drill; the full
+database restore still requires the explicit PostgreSQL, reconciliation, notebook,
+and dashboard checks in [the recovery runbook](operations-recovery.md). The restore
+command refuses existing destinations and only creates a database whose name starts
+with `restore_`, so the application database is not replaced.
 
 ## 12. Safety rules for research
 

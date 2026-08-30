@@ -516,6 +516,7 @@ def run_cycle(spec: Mapping[str, Any], *, repo_root: str | Path) -> dict[str, An
 
         environment = os.environ.copy()
         environment["INVS_DATA_DIR"] = str(root / "data")
+        environment["INVS_BACKUP_ROOT"] = normalized["backup_dir"]
         status_by_name = {item["name"]: item["status"] for item in report["stages"]}
         for index, stage in enumerate(stages, start=1):
             entry = report["stages"][index - 1]

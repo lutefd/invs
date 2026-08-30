@@ -5,6 +5,7 @@ data_root="${INVS_DATA_DIR:-data}"
 stale_after_hours="${INVS_STALE_AFTER_HOURS:-26}"
 projection_after_hours="${INVS_PROJECTION_AFTER_HOURS:-26}"
 disk_warn_percent="${INVS_DISK_WARN_PERCENT:-85}"
+backup_after_hours="${INVS_BACKUP_AFTER_HOURS:-30}"
 
 validate_number() {
   local name="$1"
@@ -18,6 +19,7 @@ validate_number() {
 validate_number INVS_STALE_AFTER_HOURS "$stale_after_hours"
 validate_number INVS_PROJECTION_AFTER_HOURS "$projection_after_hours"
 validate_number INVS_DISK_WARN_PERCENT "$disk_warn_percent"
+validate_number INVS_BACKUP_AFTER_HOURS "$backup_after_hours"
 if ! awk -v value="$disk_warn_percent" 'BEGIN { exit !(value <= 100) }'; then
   echo "INVS_DISK_WARN_PERCENT must be at most 100" >&2
   exit 2
@@ -38,7 +40,7 @@ run_sql() {
 docker compose up -d --wait postgres >/dev/null
 
 echo "operational_status_check=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "thresholds stale_hours=$stale_after_hours projection_hours=$projection_after_hours disk_warn_percent=$disk_warn_percent"
+echo "thresholds stale_hours=$stale_after_hours projection_hours=$projection_after_hours disk_warn_percent=$disk_warn_percent backup_after_hours=$backup_after_hours"
 
 issues=0
 source_sql=$(cat <<'SQL'
@@ -114,6 +116,38 @@ echo "disk path=$data_root used_percent=$disk_used_percent free_kib=$disk_free_k
 if awk -v used="$disk_used_percent" -v threshold="$disk_warn_percent" 'BEGIN { exit !(used >= threshold) }'; then
   echo "attention=disk_headroom used_percent=$disk_used_percent"
   issues=1
+fi
+
+backup_root="${INVS_BACKUP_ROOT:-${INVS_BACKUP_DIR:-}}"
+if [[ -z "$backup_root" ]]; then
+  echo "backup_check=not_configured"
+else
+  if [[ "$backup_root" == "/" || "$backup_root" == "/home" || "$backup_root" == "/tmp" ]]; then
+    echo "attention=backup_path_is_too_broad"
+    issues=1
+  elif [[ -f "$backup_root/backup-manifest.txt" ]]; then
+    latest_backup="$backup_root"
+  elif [[ -d "$backup_root" ]]; then
+    latest_entry=$(find "$backup_root" -mindepth 1 -maxdepth 1 -type f -name backup-manifest.txt -printf '%T@|%h\n' | sort -nr | head -n 1)
+    if [[ -z "$latest_entry" ]]; then
+      latest_entry=$(find "$backup_root" -mindepth 1 -maxdepth 2 -type f -name backup-manifest.txt -printf '%T@|%h\n' | sort -nr | head -n 1)
+    fi
+    latest_backup=${latest_entry#*|}
+  fi
+  if [[ -z "${latest_backup:-}" || ! -f "$latest_backup/backup-manifest.txt" ]]; then
+    echo "attention=backup_missing path=$backup_root"
+    issues=1
+  else
+    backup_mtime=$(stat -c '%Y' -- "$latest_backup/backup-manifest.txt")
+    backup_age_seconds=$(( $(date +%s) - backup_mtime ))
+    (( backup_age_seconds < 0 )) && backup_age_seconds=0
+    backup_age_hours=$(awk -v seconds="$backup_age_seconds" 'BEGIN { printf "%.2f", seconds / 3600 }')
+    echo "backup=present age_hours=$backup_age_hours"
+    if awk -v age="$backup_age_hours" -v threshold="$backup_after_hours" 'BEGIN { exit !(age > threshold) }'; then
+      echo "attention=backup_stale age_hours=$backup_age_hours"
+      issues=1
+    fi
+  fi
 fi
 
 if (( issues != 0 )); then
