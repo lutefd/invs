@@ -247,6 +247,15 @@ interruption/resume stages at `c011ab6`. Its Docker project, volume, and restore
 database are disposable and are removed after the run; the live `invs` volume is
 not part of the test.
 
+While preparing the forward-paper boundary on 2026-08-30, the Yahoo normalized
+partition reached the current `split_adjusted` price contract. The former
+normalized tree and its legacy `market-basic` artifact were preserved in the
+recoverable archives documented in the [normalized price refresh acceptance
+note](acceptance/2026-08-30-normalized-price-refresh.md), then the preserved raw
+Yahoo evidence was reingested. The new receipt-time partition has 1,673 rows
+through the 2026-08-28 session, and `make reconcile` returned `issues=0`. This is
+installation-replay data preparation only; it is not a wall-clock forward record.
+
 The supported forward-evidence path is `make forward-record-capture` after a real
 recent paper session. It validates the append-only ledger and reconciled report,
 records account/report/manifest hashes, and refuses stale or replay-only evidence;

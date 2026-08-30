@@ -23,7 +23,7 @@ criterion.
 | `INVS_BIND_ADDRESS=127.0.0.1 make dashboard-smoke` | Passed: dashboard JSON and PostgreSQL `EXPLAIN` checks | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make migrate` | Passed: existing PostgreSQL volume remained migration-ready | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make historical-truth-db-test` | Passed: append-only, rollback, fresh-image, and migration replay checks | Runtime output from 2026-08-30 |
-| `INVS_BIND_ADDRESS=127.0.0.1 make reconcile` | Passed: `issues=0` | Report generated at `2026-08-30T06:55:56Z` |
+| `INVS_BIND_ADDRESS=127.0.0.1 make reconcile` | Passed: `issues=0` after the normalized Yahoo lineage repair | [Normalized price refresh acceptance note](2026-08-30-normalized-price-refresh.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make health` | Passed: PostgreSQL accepting connections; long-lived services healthy | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make workflow-acceptance` | Passed with intentional `attention` status for thematic and cross-market reports | [Workflow integration report](2026-08-30-v1-workflow-integration.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-daily-cycle-acceptance` | Passed: actual CLI failure/resume path preserved backup and observation evidence | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
@@ -66,6 +66,7 @@ The version compatibility and forward-upgrade procedure is in the
 | Brazil/commodity coverage | Explicit bounded fitness labels and missing coverage | Not a broad coverage claim |
 | Forward-record capture path | Contract, hash binding, stale/reconciliation checks, and CLI acceptance tests pass | Ready to capture only after a real recent paper session |
 | Data-fitness matrix | 29 entries cover 5 catalog datasets, 8 backtest kinds, 4 feature families, and workflow evidence; unlisted sources reject | Accepted repository classification boundary; source breadth remains bounded |
+| Normalized Yahoo refresh | Legacy `raw` partition and stale derived artifact archived; preserved raw evidence reingested as `split_adjusted`; reconciliation clean | Installation-replay preparation only; not forward evidence |
 | Wall-clock forward paper record | Not present; retained v0.6 evidence remains replay-only | Required for v1.0 release acceptance |
 
 Generated JSON reports under `data/research/acceptance/` are ignored runtime
