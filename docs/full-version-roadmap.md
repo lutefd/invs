@@ -1598,11 +1598,13 @@ post-capture timestamps during genuine capture.
 Retained pre-timestamp reports remain aggregate/replay-compatible, while the
 operator timing rules are documented and the pre-risk/post-capture rejection
 branches are covered by `59c435f`, `7058d10`, and `c12074a`; the current full test
-gate passes 213 Python tests.
+gate passes 217 Python tests. Daily-cycle input, report, and stage-log path
+boundaries were hardened in `47034ae`, including symlink rejection and exclusive
+temporary report creation.
 
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 passing report set was pinned in `67c59ad`, and the latest runtime reports were
-rerun from `a45a7ba`. The aggregate paper report output was made safe and
+rerun from `47034ae`. The aggregate paper report output was made safe and
 no-overwrite in `27d3fdd`, with conflict termination corrected in `28319fc` and
 dangling output/temporary symlinks rejected in `40e110e`. The genuine-only
 `v1-release-acceptance` target landed in `3051376`; it requires both forward
@@ -1618,7 +1620,7 @@ release gate remains pending.
 The daily-cycle preflight was hardened in `a4f8868` to require the complete v1
 paper-account envelope before execution, with focused regression and acceptance
 coverage. The current `make validate`, resilience, and installation-lifecycle
-reruns passed from `b4e89e5`; this repository-side hardening does not substitute
+reruns passed from `47034ae`; this repository-side hardening does not substitute
 for the genuine-forward requirement.
 
 The current host readiness snapshot is recorded in the [v1 operational readiness
