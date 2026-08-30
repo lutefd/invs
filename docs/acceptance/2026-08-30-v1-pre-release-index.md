@@ -7,9 +7,10 @@ current operational snapshot below was captured from checkout commit
 `92508ffe2432ca9b5ec89e1853d2282338e60544`. The runtime hardening was committed in
 `b5200fa8cc6e0a82e0933797098b59f3fc81f30b`. The full validation and latest v1
 acceptance reruns were executed from commit
-`02e19c503a488523de3cc6d64c6174fb4b16aee4`; the operational snapshot remains the
+`c79711daa17125bed760983cf266175ba63875e9`; the operational snapshot remains the
 earlier host evidence cited below. The follow-up full `make test` rerun from
-`c12074a` passed the expanded timestamp-bound test suite. `INVS_BIND_ADDRESS=127.0.0.1`
+`c12074a` passed the expanded timestamp-bound test suite, and the broader
+`make validate` rerun also passed from the current runtime HEAD. `INVS_BIND_ADDRESS=127.0.0.1`
 was used where validation needed to override the operator's local non-loopback
 `.env` setting.
 
