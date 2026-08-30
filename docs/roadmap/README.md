@@ -63,8 +63,10 @@ and paper-trading gate is accepted at `95a79b5` (feature boundary `f02a57f`).
 v1.0 is now **in progress**: the compatibility contract, operator hardening,
 integrated workflow boundary, and resilience/bias acceptance are implemented, with
 evidence in the [v1 resilience report](../acceptance/2026-08-30-v1-resilience.md).
-The final release gate still requires a genuine wall-clock forward paper record;
-the workflow reports remain `attention` until that evidence exists.
+The current host refresh, reconciliation, notebook/dashboard checks, and external
+backup validation are recorded in the [operational readiness note](../acceptance/2026-08-30-v1-live-operations.md).
+The final release gate still requires a genuine wall-clock forward paper record; the
+workflow reports remain `attention` until that evidence exists.
 No strategy or backtester scope was pulled
 into the v0.2 exit work. The
 historical-contract slice in `4d483ac` added ADRs 0006 and 0007,

@@ -3,8 +3,9 @@
 ## Release posture
 
 This is the v1.0 pre-release evidence index, not an accepted v1.0 release. The
-refreshed resilience evidence was executed against commit
-`cf37708cf772d1c4726a50890a3ae24e0bd2b0c3` with
+current operational snapshot below was captured from checkout commit
+`92508ffe2432ca9b5ec89e1853d2282338e60544`. The refreshed resilience evidence was
+executed against commit `cf37708cf772d1c4726a50890a3ae24e0bd2b0c3` with
 `INVS_BIND_ADDRESS=127.0.0.1` where validation needed to override the operator's
 local non-loopback `.env` setting. The tracked documentation commits do not alter
 the runtime compatibility contract; the later paper price-basis compatibility
@@ -20,12 +21,15 @@ criterion.
 | --- | --- | --- |
 | `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 204 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 61 schemas, 3 registries, 16 migrations, and complete data-fitness surfaces | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make ingest SOURCE=all` | Passed: all five enabled source runs completed without rejected resources | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
+| `INVS_BIND_ADDRESS=127.0.0.1 make ops-status` | Passed: current enabled sources and projections within threshold; disk usage 17% | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make notebook` | Passed: empty-safe vertical-slice notebook executed | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make dashboard-smoke` | Passed: dashboard JSON and PostgreSQL `EXPLAIN` checks | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make migrate` | Passed: existing PostgreSQL volume remained migration-ready | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make historical-truth-db-test` | Passed: append-only, rollback, fresh-image, and migration replay checks | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make reconcile` | Passed: `issues=0` after the normalized Yahoo lineage repair | [Normalized price refresh acceptance note](2026-08-30-normalized-price-refresh.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make health` | Passed: PostgreSQL accepting connections; long-lived services healthy | Runtime output from 2026-08-30 |
+| `make backup` plus `make backup-validate` | Passed: current external backup validated with 1,550 immutable files | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make workflow-acceptance` | Passed with intentional `attention` status for thematic and cross-market reports | [Workflow integration report](2026-08-30-v1-workflow-integration.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-daily-cycle-acceptance` | Passed: actual CLI failure/resume path preserved backup and observation evidence | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-forward-record-acceptance` | Passed: retained replay-only paper evidence was rejected without writing a record | [Resilience acceptance report](2026-08-30-v1-resilience.md) |

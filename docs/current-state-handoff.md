@@ -256,6 +256,15 @@ Yahoo evidence was reingested. The new receipt-time partition has 1,673 rows
 through the 2026-08-28 session, and `make reconcile` returned `issues=0`. This is
 installation-replay data preparation only; it is not a wall-clock forward record.
 
+The current host refresh then ran `INVS_BIND_ADDRESS=127.0.0.1 make ingest
+SOURCE=all` for every enabled source. `make ops-status` reported `ok` with current
+source/projection freshness and 17% data-disk usage; `make reconcile` again returned
+`issues=0`; the notebook and dashboard smoke checks passed; and a validated backup
+was retained outside the checkout at `/home/luis/invs-backups/v1-current-20260830-0917`.
+The exact source hashes and backup fingerprint are in the [current operational
+readiness note](acceptance/2026-08-30-v1-live-operations.md). This confirms current
+host readiness only and does not create a genuine wall-clock paper record.
+
 The forward paper input boundary now admits explicitly labeled `split_adjusted`
 price artifacts while keeping historical backtests raw-only. A paper artifact must
 use one price basis, and the loader rejects split-adjusted prices paired with
@@ -341,6 +350,7 @@ to close the v0.2 calendar gate. See the
 - v0.5 status: complete; see [the v0.5 acceptance report](acceptance/2026-08-29-v0.5-backtesting.md)
 - v0.6 status: complete; see [the v0.6 acceptance report](acceptance/2026-08-29-v0.6-paper-trading.md)
 - v1.0 status: in progress; see the [resilience acceptance report](acceptance/2026-08-30-v1-resilience.md)
+- v1.0 current host readiness: accepted snapshot; see the [operational readiness note](acceptance/2026-08-30-v1-live-operations.md)
 - v1.0 installation lifecycle: accepted repository-side; see the [install/upgrade acceptance report](acceptance/2026-08-30-v1-install-upgrade.md)
 - v1.0 workflow status: attention by design; see the [workflow integration report](acceptance/2026-08-30-v1-workflow-integration.md)
 - Latest v0.4 acceptance boundary: `3ac61e1` (`test(acceptance): prove v0.4 hypothesis loop`)

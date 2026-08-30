@@ -1600,6 +1600,12 @@ genuine wall-clock forward record. Brazil and commodity evidence also retain the
 bounded fitness labels. The pre-release evidence index is recorded; the final
 release gate remains pending.
 
+The current host readiness snapshot is recorded in the [v1 operational readiness
+note](acceptance/2026-08-30-v1-live-operations.md): all enabled sources refreshed,
+the normalized tree reconciled with zero findings, notebook and dashboard smoke
+checks passed, and an external backup validated. This strengthens the operational
+boundary without changing the genuine-forward requirement.
+
 ## Scope
 
 ### 1. End-to-end release contract
