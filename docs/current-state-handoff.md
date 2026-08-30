@@ -352,6 +352,13 @@ record and final end-to-end workflow acceptance. The pre-release evidence index 
 recorded, while the bounded Brazil and commodity fitness limitations remain in
 force; no broker or real-money execution claim is made.
 
+A read-only live preflight at `2026-08-30T14:33:50Z` found zero rows in the
+`paper_accounts` projection, no files under `data/research/forward/`, and one current
+Yahoo PostgreSQL price projection for AAPL observed at `2026-08-28T20:00:00Z`. The
+next real session therefore requires an operator-supplied immutable paper-account
+specification and exact current-research-only input artifacts; retained v0.6 fixtures
+and backdated timestamps remain ineligible for the release gate.
+
 The data-fitness classification gate is now accepted at `4a72ed0`. The release-pinned
 [`data-fitness matrix`](../release/data-fitness.json) covers five catalog datasets,
 eight backtest input kinds, four feature families, and the workflow commodity
