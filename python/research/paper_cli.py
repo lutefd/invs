@@ -12,6 +12,7 @@ from .paper import (
     LedgerStore,
     PaperError,
     approve_paper_decision,
+    build_paper_acceptance_report,
     create_paper_account,
     read_paper_report,
     rebuild_paper_account,
@@ -72,6 +73,12 @@ def _parser() -> argparse.ArgumentParser:
     reconcile = commands.add_parser("reconcile", help="check every valuation and the latest projection")
     reconcile.add_argument("--account-id", required=True)
     reconcile.add_argument("--ledger-root", required=True)
+    acceptance = commands.add_parser(
+        "acceptance-report", help="derive aggregate acceptance checks from one immutable ledger"
+    )
+    acceptance.add_argument("--account-id", required=True)
+    acceptance.add_argument("--data-root", required=True)
+    acceptance.add_argument("--ledger-root", required=True)
     return parser
 
 
@@ -102,6 +109,12 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "rebuild":
             output = rebuild_paper_account(args.account_id, ledger_root=args.ledger_root)
+        elif args.command == "acceptance-report":
+            output = build_paper_acceptance_report(
+                LedgerStore(args.ledger_root, args.account_id).load_account(),
+                data_root=args.data_root,
+                ledger_root=args.ledger_root,
+            )
         else:
             output = reconcile_paper_account(LedgerStore(args.ledger_root, args.account_id))
     except (PaperError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:

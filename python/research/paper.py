@@ -6,7 +6,9 @@ import hashlib
 import json
 import os
 import re
-from collections import defaultdict
+import shutil
+import tempfile
+from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, date, datetime
@@ -76,6 +78,35 @@ _EVENT_TYPES = frozenset(
         "reconciliation",
         "fx_conversion",
     }
+)
+
+_PAPER_REPORT_REQUIRED_FIELDS = frozenset(
+    {
+        "schema_version",
+        "report_id",
+        "account_id",
+        "session_date",
+        "decision_id",
+        "input_fingerprint",
+        "decision_status",
+        "risk",
+        "approval",
+        "orders",
+        "nav_base",
+        "cash_base",
+        "positions_value_base",
+        "gross_exposure",
+        "drawdown",
+        "ledger_sequence_start",
+        "ledger_sequence_end",
+        "reconciled",
+    }
+)
+_PAPER_REPORT_STATUSES = frozenset(
+    {"proposed", "approved", "rejected", "halted", "no_op", "settled"}
+)
+_FORWARD_SESSION_STATUSES = frozenset(
+    {"proposed", "approved", "rejected", "no_op", "settled"}
 )
 
 
@@ -1576,6 +1607,198 @@ def reconcile_paper_account(store: LedgerStore) -> dict[str, Any]:
     }
 
 
+def _ledger_tree_fingerprint(root: Path) -> tuple[tuple[str, str], ...]:
+    if root.is_symlink() or not root.is_dir():
+        raise PaperLedgerError(f"paper ledger account directory is not a regular directory: {root}")
+    files: list[tuple[str, str]] = []
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise PaperLedgerError(f"paper ledger contains a symlink: {path}")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise PaperLedgerError(f"paper ledger contains a non-file entry: {path}")
+        files.append(
+            (
+                path.relative_to(root).as_posix(),
+                hashlib.sha256(path.read_bytes()).hexdigest(),
+            )
+        )
+    return tuple(sorted(files))
+
+
+def _acceptance_reports(
+    store: LedgerStore,
+    account: Mapping[str, Any],
+    events: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    if not store.reports_dir.is_dir():
+        raise PaperLedgerError(f"paper reports directory does not exist: {store.reports_dir}")
+    paths = sorted(store.reports_dir.glob("report-*.json"))
+    if not paths:
+        raise PaperLedgerError(f"paper account has no session reports: {store.account_id}")
+
+    period_start = date.fromisoformat(account["period"]["start_date"])
+    period_end = date.fromisoformat(account["period"]["end_date"])
+    reports: list[dict[str, Any]] = []
+    for path in paths:
+        if path.is_symlink() or not path.is_file():
+            raise PaperLedgerError(f"paper report is not a regular file: {path}")
+        match = re.fullmatch(r"report-([0-9]{4}-[0-9]{2}-[0-9]{2})\.json", path.name)
+        if match is None:
+            raise PaperLedgerError(f"paper report filename is invalid: {path.name}")
+        try:
+            session_date = date.fromisoformat(match.group(1))
+        except ValueError as error:
+            raise PaperLedgerError(f"paper report filename contains an invalid date: {path.name}") from error
+        if not period_start <= session_date <= period_end:
+            raise PaperLedgerError(f"paper report is outside the account period: {path.name}")
+
+        report = store.read_report(session_date)
+        if not isinstance(report, Mapping):
+            raise PaperLedgerError(f"paper report is not an object: {path}")
+        allowed = _PAPER_REPORT_REQUIRED_FIELDS | {"warnings"}
+        if not _PAPER_REPORT_REQUIRED_FIELDS.issubset(report) or not set(report).issubset(allowed):
+            raise PaperLedgerError(f"paper report has an invalid field set: {path}")
+        if report["schema_version"] != PAPER_SCHEMA_VERSION or report["account_id"] != store.account_id:
+            raise PaperLedgerError(f"paper report identity is invalid: {path}")
+        if report["session_date"] != session_date.isoformat():
+            raise PaperLedgerError(f"paper report session does not match its filename: {path}")
+        _uuid(report["report_id"], field="paper report.report_id")
+        _uuid(report["decision_id"], field="paper report.decision_id")
+        _sha(report["input_fingerprint"], field="paper report.input_fingerprint")
+        if report["decision_status"] not in _PAPER_REPORT_STATUSES:
+            raise PaperLedgerError(f"paper report decision status is unsupported: {path}")
+        if report["reconciled"] is not True:
+            raise PaperLedgerError(f"paper report is not reconciled: {path}")
+        for field in ("ledger_sequence_start", "ledger_sequence_end"):
+            if not isinstance(report[field], int) or isinstance(report[field], bool) or report[field] < 1:
+                raise PaperLedgerError(f"paper report {field} is invalid: {path}")
+        session_events = [event for event in events if event["session_date"] == report["session_date"]]
+        if not session_events:
+            raise PaperLedgerError(f"paper report has no ledger events for its session: {path}")
+        if (
+            report["ledger_sequence_start"] != min(event["sequence"] for event in session_events)
+            or report["ledger_sequence_end"] > max(event["sequence"] for event in session_events)
+            or report["ledger_sequence_end"]
+            not in {event["sequence"] for event in session_events}
+        ):
+            raise PaperLedgerError(f"paper report ledger sequence does not match its events: {path}")
+        if not any(
+            event["event_type"] == "decision" and event["decision_id"] == report["decision_id"]
+            for event in session_events
+        ):
+            raise PaperLedgerError(f"paper report decision is not present in its ledger session: {path}")
+        if "warnings" in report and (
+            not isinstance(report["warnings"], list)
+            or any(not isinstance(warning, str) or not warning for warning in report["warnings"])
+        ):
+            raise PaperLedgerError(f"paper report warnings are invalid: {path}")
+        reports.append(dict(report))
+    return reports
+
+
+def build_paper_acceptance_report(
+    account: Mapping[str, Any],
+    *,
+    data_root: str | Path,
+    ledger_root: str | Path,
+) -> dict[str, Any]:
+    """Derive an aggregate paper acceptance report without mutating the source ledger."""
+
+    normalized = validate_paper_account(account)
+    store = LedgerStore(ledger_root, normalized["account_id"])
+    persisted = store.load_account()
+    if persisted != normalized:
+        raise PaperConflictError("supplied paper account differs from immutable ledger account")
+    events = store.events()
+    reports = _acceptance_reports(store, normalized, events)
+    latest_report = reports[-1]
+    source_fingerprint = _ledger_tree_fingerprint(store.account_dir)
+
+    first_replay = run_paper_session(
+        normalized,
+        data_root=data_root,
+        ledger_root=ledger_root,
+        session_date=latest_report["session_date"],
+    )
+    second_replay = run_paper_session(
+        normalized,
+        data_root=data_root,
+        ledger_root=ledger_root,
+        session_date=latest_report["session_date"],
+    )
+    duplicate_auto_cycle = (
+        source_fingerprint == _ledger_tree_fingerprint(store.account_dir)
+        and first_replay == latest_report
+        and second_replay == latest_report
+    )
+
+    rebuilt = rebuild_paper_account(normalized["account_id"], ledger_root=ledger_root)
+    reconciliation = reconcile_paper_account(store)
+    rebuild_exact = all(
+        rebuilt[field] == latest_report[field]
+        for field in ("nav_base", "cash_base", "positions_value_base")
+    )
+
+    with tempfile.TemporaryDirectory(prefix="invs-paper-acceptance-") as temporary:
+        restored_root = Path(temporary) / "ledger"
+        restored_account_dir = restored_root / "accounts" / normalized["account_id"]
+        shutil.copytree(store.account_dir, restored_account_dir)
+        restored_fingerprint = _ledger_tree_fingerprint(restored_account_dir)
+        restored_rebuild = rebuild_paper_account(
+            normalized["account_id"], ledger_root=restored_root
+        )
+        restored_reconciliation = reconcile_paper_account(
+            LedgerStore(restored_root, normalized["account_id"])
+        )
+        backup_restore = (
+            source_fingerprint == restored_fingerprint
+            and restored_rebuild == rebuilt
+            and restored_reconciliation["status"] == "passed"
+        )
+
+    acceptance = {
+        "forward_sessions": bool(reports)
+        and all(
+            report["reconciled"] is True
+            and report["decision_status"] in _FORWARD_SESSION_STATUSES
+            for report in reports
+        ),
+        "duplicate_auto_cycle": duplicate_auto_cycle,
+        "rebuild_exact": rebuild_exact,
+        "backup_restore": backup_restore,
+        "reconciliation": reconciliation["status"] == "passed",
+    }
+    counts = Counter(event["event_type"] for event in events)
+    return {
+        "schema_version": PAPER_SCHEMA_VERSION,
+        "status": "passed" if all(acceptance.values()) else "attention",
+        "period": dict(normalized["period"]),
+        "session_count": len(reports),
+        "accounts": [
+            {
+                "account_id": normalized["account_id"],
+                "strategy": normalized["strategy"]["name"],
+                "strategy_version": normalized["strategy"]["version"],
+                "sessions": len(reports),
+                "rebalanced_sessions": sum(
+                    report["decision_status"] in {"proposed", "approved", "rejected"}
+                    for report in reports
+                ),
+                "no_op_sessions": sum(report["decision_status"] == "no_op" for report in reports),
+                "filled_orders": counts["fill"],
+                "event_count": len(events),
+                "event_types": dict(sorted(counts.items())),
+                "final_report": latest_report,
+            }
+        ],
+        "acceptance": acceptance,
+        "rebuild": rebuilt,
+        "reconciliation": reconciliation,
+    }
+
+
 def read_paper_report(
     account_id: str, session_date: str | date, *, ledger_root: str | Path
 ) -> dict[str, Any]:
@@ -1595,6 +1818,7 @@ __all__ = [
     "PaperReconciliationError",
     "PaperSpecError",
     "approve_paper_decision",
+    "build_paper_acceptance_report",
     "create_paper_account",
     "paper_account_sha256",
     "read_paper_report",

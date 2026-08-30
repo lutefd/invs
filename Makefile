@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-acceptance-report paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -199,6 +199,14 @@ paper-reconcile: config
 	@test -n "$(PAPER_LEDGER_ROOT)" || (echo "PAPER_LEDGER_ROOT is required" >&2; exit 2)
 	@$(COMPOSE) run --rm --no-deps jupyter python -m research.paper_cli reconcile \
 		--account-id "$(PAPER_ACCOUNT_ID)" \
+		--ledger-root "$(PAPER_LEDGER_ROOT)"
+
+paper-acceptance-report: config
+	@test -n "$(PAPER_ACCOUNT_ID)" || (echo "PAPER_ACCOUNT_ID is required" >&2; exit 2)
+	@test -n "$(PAPER_LEDGER_ROOT)" || (echo "PAPER_LEDGER_ROOT is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps jupyter python -m research.paper_cli acceptance-report \
+		--account-id "$(PAPER_ACCOUNT_ID)" \
+		--data-root "$(or $(PAPER_DATA_ROOT),/data)" \
 		--ledger-root "$(PAPER_LEDGER_ROOT)"
 
 forward-record-capture: config

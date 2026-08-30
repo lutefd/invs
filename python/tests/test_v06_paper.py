@@ -274,6 +274,48 @@ def test_paper_rejects_split_adjusted_prices_with_actions(tmp_path: Path) -> Non
         load_paper_inputs(account["inputs"], data_root=root)
 
 
+def test_paper_acceptance_report_derives_checks_without_mutating_ledger(tmp_path: Path) -> None:
+    from research.paper import (
+        LedgerStore,
+        build_paper_acceptance_report,
+        create_paper_account,
+        run_paper_session,
+    )
+
+    account, root = _account_fixture(tmp_path, price_basis="split_adjusted")
+    ledger_root = root / "ledger"
+    create_paper_account(account, ledger_root=ledger_root)
+    run_paper_session(
+        account,
+        data_root=root,
+        ledger_root=ledger_root,
+        session_date="2025-01-02",
+    )
+    store = LedgerStore(ledger_root, account["account_id"])
+    before = store.events()
+
+    report = build_paper_acceptance_report(
+        account,
+        data_root=root,
+        ledger_root=ledger_root,
+    )
+
+    assert report["status"] == "passed"
+    assert report["session_count"] == 1
+    assert report["accounts"][0]["account_id"] == account["account_id"]
+    assert all(
+        report["acceptance"][check]
+        for check in (
+            "forward_sessions",
+            "duplicate_auto_cycle",
+            "rebuild_exact",
+            "backup_restore",
+            "reconciliation",
+        )
+    )
+    assert store.events() == before
+
+
 def test_paper_proposal_approval_fill_and_rebuild_are_idempotent(tmp_path: Path) -> None:
     from research.paper import (
         LedgerStore,
@@ -447,4 +489,16 @@ def test_paper_cli_dispatches_operator_lifecycle(tmp_path: Path, capsys: pytest.
     rebuilt = json.loads(capsys.readouterr().out)
     assert rebuilt["event_count"] > 1
     assert main(["reconcile", "--account-id", account["account_id"], "--ledger-root", str(ledger_root)]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "passed"
+    assert main(
+        [
+            "acceptance-report",
+            "--account-id",
+            account["account_id"],
+            "--data-root",
+            str(root),
+            "--ledger-root",
+            str(ledger_root),
+        ]
+    ) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "passed"
