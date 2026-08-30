@@ -70,6 +70,14 @@ jq -n \
 		"paper": [{"account_id": $account_id, "spec": $paper_spec}]
 	}' > "$spec_path"
 
+paper_preflight_spec_path="$run_root/paper-preflight-failure-spec.json"
+jq \
+	--arg cycle_id 'v1-daily-cycle-paper-preflight-failure' \
+	--arg report_path "${run_root#"$repo_root/"}/paper-preflight-failure-cycle.json" \
+	--arg log_dir "${run_root#"$repo_root/"}/paper-preflight-failure-logs" \
+	'.cycle_id = $cycle_id | .report_path = $report_path | .log_dir = $log_dir' \
+	"$spec_path" > "$paper_preflight_spec_path"
+
 export INVS_DAILY_ACCEPTANCE_COMMAND_LOG="$command_log"
 export PATH="$bin_root:$PATH"
 export INVS_DAILY_ACCEPTANCE_FAIL_COMMAND=feature-batch
@@ -101,6 +109,29 @@ jq -e '
 while IFS= read -r log_path; do
 	test -s "$repo_root/$log_path"
 done < <(jq -r '.stages[].log_path' "${run_root}/cycle.json")
+
+preflight_command_log="$run_root/paper-preflight-commands.log"
+export INVS_DAILY_ACCEPTANCE_COMMAND_LOG="$preflight_command_log"
+export INVS_DAILY_ACCEPTANCE_FAIL_COMMAND=paper-validate-inputs
+if scripts/daily-cycle.sh --repo-root "$repo_root" --spec "$paper_preflight_spec_path" > "$run_root/paper-preflight-failure.log" 2>&1; then
+	echo 'daily-cycle paper preflight acceptance expected the run to fail' >&2
+	exit 1
+else
+	preflight_exit=$?
+fi
+test "$preflight_exit" -eq 1
+jq -e '
+	.status == "attention"
+	and ([.stages[] | select((.name | endswith(":validate-inputs")) and .status == "failed")] | length == 1)
+	and ([.stages[] | select((.name | endswith(":create")) and .status == "skipped")] | length == 1)
+	and ([.stages[] | select((.name | endswith(":run")) and .status == "skipped")] | length == 1)
+	and ([.stages[] | select((.name | endswith(":reconcile")) and .status == "skipped")] | length == 1)
+	and ([.stages[] | select(.name == "backup" and .status == "passed")] | length == 1)
+' "$run_root/paper-preflight-failure-cycle.json" >/dev/null
+if grep -Fq 'paper-create-account' "$preflight_command_log"; then
+	echo 'daily-cycle paper preflight acceptance created an account after validation failure' >&2
+	exit 1
+fi
 
 printf '%s\n' 'v1 daily-cycle CLI acceptance passed'
 printf 'report: %s\n' "$run_root/cycle.json"
