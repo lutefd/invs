@@ -22,7 +22,7 @@ Planning snapshot:
 - The planning snapshot's implementation boundary described by
   [current-state-handoff.md](current-state-handoff.md) was `742e5ae`
   (`feat(features): publish deterministic market artifacts`); the current accepted
-  v0.5 implementation boundary is `a143b57`.
+  v0.5 implementation boundary is `180d5c9`.
 - The post-handoff continuation also includes the supported feature operator command
   at `e581c5d`, aligned feature documentation at `37e8812`, and the retained
   `market-basic` operator acceptance report at `b7dcac3`.
@@ -1140,7 +1140,7 @@ are recorded in
 
 # v0.5 — Point-in-Time Backtesting and Experiment Tracking
 
-**Status:** Accepted at `a143b57`; see the [v0.5 backtesting acceptance report](acceptance/2026-08-29-v0.5-backtesting.md).
+**Status:** Accepted at `180d5c9`; see the [v0.5 backtesting acceptance report](acceptance/2026-08-29-v0.5-backtesting.md).
 
 ## Goal
 
@@ -1352,7 +1352,7 @@ v0.5 is complete when baseline US and Brazil experiments reproduce from immutabl
 inputs, the accounting ledger balances, conservative costs and actions are applied,
 and the deliberate lookahead/survivorship failures are caught by tests.
 
-v0.5 is complete at `a143b57`. The exact reproduction, recovery, bias, and
+v0.5 is complete at `180d5c9`. The exact reproduction, recovery, bias, and
 validation evidence is recorded in
 [`2026-08-29-v0.5-backtesting.md`](acceptance/2026-08-29-v0.5-backtesting.md).
 
@@ -1965,7 +1965,7 @@ integrates the bounded identity, membership, calendar, price, action, FX, macro,
 SEC filing chains, verifies 16 pinned evidence artifacts, and preserves
 installation-replay and unsupported scope decisions. The v0.3 feature platform is
 accepted through `5fc3783`; the v0.4 theme and hypothesis loop is accepted through
-`3ac61e1`; v0.5 is accepted at `a143b57`; see their acceptance reports. The next
+`3ac61e1`; v0.5 is accepted at `180d5c9`; see their acceptance reports. The next
 narrow queue is v0.6 portfolio construction and paper trading. The accepted v0.5
 backtest remains daily, long-only, and canonical to the internal Python simulator;
 rolling calibration, paper execution, and broker behavior remain future boundaries.

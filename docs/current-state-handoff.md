@@ -176,7 +176,7 @@ trading, and live execution remain later roadmap boundaries.
 ## v0.5 completion boundary
 
 The v0.5 point-in-time backtesting and experiment-tracking gate is accepted on
-2026-08-29 at `a143b57`. The implementation now includes strict hash-pinned
+2026-08-29 at `180d5c9`. The implementation now includes strict hash-pinned
 experiment specifications, explicit decision and execution clocks, a daily
 long-only event loop, exact cash/positions/NAV accounting, corporate actions, FX,
 conservative costs and delays, transparent buy-and-hold/equal-weight/momentum
@@ -244,7 +244,7 @@ to close the v0.2 calendar gate. See the
 - v0.4 status: complete; see [the v0.4 acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md)
 - v0.5 status: complete; see [the v0.5 acceptance report](acceptance/2026-08-29-v0.5-backtesting.md)
 - Latest v0.4 acceptance boundary: `3ac61e1` (`test(acceptance): prove v0.4 hypothesis loop`)
-- Latest v0.5 implementation boundary: `a143b57` (`test(backtest): tighten artifact and ledger invariants`)
+- Latest v0.5 implementation boundary: `180d5c9` (`fix(backtest): order metric attribution deterministically`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`
@@ -1206,6 +1206,6 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d` and v0.2 at `0bfdc27`; v0.3 is accepted at
 `5fc3783` with reporting correction `0454d0e`; v0.4 is accepted at `3ac61e1`; and
-v0.5 is accepted at `a143b57`. Keep receipt-time prices installation-replay only.
+v0.5 is accepted at `180d5c9`. Keep receipt-time prices installation-replay only.
 The next smallest cohesive boundary is v0.6 portfolio construction and paper
 trading; rolling calibration and broker behavior remain deferred.

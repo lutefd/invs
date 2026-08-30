@@ -134,7 +134,7 @@ paper trading, and live execution remain later roadmap boundaries. Rolling
 calibration execution is also deferred beyond the accepted v0.5 fixed-baseline
 boundary.
 
-v0.5 is **accepted** at `a143b57`. The bounded daily backtest now has immutable
+v0.5 is **accepted** at `180d5c9`. The bounded daily backtest now has immutable
 experiment identity, explicit decision/execution clocks, actions/costs/FX, baseline
 strategies, versioned metrics, result comparison, PostgreSQL run lineage,
 checkpoint recovery, and a retained five-experiment US/Brazil reproduction with a
