@@ -327,6 +327,61 @@ def test_clean_replay_is_byte_deterministic(tmp_path: Path) -> None:
     assert first == second
 
 
+def test_checkpointed_interruption_resumes_to_the_clean_result(tmp_path: Path) -> None:
+    from research.backtest import BacktestInterruptedError, simulate_backtest
+
+    spec, root = _base_fixture(tmp_path / "inputs")
+    clean = simulate_backtest(spec, data_root=root)
+    checkpoint_root = tmp_path / "checkpoints"
+
+    with pytest.raises(BacktestInterruptedError, match="checkpoint="):
+        simulate_backtest(
+            spec,
+            data_root=root,
+            checkpoint_root=checkpoint_root,
+            stop_after_session=1,
+        )
+
+    checkpoint_dir = checkpoint_root / f"experiment-{spec['experiment_id']}"
+    assert sorted(path.name for path in checkpoint_dir.glob("checkpoint-*.json")) == [
+        "checkpoint-000001.json"
+    ]
+    resumed = simulate_backtest(spec, data_root=root, checkpoint_root=checkpoint_root, resume=True)
+
+    assert resumed == clean
+    assert sorted(path.name for path in checkpoint_dir.glob("checkpoint-*.json")) == [
+        "checkpoint-000001.json",
+        "checkpoint-000002.json",
+        "checkpoint-000003.json",
+    ]
+
+
+def test_tampered_checkpoint_is_rejected_before_resume(tmp_path: Path) -> None:
+    from research.backtest import (
+        BacktestCheckpointError,
+        BacktestInterruptedError,
+        simulate_backtest,
+    )
+
+    spec, root = _base_fixture(tmp_path / "inputs")
+    checkpoint_root = tmp_path / "checkpoints"
+    with pytest.raises(BacktestInterruptedError):
+        simulate_backtest(
+            spec,
+            data_root=root,
+            checkpoint_root=checkpoint_root,
+            stop_after_session=1,
+        )
+
+    checkpoint_path = checkpoint_root / f"experiment-{spec['experiment_id']}" / "checkpoint-000001.json"
+    document = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    document["payload"]["state"]["last_nav"] = "999"
+    checkpoint_path.write_bytes(canonical_json(document) + b"\n")
+
+    with pytest.raises(BacktestCheckpointError, match="hash does not match"):
+        simulate_backtest(spec, data_root=root, checkpoint_root=checkpoint_root, resume=True)
+
+
 def test_tampered_pinned_input_is_rejected(tmp_path: Path) -> None:
     from research.backtest import simulate_backtest
     from research.backtest_inputs import BacktestInputError
@@ -379,6 +434,27 @@ def test_future_execution_price_can_halt_instead_of_looking_ahead(tmp_path: Path
     changed = build_experiment_spec(changed)
 
     with pytest.raises(BacktestMissingDataError, match="missing executable open"):
+        simulate_backtest(changed, data_root=root)
+
+
+def test_missing_historical_membership_is_rejected_instead_of_becoming_survivorship_bias(
+    tmp_path: Path,
+) -> None:
+    from research.backtest import BacktestMissingDataError, simulate_backtest
+
+    spec, root = _base_fixture(tmp_path)
+    membership_path = root / "inputs" / "membership.json"
+    document = json.loads(membership_path.read_text(encoding="utf-8"))
+    document["rows"] = [row for row in document["rows"] if row["security_id"] != SECURITY_B]
+    content = canonical_json(document) + b"\n"
+    membership_path.write_bytes(content)
+    changed = deepcopy(spec)
+    membership_ref = next(item for item in changed["inputs"] if item["kind"] == "membership")
+    membership_ref["sha256"] = hashlib.sha256(content).hexdigest()
+    changed.pop("experiment_id")
+    changed = build_experiment_spec(changed)
+
+    with pytest.raises(BacktestMissingDataError, match="historical membership is unavailable"):
         simulate_backtest(changed, data_root=root)
 
 

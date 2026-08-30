@@ -8,12 +8,17 @@ cash, valuation, and the audit ledger.
 
 from __future__ import annotations
 
+import json
+import os
+import re
+import tempfile
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import ROUND_DOWN, Decimal, InvalidOperation, localcontext
 from itertools import pairwise
+from pathlib import Path
 from typing import Any, Final
 from uuid import UUID, uuid5
 
@@ -21,13 +26,16 @@ from .backtest_inputs import BacktestInputError, BacktestInputs, load_backtest_i
 from .experiments import (
     ENGINE_VERSION,
     BacktestSpecError,
+    canonical_json,
     experiment_sha256,
     input_fingerprint,
+    sha256_bytes,
     validate_experiment_spec,
 )
 from .strategies import baseline_targets
 
 BACKTEST_SCHEMA_VERSION: Final[str] = "1.0.0"
+CHECKPOINT_SCHEMA_VERSION: Final[str] = "1.0.0"
 METRICS_VERSION: Final[str] = "1.0.0"
 ANNUALIZATION_FACTOR: Final[int] = 252
 
@@ -50,6 +58,14 @@ class BacktestMissingDataError(BacktestError):
 
 class BacktestAccountingError(BacktestError):
     """Raised when a portfolio accounting invariant would be violated."""
+
+
+class BacktestCheckpointError(BacktestError):
+    """Raised when an append-only recovery checkpoint is invalid or conflicts."""
+
+
+class BacktestInterruptedError(BacktestError):
+    """Raised by the operator path after a durable checkpointed interruption."""
 
 
 @dataclass(frozen=True)
@@ -106,6 +122,415 @@ class _State:
     cost_by_session: dict[date, Decimal] = field(default_factory=lambda: defaultdict(Decimal))
     rejected_trade_count: int = 0
     out_of_market_sessions: int = 0
+
+
+_CHECKPOINT_DECIMAL = re.compile(r"^-?(0|[1-9][0-9]*)(\.[0-9]+)?$")
+_CHECKPOINT_FIELDS = frozenset(
+    {"schema_version", "checkpoint_sha256", "payload"}
+)
+_CHECKPOINT_PAYLOAD_FIELDS = frozenset(
+    {
+        "experiment_id",
+        "experiment_sha256",
+        "input_fingerprint",
+        "engine_version",
+        "next_session_index",
+        "state",
+        "nav",
+        "holdings",
+    }
+)
+_CHECKPOINT_STATE_FIELDS = frozenset(
+    {
+        "cash",
+        "quantities",
+        "security_currency",
+        "orders",
+        "fills",
+        "ledger",
+        "pending",
+        "processed_actions",
+        "hold_weights",
+        "hold_initialized",
+        "last_decision_date",
+        "last_nav",
+        "benchmark_units",
+        "benchmark_value_start",
+        "next_ledger_sequence",
+        "total_fee_base",
+        "total_spread_base",
+        "total_slippage_base",
+        "total_tax_base",
+        "total_gross_base",
+        "cost_by_session",
+        "rejected_trade_count",
+        "out_of_market_sessions",
+    }
+)
+_CHECKPOINT_PENDING_FIELDS = frozenset(
+    {"index", "security_id", "side", "quantity", "execution_date", "currency"}
+)
+
+
+def _checkpoint_strict_json(path: Path) -> dict[str, Any]:
+    def no_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON key {key!r}")
+            result[key] = value
+        return result
+
+    try:
+        document = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=no_duplicates,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(f"invalid JSON constant {value}")
+            ),
+        )
+    except (OSError, UnicodeError, ValueError) as error:
+        raise BacktestCheckpointError(f"invalid checkpoint {path}: {error}") from error
+    if not isinstance(document, dict):
+        raise BacktestCheckpointError(f"checkpoint {path} must be an object")
+    return document
+
+
+def _checkpoint_exact_fields(value: Mapping[str, Any], expected: frozenset[str], label: str) -> None:
+    actual = frozenset(value)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise BacktestCheckpointError(f"{label} fields mismatch: missing={missing}, extra={extra}")
+
+
+def _checkpoint_decimal(value: Any, *, field: str) -> Decimal:
+    if not isinstance(value, str) or not _CHECKPOINT_DECIMAL.fullmatch(value):
+        raise BacktestCheckpointError(f"{field} must be a canonical decimal string")
+    try:
+        return _d(value)
+    except BacktestAccountingError as error:
+        raise BacktestCheckpointError(f"{field} is invalid: {error}") from error
+
+
+def _checkpoint_decimal_map(value: Any, *, field: str) -> dict[str, Decimal]:
+    if not isinstance(value, Mapping):
+        raise BacktestCheckpointError(f"{field} must be an object")
+    result: dict[str, Decimal] = {}
+    for key, item in value.items():
+        if not isinstance(key, str) or not key:
+            raise BacktestCheckpointError(f"{field} has an invalid key")
+        result[key] = _checkpoint_decimal(item, field=f"{field}.{key}")
+    return result
+
+
+def _checkpoint_list(value: Any, *, field: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise BacktestCheckpointError(f"{field} must be an array")
+    return list(value)
+
+
+def _state_checkpoint_document(state: _State) -> dict[str, Any]:
+    return {
+        "cash": {key: _dstr(value) for key, value in sorted(state.cash.items())},
+        "quantities": {key: _dstr(value) for key, value in sorted(state.quantities.items())},
+        "security_currency": dict(sorted(state.security_currency.items())),
+        "orders": list(state.orders),
+        "fills": list(state.fills),
+        "ledger": list(state.ledger),
+        "pending": [
+            {
+                "index": order.index,
+                "security_id": order.security_id,
+                "side": order.side,
+                "quantity": _dstr(order.quantity),
+                "execution_date": order.execution_date.isoformat(),
+                "currency": order.currency,
+            }
+            for order in sorted(state.pending, key=lambda item: item.index)
+        ],
+        "processed_actions": sorted(state.processed_actions),
+        "hold_weights": {key: _dstr(value) for key, value in sorted(state.hold_weights.items())},
+        "hold_initialized": state.hold_initialized,
+        "last_decision_date": (
+            state.last_decision_date.isoformat() if state.last_decision_date is not None else None
+        ),
+        "last_nav": _dstr(state.last_nav),
+        "benchmark_units": (
+            _dstr(state.benchmark_units) if state.benchmark_units is not None else None
+        ),
+        "benchmark_value_start": (
+            _dstr(state.benchmark_value_start) if state.benchmark_value_start is not None else None
+        ),
+        "next_ledger_sequence": state.next_ledger_sequence,
+        "total_fee_base": _dstr(state.total_fee_base),
+        "total_spread_base": _dstr(state.total_spread_base),
+        "total_slippage_base": _dstr(state.total_slippage_base),
+        "total_tax_base": _dstr(state.total_tax_base),
+        "total_gross_base": _dstr(state.total_gross_base),
+        "cost_by_session": {
+            key.isoformat(): _dstr(value) for key, value in sorted(state.cost_by_session.items())
+        },
+        "rejected_trade_count": state.rejected_trade_count,
+        "out_of_market_sessions": state.out_of_market_sessions,
+    }
+
+
+def _checkpoint_payload(
+    *,
+    normalized: Mapping[str, Any],
+    spec_hash: str,
+    input_hash: str,
+    next_session_index: int,
+    state: _State,
+    nav_rows: list[dict[str, Any]],
+    holding_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "experiment_id": normalized["experiment_id"],
+        "experiment_sha256": spec_hash,
+        "input_fingerprint": input_hash,
+        "engine_version": ENGINE_VERSION,
+        "next_session_index": next_session_index,
+        "state": _state_checkpoint_document(state),
+        "nav": list(nav_rows),
+        "holdings": list(holding_rows),
+    }
+
+
+def _checkpoint_document(payload: Mapping[str, Any]) -> tuple[dict[str, Any], bytes]:
+    payload_bytes = canonical_json(payload) + b"\n"
+    checkpoint_hash = sha256_bytes(payload_bytes)
+    document = {
+        "schema_version": CHECKPOINT_SCHEMA_VERSION,
+        "checkpoint_sha256": checkpoint_hash,
+        "payload": payload,
+    }
+    return document, canonical_json(document) + b"\n"
+
+
+def _write_checkpoint(path: Path, payload: Mapping[str, Any]) -> str:
+    document, content = _checkpoint_document(payload)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            try:
+                existing = path.read_bytes()
+            except OSError as error:
+                raise BacktestCheckpointError(f"cannot read existing checkpoint {path}: {error}") from error
+            if existing != content:
+                raise BacktestCheckpointError(f"immutable checkpoint path conflicts: {path}")
+        finally:
+            temporary.unlink(missing_ok=True)
+    except OSError as error:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise BacktestCheckpointError(f"cannot publish checkpoint {path}: {error}") from error
+    return document["checkpoint_sha256"]
+
+
+def _checkpoint_directory(checkpoint_root: str | Path, experiment_id: str) -> Path:
+    return Path(checkpoint_root).expanduser().resolve() / f"experiment-{experiment_id}"
+
+
+def _latest_checkpoint(directory: Path) -> tuple[Path, int] | None:
+    if not directory.exists():
+        return None
+    if not directory.is_dir():
+        raise BacktestCheckpointError(f"checkpoint path is not a directory: {directory}")
+    candidates: list[tuple[Path, int]] = []
+    for path in directory.glob("checkpoint-*.json"):
+        match = re.fullmatch(r"checkpoint-([0-9]{6})\.json", path.name)
+        if match is None:
+            raise BacktestCheckpointError(f"checkpoint directory contains an invalid file: {path.name}")
+        candidates.append((path, int(match.group(1))))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[1])
+
+
+def _restore_checkpoint(
+    path: Path,
+    *,
+    expected_experiment_id: str,
+    expected_spec_hash: str,
+    expected_input_hash: str,
+    expected_engine_version: str,
+    sessions: tuple[dict[str, Any], ...],
+    expected_index: int,
+) -> tuple[_State, list[dict[str, Any]], list[dict[str, Any]], int]:
+    document = _checkpoint_strict_json(path)
+    _checkpoint_exact_fields(document, _CHECKPOINT_FIELDS, "checkpoint")
+    if document["schema_version"] != CHECKPOINT_SCHEMA_VERSION:
+        raise BacktestCheckpointError(f"checkpoint {path} has an unsupported schema_version")
+    checkpoint_hash = document["checkpoint_sha256"]
+    if not isinstance(checkpoint_hash, str) or not re.fullmatch(r"^[0-9a-f]{64}$", checkpoint_hash):
+        raise BacktestCheckpointError(f"checkpoint {path} has an invalid checkpoint_sha256")
+    payload = document["payload"]
+    if not isinstance(payload, Mapping):
+        raise BacktestCheckpointError(f"checkpoint {path}.payload must be an object")
+    _checkpoint_exact_fields(payload, _CHECKPOINT_PAYLOAD_FIELDS, "checkpoint payload")
+    expected_document, _ = _checkpoint_document(payload)
+    if expected_document["checkpoint_sha256"] != checkpoint_hash:
+        raise BacktestCheckpointError(f"checkpoint {path} hash does not match its payload")
+    for expected_field, expected in (
+        ("experiment_id", expected_experiment_id),
+        ("experiment_sha256", expected_spec_hash),
+        ("input_fingerprint", expected_input_hash),
+        ("engine_version", expected_engine_version),
+    ):
+        if payload[expected_field] != expected:
+            raise BacktestCheckpointError(
+                f"checkpoint {path} {expected_field} does not match the current run"
+            )
+    next_index = payload["next_session_index"]
+    if not isinstance(next_index, int) or isinstance(next_index, bool) or next_index != expected_index:
+        raise BacktestCheckpointError(f"checkpoint {path} has an invalid next_session_index")
+    if next_index < 1 or next_index > len(sessions):
+        raise BacktestCheckpointError(f"checkpoint {path} next_session_index is outside the session range")
+
+    state_document = payload["state"]
+    if not isinstance(state_document, Mapping):
+        raise BacktestCheckpointError(f"checkpoint {path}.payload.state must be an object")
+    _checkpoint_exact_fields(state_document, _CHECKPOINT_STATE_FIELDS, "checkpoint state")
+    cash = _checkpoint_decimal_map(state_document["cash"], field="checkpoint state.cash")
+    quantities = _checkpoint_decimal_map(state_document["quantities"], field="checkpoint state.quantities")
+    hold_weights = _checkpoint_decimal_map(state_document["hold_weights"], field="checkpoint state.hold_weights")
+    security_currency = state_document["security_currency"]
+    if not isinstance(security_currency, Mapping) or any(
+        not isinstance(key, str) or not isinstance(value, str) or not value
+        for key, value in security_currency.items()
+    ):
+        raise BacktestCheckpointError("checkpoint state.security_currency must map strings to currencies")
+    processed_actions = _checkpoint_list(state_document["processed_actions"], field="checkpoint state.processed_actions")
+    if any(not isinstance(item, str) or not item for item in processed_actions):
+        raise BacktestCheckpointError("checkpoint state.processed_actions contains an invalid action")
+    if len(set(processed_actions)) != len(processed_actions):
+        raise BacktestCheckpointError("checkpoint state.processed_actions contains duplicates")
+    pending_document = _checkpoint_list(state_document["pending"], field="checkpoint state.pending")
+    pending: list[_PendingOrder] = []
+    for index, raw in enumerate(pending_document):
+        if not isinstance(raw, Mapping):
+            raise BacktestCheckpointError(f"checkpoint state.pending[{index}] must be an object")
+        _checkpoint_exact_fields(raw, _CHECKPOINT_PENDING_FIELDS, f"checkpoint state.pending[{index}]")
+        order_index = raw["index"]
+        if not isinstance(order_index, int) or isinstance(order_index, bool) or order_index < 0:
+            raise BacktestCheckpointError(f"checkpoint state.pending[{index}].index is invalid")
+        if raw["side"] not in {"buy", "sell"}:
+            raise BacktestCheckpointError(f"checkpoint state.pending[{index}].side is invalid")
+        try:
+            execution_date = date.fromisoformat(raw["execution_date"])
+        except (TypeError, ValueError) as error:
+            raise BacktestCheckpointError(f"checkpoint state.pending[{index}].execution_date is invalid") from error
+        pending.append(
+            _PendingOrder(
+                order_index,
+                raw["security_id"],
+                raw["side"],
+                _checkpoint_decimal(raw["quantity"], field=f"checkpoint state.pending[{index}].quantity"),
+                execution_date,
+                raw["currency"],
+            )
+        )
+    pending.sort(key=lambda item: item.index)
+    orders = _checkpoint_list(state_document["orders"], field="checkpoint state.orders")
+    fills = _checkpoint_list(state_document["fills"], field="checkpoint state.fills")
+    ledger = _checkpoint_list(state_document["ledger"], field="checkpoint state.ledger")
+    for row_field, rows in (("orders", orders), ("fills", fills), ("ledger", ledger)):
+        if any(not isinstance(row, Mapping) for row in rows):
+            raise BacktestCheckpointError(f"checkpoint state.{row_field} contains a non-object row")
+    if any(order.index >= len(orders) for order in pending):
+        raise BacktestCheckpointError("checkpoint state.pending references an unknown order")
+    last_decision_value = state_document["last_decision_date"]
+    if last_decision_value is None:
+        last_decision_date = None
+    else:
+        try:
+            last_decision_date = date.fromisoformat(last_decision_value)
+        except (TypeError, ValueError) as error:
+            raise BacktestCheckpointError("checkpoint state.last_decision_date is invalid") from error
+    hold_initialized = state_document["hold_initialized"]
+    if not isinstance(hold_initialized, bool):
+        raise BacktestCheckpointError("checkpoint state.hold_initialized must be boolean")
+    next_ledger_sequence = state_document["next_ledger_sequence"]
+    if not isinstance(next_ledger_sequence, int) or isinstance(next_ledger_sequence, bool) or next_ledger_sequence < 1:
+        raise BacktestCheckpointError("checkpoint state.next_ledger_sequence is invalid")
+    for count_field in ("rejected_trade_count", "out_of_market_sessions"):
+        value = state_document[count_field]
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise BacktestCheckpointError(f"checkpoint state.{count_field} is invalid")
+    cost_by_session_document = state_document["cost_by_session"]
+    if not isinstance(cost_by_session_document, Mapping):
+        raise BacktestCheckpointError("checkpoint state.cost_by_session must be an object")
+    cost_by_session: dict[date, Decimal] = {}
+    for key, value in cost_by_session_document.items():
+        try:
+            parsed_date = date.fromisoformat(key)
+        except (TypeError, ValueError) as error:
+            raise BacktestCheckpointError("checkpoint state.cost_by_session has an invalid date") from error
+        cost_by_session[parsed_date] = _checkpoint_decimal(value, field=f"checkpoint state.cost_by_session.{key}")
+
+    def optional_decimal(field: str) -> Decimal | None:
+        value = state_document[field]
+        if value is None:
+            return None
+        return _checkpoint_decimal(value, field=f"checkpoint state.{field}")
+
+    nav_rows = _checkpoint_list(payload["nav"], field="checkpoint payload.nav")
+    holding_rows = _checkpoint_list(payload["holdings"], field="checkpoint payload.holdings")
+    if len(nav_rows) != next_index:
+        raise BacktestCheckpointError(f"checkpoint {path} NAV row count does not match next_session_index")
+    for index, row in enumerate(nav_rows):
+        if not isinstance(row, Mapping) or row.get("session_date") != sessions[index]["session_date"].isoformat():
+            raise BacktestCheckpointError(f"checkpoint {path} NAV rows are not session ordered")
+    if not nav_rows:
+        raise BacktestCheckpointError(f"checkpoint {path} has no NAV rows")
+    if _checkpoint_decimal(nav_rows[-1].get("nav"), field="checkpoint payload.nav[-1].nav") != _checkpoint_decimal(
+        state_document["last_nav"], field="checkpoint state.last_nav"
+    ):
+        raise BacktestCheckpointError(f"checkpoint {path} last_nav does not match the final NAV row")
+    ledger_sequences = [row.get("sequence") for row in ledger]
+    if any(not isinstance(sequence, int) or isinstance(sequence, bool) for sequence in ledger_sequences):
+        raise BacktestCheckpointError("checkpoint state.ledger contains an invalid sequence")
+    if ledger_sequences and next_ledger_sequence != max(ledger_sequences) + 1:
+        raise BacktestCheckpointError("checkpoint state.next_ledger_sequence does not follow the ledger")
+
+    state = _State(cash=cash)
+    state.quantities = defaultdict(Decimal, quantities)
+    state.security_currency = dict(security_currency)
+    state.orders = [dict(row) for row in orders]
+    state.fills = [dict(row) for row in fills]
+    state.ledger = [dict(row) for row in ledger]
+    state.pending = pending
+    state.processed_actions = set(processed_actions)
+    state.hold_weights = hold_weights
+    state.hold_initialized = hold_initialized
+    state.last_decision_date = last_decision_date
+    state.last_nav = _checkpoint_decimal(state_document["last_nav"], field="checkpoint state.last_nav")
+    state.benchmark_units = optional_decimal("benchmark_units")
+    state.benchmark_value_start = optional_decimal("benchmark_value_start")
+    state.next_ledger_sequence = next_ledger_sequence
+    state.total_fee_base = _checkpoint_decimal(state_document["total_fee_base"], field="checkpoint state.total_fee_base")
+    state.total_spread_base = _checkpoint_decimal(state_document["total_spread_base"], field="checkpoint state.total_spread_base")
+    state.total_slippage_base = _checkpoint_decimal(
+        state_document["total_slippage_base"], field="checkpoint state.total_slippage_base"
+    )
+    state.total_tax_base = _checkpoint_decimal(state_document["total_tax_base"], field="checkpoint state.total_tax_base")
+    state.total_gross_base = _checkpoint_decimal(
+        state_document["total_gross_base"], field="checkpoint state.total_gross_base"
+    )
+    state.cost_by_session = defaultdict(Decimal, cost_by_session)
+    state.rejected_trade_count = state_document["rejected_trade_count"]
+    state.out_of_market_sessions = state_document["out_of_market_sessions"]
+    return state, [dict(row) for row in nav_rows], [dict(row) for row in holding_rows], next_index
 
 
 def _d(value: Decimal | str | int) -> Decimal:
@@ -253,7 +678,9 @@ def _active_members(
     for security_id in spec["universe"]["security_ids"]:
         state = _membership_state(inputs, security_id, session["session_date"], session["close_at"])
         if state is None:
-            continue
+            raise BacktestMissingDataError(
+                f"historical membership is unavailable for {security_id} on {session['session_date']}"
+            )
         if state and _price_row(inputs, security_id, session["session_date"], session["close_at"]):
             active.append(security_id)
     return tuple(sorted(active))
@@ -709,7 +1136,10 @@ def _execute_orders(
         spread_base = _convert(inputs, spread, order.currency, base_currency, execution_at)
         slippage_base = _convert(inputs, slippage, order.currency, base_currency, execution_at)
         tax_base = _convert(inputs, tax, order.currency, base_currency, execution_at)
-        fill_id = _uuid(_FILL_NAMESPACE, f"{state.orders[order.index]['order_id']}:{quantity}:{fill_price}")
+        fill_id = _uuid(
+            _FILL_NAMESPACE,
+            f"{state.orders[order.index]['order_id']}:{_dstr(quantity)}:{_dstr(fill_price)}",
+        )
         state.fills.append(
             {
                 "fill_id": fill_id,
@@ -1009,94 +1439,171 @@ def _metrics(spec: Mapping[str, Any], state: _State, nav_rows: tuple[dict[str, A
     }
 
 
-def simulate_backtest(spec: Mapping[str, Any], *, data_root: str | Any) -> BacktestRun:
-    """Run one deterministic daily experiment from hash-pinned local inputs."""
+def simulate_backtest(
+    spec: Mapping[str, Any],
+    *,
+    data_root: str | Path,
+    checkpoint_root: str | Path | None = None,
+    resume: bool = False,
+    stop_after_session: int | None = None,
+) -> BacktestRun:
+    """Run one deterministic daily experiment from hash-pinned local inputs.
+
+    When ``checkpoint_root`` is supplied, the engine appends one authenticated
+    checkpoint per completed session. ``resume=True`` restores the latest
+    checkpoint and continues from its next session without duplicating ledger,
+    order, fill, or valuation rows.
+    """
 
     normalized = validate_experiment_spec(spec)
+    spec_hash = experiment_sha256(normalized)
+    input_hash = input_fingerprint(normalized)
     inputs = load_backtest_inputs(normalized, data_root=data_root)
     sessions = _calendar_sessions(normalized, inputs)
-    base_currency = normalized["accounting_policy"]["base_currency"]
-    state = _State(cash={base_currency: _d(normalized["accounting_policy"]["initial_cash"])})
-    first_session = sessions[0]
-    _ledger(
-        state,
-        session_date=first_session["session_date"],
-        event_at=first_session["open_at"],
-        event_type="initial_cash",
-        currency=base_currency,
-        amount_local=state.cash[base_currency],
-        amount_base=state.cash[base_currency],
-        note="initial cash",
-    )
-    nav_rows: list[dict[str, Any]] = []
-    holding_rows: list[dict[str, Any]] = []
+    if stop_after_session is not None:
+        if (
+            not isinstance(stop_after_session, int)
+            or isinstance(stop_after_session, bool)
+            or stop_after_session < 1
+            or stop_after_session >= len(sessions)
+        ):
+            raise BacktestCheckpointError(
+                "stop_after_session must be a positive session count before the final session"
+            )
+        if resume:
+            raise BacktestCheckpointError("stop_after_session cannot be combined with resume")
+    if resume and checkpoint_root is None:
+        raise BacktestCheckpointError("resume requires checkpoint_root")
+
+    checkpoint_directory: Path | None = None
+    checkpoint_entry: tuple[Path, int] | None = None
+    if checkpoint_root is not None:
+        checkpoint_directory = _checkpoint_directory(checkpoint_root, normalized["experiment_id"])
+        checkpoint_entry = _latest_checkpoint(checkpoint_directory)
+        if not resume and checkpoint_entry is not None:
+            raise BacktestCheckpointError(
+                f"checkpoint already exists for experiment {normalized['experiment_id']}; use resume"
+            )
+
+    if resume:
+        assert checkpoint_directory is not None
+        if checkpoint_entry is None:
+            raise BacktestCheckpointError(
+                f"no checkpoint exists for experiment {normalized['experiment_id']}"
+            )
+        checkpoint_path, checkpoint_index = checkpoint_entry
+        state, nav_rows, holding_rows, next_session_index = _restore_checkpoint(
+            checkpoint_path,
+            expected_experiment_id=normalized["experiment_id"],
+            expected_spec_hash=spec_hash,
+            expected_input_hash=input_hash,
+            expected_engine_version=ENGINE_VERSION,
+            sessions=sessions,
+            expected_index=checkpoint_index,
+        )
+    else:
+        base_currency = normalized["accounting_policy"]["base_currency"]
+        state = _State(cash={base_currency: _d(normalized["accounting_policy"]["initial_cash"])})
+        first_session = sessions[0]
+        _ledger(
+            state,
+            session_date=first_session["session_date"],
+            event_at=first_session["open_at"],
+            event_type="initial_cash",
+            currency=base_currency,
+            amount_local=state.cash[base_currency],
+            amount_base=state.cash[base_currency],
+            note="initial cash",
+        )
+        nav_rows = []
+        holding_rows = []
+        next_session_index = 0
+
     session_dates = [session["session_date"] for session in sessions]
-    for index, session in enumerate(sessions):
+    for index in range(next_session_index, len(sessions)):
+        session = sessions[index]
         _apply_actions(normalized, inputs, state, session)
         _execute_orders(normalized, inputs, state, session)
         nav_row, holdings = _mark(normalized, inputs, state, session)
         nav_rows.append(nav_row)
         holding_rows.extend(holdings)
-        if index + 1 >= len(sessions):
-            continue
-        targets = _target_weights(normalized, inputs, sessions, index, state)
-        execution_date = session_dates[index + 1]
-        candidates = set(targets) | {security_id for security_id, quantity in state.quantities.items() if quantity > 0}
-        for ordinal, security_id in enumerate(sorted(candidates)):
-            target_weight = targets.get(security_id, _ZERO)
-            member_state = _membership_state(inputs, security_id, session["session_date"], session["close_at"])
-            if member_state is None and state.quantities.get(security_id, _ZERO) > 0:
-                raise BacktestMissingDataError(
-                    f"historical membership is unavailable for held security {security_id} on {session['session_date']}"
-                )
-            quantity_side = _order_quantity(normalized, inputs, state, security_id, target_weight, session)
-            if quantity_side is None:
-                continue
-            quantity, side = quantity_side
-            row = _price_row(inputs, security_id, session["session_date"], session["close_at"])
-            assert row is not None
-            order_id = _uuid(
-                _ORDER_NAMESPACE,
-                f"{normalized['experiment_id']}:{session['session_date'].isoformat()}:{security_id}:{ordinal}",
-            )
-            reason = "membership_exit" if target_weight == 0 and member_state is False else normalized["strategy"]["name"]
-            order = {
-                "order_id": order_id,
-                "decision_session": session["session_date"].isoformat(),
-                "execution_session": execution_date.isoformat(),
-                "security_id": security_id,
-                "side": side,
-                "quantity": _dstr(quantity),
-                "reference_price": _dstr(row["close"]),
-                "currency": row["currency"],
-                "target_weight": _dstr(target_weight),
-                "reason": reason,
-                "status": "proposed",
+        if index + 1 < len(sessions):
+            targets = _target_weights(normalized, inputs, sessions, index, state)
+            execution_date = session_dates[index + 1]
+            candidates = set(targets) | {
+                security_id for security_id, quantity in state.quantities.items() if quantity > 0
             }
-            order_index = len(state.orders)
-            state.orders.append(order)
-            _ledger(
-                state,
-                session_date=session["session_date"],
-                event_at=session["close_at"],
-                event_type="order",
-                currency=row["currency"],
-                amount_local=_ZERO,
-                amount_base=_ZERO,
-                note=f"{side} order {order_id}",
-                security_id=security_id,
-                quantity=quantity if side == "buy" else -quantity,
-                price=row["close"],
+            for ordinal, security_id in enumerate(sorted(candidates)):
+                target_weight = targets.get(security_id, _ZERO)
+                member_state = _membership_state(inputs, security_id, session["session_date"], session["close_at"])
+                if member_state is None and state.quantities.get(security_id, _ZERO) > 0:
+                    raise BacktestMissingDataError(
+                        f"historical membership is unavailable for held security {security_id} on {session['session_date']}"
+                    )
+                quantity_side = _order_quantity(normalized, inputs, state, security_id, target_weight, session)
+                if quantity_side is None:
+                    continue
+                quantity, side = quantity_side
+                row = _price_row(inputs, security_id, session["session_date"], session["close_at"])
+                assert row is not None
+                order_id = _uuid(
+                    _ORDER_NAMESPACE,
+                    f"{normalized['experiment_id']}:{session['session_date'].isoformat()}:{security_id}:{ordinal}",
+                )
+                reason = "membership_exit" if target_weight == 0 and member_state is False else normalized["strategy"]["name"]
+                order = {
+                    "order_id": order_id,
+                    "decision_session": session["session_date"].isoformat(),
+                    "execution_session": execution_date.isoformat(),
+                    "security_id": security_id,
+                    "side": side,
+                    "quantity": _dstr(quantity),
+                    "reference_price": _dstr(row["close"]),
+                    "currency": row["currency"],
+                    "target_weight": _dstr(target_weight),
+                    "reason": reason,
+                    "status": "proposed",
+                }
+                order_index = len(state.orders)
+                state.orders.append(order)
+                _ledger(
+                    state,
+                    session_date=session["session_date"],
+                    event_at=session["close_at"],
+                    event_type="order",
+                    currency=row["currency"],
+                    amount_local=_ZERO,
+                    amount_base=_ZERO,
+                    note=f"{side} order {order_id}",
+                    security_id=security_id,
+                    quantity=quantity if side == "buy" else -quantity,
+                    price=row["close"],
+                )
+                state.pending.append(
+                    _PendingOrder(order_index, security_id, side, quantity, execution_date, row["currency"])
+                )
+        if checkpoint_directory is not None:
+            checkpoint_path = checkpoint_directory / f"checkpoint-{index + 1:06d}.json"
+            _write_checkpoint(
+                checkpoint_path,
+                _checkpoint_payload(
+                    normalized=normalized,
+                    spec_hash=spec_hash,
+                    input_hash=input_hash,
+                    next_session_index=index + 1,
+                    state=state,
+                    nav_rows=nav_rows,
+                    holding_rows=holding_rows,
+                ),
             )
-            state.pending.append(
-                _PendingOrder(order_index, security_id, side, quantity, execution_date, row["currency"])
-            )
+            if stop_after_session == index + 1:
+                raise BacktestInterruptedError(
+                    f"interrupted after session {session['session_date']}; checkpoint={checkpoint_path}"
+                )
     if state.pending:
         raise BacktestError("pending orders remain after the final executable session")
     nav_tuple = tuple(nav_rows)
     metrics = _metrics(normalized, state, nav_tuple)
-    spec_hash = experiment_sha256(normalized)
-    input_hash = input_fingerprint(normalized)
     result_id = _uuid(_RESULT_NAMESPACE, f"{normalized['experiment_id']}:{spec_hash}:{input_hash}:{ENGINE_VERSION}")
     summary = {
         "session_count": len(nav_rows),
@@ -1134,9 +1641,12 @@ def simulate_backtest(spec: Mapping[str, Any], *, data_root: str | Any) -> Backt
 __all__ = [
     "ANNUALIZATION_FACTOR",
     "BACKTEST_SCHEMA_VERSION",
+    "CHECKPOINT_SCHEMA_VERSION",
     "METRICS_VERSION",
     "BacktestAccountingError",
+    "BacktestCheckpointError",
     "BacktestError",
+    "BacktestInterruptedError",
     "BacktestMissingDataError",
     "BacktestRun",
     "simulate_backtest",

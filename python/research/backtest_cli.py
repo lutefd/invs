@@ -27,6 +27,9 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--spec", required=True)
     run.add_argument("--data-root", required=True)
     run.add_argument("--results-root", required=True)
+    run.add_argument("--checkpoint-root")
+    run.add_argument("--resume", action="store_true")
+    run.add_argument("--stop-after-session", type=int)
     validate = commands.add_parser("validate", help="validate one published result")
     validate.add_argument("--manifest", required=True)
     compare = commands.add_parser("compare", help="compare published results without mutation")
@@ -36,7 +39,13 @@ def _parser() -> argparse.ArgumentParser:
 
 def _run(args: argparse.Namespace) -> dict[str, object]:
     validated = read_experiment_spec(Path(args.spec))
-    run = simulate_backtest(validated.spec, data_root=args.data_root)
+    run = simulate_backtest(
+        validated.spec,
+        data_root=args.data_root,
+        checkpoint_root=args.checkpoint_root,
+        resume=args.resume,
+        stop_after_session=args.stop_after_session,
+    )
     manifest_path = publish_backtest_result(run, results_root=args.results_root)
     result = read_backtest_result(manifest_path)
     return {

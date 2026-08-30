@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/backtest-checkpoint.schema.json",
+  "title": "Append-only backtest recovery checkpoint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "checkpoint_sha256", "payload"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "checkpoint_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "payload": { "$ref": "#/$defs/payload" }
+  },
+  "$defs": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "experiment_id", "experiment_sha256", "input_fingerprint", "engine_version",
+        "next_session_index", "state", "nav", "holdings"
+      ],
+      "properties": {
+        "experiment_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "experiment_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "engine_version": { "type": "string", "minLength": 1 },
+        "next_session_index": { "type": "integer", "minimum": 1 },
+        "state": { "$ref": "#/$defs/state" },
+        "nav": { "type": "array", "items": { "type": "object" } },
+        "holdings": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "decimalMap": {
+      "type": "object",
+      "additionalProperties": { "$ref": "common.schema.json#/$defs/decimal" }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cash", "quantities", "security_currency", "orders", "fills", "ledger", "pending",
+        "processed_actions", "hold_weights", "hold_initialized", "last_decision_date", "last_nav",
+        "benchmark_units", "benchmark_value_start", "next_ledger_sequence", "total_fee_base",
+        "total_spread_base", "total_slippage_base", "total_tax_base", "total_gross_base",
+        "cost_by_session", "rejected_trade_count", "out_of_market_sessions"
+      ],
+      "properties": {
+        "cash": { "$ref": "#/$defs/decimalMap" },
+        "quantities": { "$ref": "#/$defs/decimalMap" },
+        "security_currency": { "type": "object", "additionalProperties": { "type": "string" } },
+        "orders": { "type": "array", "items": { "type": "object" } },
+        "fills": { "type": "array", "items": { "type": "object" } },
+        "ledger": { "type": "array", "items": { "type": "object" } },
+        "pending": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["index", "security_id", "side", "quantity", "execution_date", "currency"],
+            "properties": {
+              "index": { "type": "integer", "minimum": 0 },
+              "security_id": { "type": "string", "minLength": 1 },
+              "side": { "enum": ["buy", "sell"] },
+              "quantity": { "$ref": "common.schema.json#/$defs/decimal" },
+              "execution_date": { "$ref": "common.schema.json#/$defs/date" },
+              "currency": { "$ref": "common.schema.json#/$defs/currency" }
+            }
+          }
+        },
+        "processed_actions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "hold_weights": { "$ref": "#/$defs/decimalMap" },
+        "hold_initialized": { "type": "boolean" },
+        "last_decision_date": { "anyOf": [{ "$ref": "common.schema.json#/$defs/date" }, { "type": "null" }] },
+        "last_nav": { "$ref": "common.schema.json#/$defs/decimal" },
+        "benchmark_units": { "anyOf": [{ "$ref": "common.schema.json#/$defs/decimal" }, { "type": "null" }] },
+        "benchmark_value_start": { "anyOf": [{ "$ref": "common.schema.json#/$defs/decimal" }, { "type": "null" }] },
+        "next_ledger_sequence": { "type": "integer", "minimum": 1 },
+        "total_fee_base": { "$ref": "common.schema.json#/$defs/decimal" },
+        "total_spread_base": { "$ref": "common.schema.json#/$defs/decimal" },
+        "total_slippage_base": { "$ref": "common.schema.json#/$defs/decimal" },
+        "total_tax_base": { "$ref": "common.schema.json#/$defs/decimal" },
+        "total_gross_base": { "$ref": "common.schema.json#/$defs/decimal" },
+        "cost_by_session": { "$ref": "#/$defs/decimalMap" },
+        "rejected_trade_count": { "type": "integer", "minimum": 0 },
+        "out_of_market_sessions": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
