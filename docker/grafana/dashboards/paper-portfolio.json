@@ -1,0 +1,54 @@
+{
+  "annotations": {"list": []},
+  "description": "Latest paper-account catalog status and append-only event monitoring. PostgreSQL is an operator projection; the local paper ledger remains the rebuildable source of truth.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "One row per registered paper account. A latest event is shown when the local ledger has published an event envelope.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": true, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "name"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT account_id::text AS account_id, name, strategy_name, strategy_version, status, approval_mode, last_event_sequence, last_event_session, last_event_type, last_nav_base::double precision AS nav_base, last_cash_base::double precision AS cash_base, last_positions_value_base::double precision AS positions_value_base, last_event_at FROM paper_account_status ORDER BY name", "refId": "A"}],
+      "title": "Paper account status",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Valuation events emitted by the paper event envelope. Missing points mean no valuation has been cataloged; they are not filled with synthetic values.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 10},
+      "id": 2,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "time_series", "rawQuery": true, "rawSql": "SELECT event_at AS time, account_id::text AS metric, nav_base::double precision AS value FROM paper_account_events WHERE event_type = 'valuation' AND $__timeFilter(event_at) ORDER BY time", "refId": "A"}],
+      "title": "Paper NAV by account",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Event-type counts make approvals, rejections, halts, fills, corporate actions, and reconciliation activity visible without turning the dashboard into the full replay ledger.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 10},
+      "id": 3,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": true, "displayName": "events"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT account_id::text AS account_id, event_type, count(*)::double precision AS events, max(event_at) AS last_event_at FROM paper_account_events GROUP BY account_id, event_type ORDER BY events DESC, account_id, event_type", "refId": "A"}],
+      "title": "Paper event mix",
+      "type": "table"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "tags": ["research", "paper-trading", "portfolio", "append-only"],
+  "templating": {"list": []},
+  "time": {"from": "now-30d", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Paper portfolio",
+  "uid": "paper-portfolio",
+  "version": 1
+}

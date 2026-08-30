@@ -61,6 +61,24 @@ def test_pipeline_dashboard_includes_macro_snapshot_state() -> None:
     assert "source disabled" in sql
 
 
+def test_paper_dashboard_exposes_catalog_status_and_event_monitoring() -> None:
+    paper = DASHBOARD.parent / "paper-portfolio.json"
+    document = load_dashboard(paper)
+    queries = dashboard_queries(document)
+    sql = "\n".join(queries)
+
+    assert len(queries) == 3
+    assert "paper_account_status" in sql
+    assert "paper_account_events" in sql
+    assert "event_type = 'valuation'" in sql
+    assert "$__timeFilter(event_at)" in "\n".join(
+        target.get("rawSql", "")
+        for panel in document["panels"]
+        for target in panel.get("targets", [])
+    )
+    assert "local paper ledger" in document["description"]
+
+
 @pytest.mark.parametrize(
     ("payload", "key"),
     [
