@@ -92,6 +92,8 @@ criterion.
 - `010cfc0` — preflight daily-cycle report and log destinations before execution.
 - `246702d` — reject release evidence and workflow output paths that resolve
   outside the repository through symlinked ancestors.
+- `c97a8eb` — add the receipt-time Nasdaq Trader/XNAS calendar adapter with
+  source URL admission, raw retention, catalog wiring, and session publication tests.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the

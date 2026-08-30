@@ -368,14 +368,17 @@ transport or production access dependency was added. See the
 [listed-company evidence report](acceptance/2026-08-23-b3-corporate-actions-evidence.md),
 [UP2DATA sample report](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md),
 and [corporate-action publication report](acceptance/2026-08-24-corporate-action-publication.md).
-The official B3 and NYSE calendar/hour pages now have raw-first adapters and a
-canonical calendar compiler/publisher. A live bounded acceptance published one
-append-only manifest plus an explicit row for every covered date: five BVMF sessions
-for 2026-08-24 through 2026-08-28 and all 365 XNYS dates for 2026. Pinned
+The official B3, Nasdaq Trader, and NYSE calendar/hour pages now have raw-first
+adapters and a canonical calendar compiler/publisher. A live bounded acceptance
+published one append-only manifest plus an explicit row for every covered date: five
+BVMF sessions for 2026-08-24 through 2026-08-28 and all 365 XNYS dates for 2026.
+The new `c97a8eb` boundary adds a source-wired XNAS current/reference adapter and a
+live parser check against the official Nasdaq Trader holiday page; it does not yet
+claim a live canonical XNAS publication or a genuine paper session. Pinned
 after-close lookups crossed a normal BVMF close and the XNYS Thanksgiving closure.
-This remains current/reference evidence available only from local receipt time;
-neither source exposes the historical publication/correction chronology required
-to close the v0.2 calendar gate. See the
+These current/reference versions are available only from local receipt time; the
+pages expose no historical publication/correction chronology required to close the
+v0.2 calendar gate. See the
 [source evidence report](acceptance/2026-08-23-b3-market-calendar-evidence.md) and
 [canonical publication report](acceptance/2026-08-23-exchange-calendar-publication.md).
 
@@ -451,6 +454,7 @@ to close the v0.2 calendar gate. See the
 - B3 UP2DATA sample acceptance: [source-native lifecycle evidence](acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md); production access remains blocked, while the later bounded path publishes only installation-replay revisions with unsupported states
 - Latest B3 market-calendar evidence boundary: `6f61a84` (`feat(provider): parse B3 market-calendar evidence`)
 - Latest exchange-calendar provider boundary: `acd8eec` (`feat(provider): parse official exchange calendars`)
+- Latest current XNAS calendar adapter boundary: `c97a8eb` (`feat(collector): add receipt-time Nasdaq calendar`)
 - Latest exchange-calendar publication boundary: `77fee79` (`feat(data): publish versioned exchange calendars`)
 - Latest historical-calendar provider boundary: `beba0a1` (`feat(provider): verify historical calendar artifacts`)
 - Latest historical-calendar publication boundary: `173023e` (`feat(data): publish historical calendar artifacts`)
@@ -1352,9 +1356,10 @@ The following are not accidental omissions:
 - No fundamental or filing latest-only dashboard projection.
 - Corporate-action publication and adjustment artifacts are accepted for one exact
   SEC split plus a B3 installation-replay revision family. This is not a broad action
-  archive or production B3 delivery claim. Exchange calendars now have both bounded
-  BVMF/XNYS current/reference publication and accepted exact-artifact XNAS/BVMF
-  historical chronology; dates outside those explicit versions remain unavailable.
+  archive or production B3 delivery claim. Exchange calendars have bounded
+  BVMF/XNYS current/reference publication plus a source-wired XNAS current/reference
+  adapter, and accepted exact-artifact XNAS/BVMF historical chronology; dates outside
+  those explicit versions remain unavailable.
 - BCB PTAX closing USD/BRL is accepted as the first canonical FX dataset. Five live
   Aug 10-14 bulletins, exact before/at availability selection, content-addressed
   Parquet, exact-key replay, and pinned direct/inverse sell-side conversions are

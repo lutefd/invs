@@ -131,6 +131,7 @@ make ingest SOURCE=alfred
 make ingest SOURCE=bcb
 make ingest SOURCE=b3
 make ingest SOURCE=b3-calendar
+make ingest SOURCE=nasdaq-calendar
 make ingest SOURCE=nyse
 make ingest SOURCE=cvm
 make ingest SOURCE=all
@@ -384,12 +385,12 @@ listing dates, delistings, or corporate actions. See the [B3 acceptance report](
 make ingest SOURCE=b3 RUN_KEY=b3-instruments-2026-08-21
 ```
 
-### Versioned B3 and NYSE calendars
+### Versioned B3, Nasdaq, and NYSE calendars
 
 Calendar collection publishes an append-only manifest plus one explicit session
 row for every local date in the requested coverage. Closed weekends and holidays
-are rows, not gaps. Configure a deliberately bounded B3 interval and an explicit
-NYSE year:
+are rows, not gaps. Configure a deliberately bounded B3 interval and explicit
+Nasdaq/NYSE years:
 
 ```yaml
 providers:
@@ -402,6 +403,11 @@ providers:
       year: 2026
       coverage_start: 2026-08-24
       coverage_end: 2026-08-28
+  nasdaq_calendar:
+    enabled: true
+    year: 2026
+    coverage_start: 2026-01-01
+    coverage_end: 2026-12-31
   nyse:
     enabled: true
     year: 2026
@@ -409,12 +415,13 @@ providers:
     coverage_end: 2026-12-31
 ```
 
-Run B3 instrument and calendar collection together, the B3 calendar alone, or the
-NYSE calendar alone:
+Run B3 instrument and calendar collection together, or collect the B3, Nasdaq, and
+NYSE calendars independently:
 
 ```sh
 make ingest SOURCE=b3 RUN_KEY=b3-snapshot-and-calendar-2026-08-24
 make ingest SOURCE=b3-calendar RUN_KEY=b3-calendar-2026-08-24
+make ingest SOURCE=nasdaq-calendar RUN_KEY=nasdaq-calendar-2026
 make ingest SOURCE=nyse RUN_KEY=nyse-calendar-2026
 ```
 
@@ -422,13 +429,17 @@ make ingest SOURCE=nyse RUN_KEY=nyse-calendar-2026
 scope, so it cannot collide with a B3 instrument run using the same operator key.
 Exact-key retries return the successful existing run.
 
-The compiler uses `America/Sao_Paulo` for BVMF and `America/New_York` for XNYS,
+The compiler uses `America/Sao_Paulo` for BVMF and `America/New_York` for XNAS/XNYS,
 applies source-declared closures and special hours, and fingerprints the complete
-covered row set. The official HTML pages are current/reference evidence without an
-exposed historical publication or correction sequence. Every resulting version is
-therefore eligible only at its local raw receipt time; do not use it to simulate an
-earlier decision. Keep B3 coverage narrow unless retained official evidence supports
-the regular-hours effective interval. See the
+covered row set. The current Nasdaq adapter reads the official
+[Nasdaq Trader holiday schedule](https://www.nasdaqtrader.com/Trader.aspx?id=Calendar),
+retains the exact HTML response, and uses the stable 09:30–16:00 ET Nasdaq equity
+session because that page publishes holiday exceptions rather than regular-session
+hours. The B3, Nasdaq, and NYSE current/reference pages expose no historical
+publication or correction sequence. Every resulting version is therefore eligible
+only at its local raw receipt time; do not use it to simulate an earlier decision.
+Keep B3 coverage narrow unless retained official evidence supports the regular-hours
+effective interval. See the
 [exchange-calendar publication report](acceptance/2026-08-23-exchange-calendar-publication.md)
 for the accepted boundary.
 

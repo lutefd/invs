@@ -94,11 +94,12 @@ admission publishes its sample revisions only for installation replay and leaves
 unknown states unsupported. See the
 [UP2DATA sample report](../acceptance/2026-08-23-b3-up2data-corporate-actions-evidence.md).
 The B3 2026 market-calendar evidence parser in `6f61a84` now feeds official B3
-hours alongside new NYSE calendar/hours parsing (`acd8eec`) and deterministic
-canonical publication (`77fee79`). Live acceptance published five bounded BVMF
-sessions and all 365 XNYS dates for 2026, then proved pinned after-close
-next-session selection across an XNYS holiday. These are current/reference versions
-eligible only from receipt time, not historically admitted calendars. See the
+hours alongside NYSE calendar/hours parsing (`acd8eec`), the receipt-time XNAS
+adapter (`c97a8eb`), and deterministic canonical publication (`77fee79`). Live
+acceptance published five bounded BVMF sessions and all 365 XNYS dates for 2026,
+then proved pinned after-close next-session selection across an XNYS holiday. These
+current/reference versions are eligible only from receipt time, not historically
+admitted calendars. See the
 [B3 source report](../acceptance/2026-08-23-b3-market-calendar-evidence.md) and
 [exchange-calendar publication report](../acceptance/2026-08-23-exchange-calendar-publication.md).
 The exact-artifact historical follow-up is accepted in the
