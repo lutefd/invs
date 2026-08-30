@@ -1487,6 +1487,10 @@ The complete local operator path is specification-driven so every derived artifa
 has an explicit input and recovery boundary. Start from the strict contract in
 `schemas/daily-cycle.schema.json`, then run:
 
+The current daily-cycle and durable daily-cycle-report contract revision is `1.1.0`.
+The report records the specification's bound `decision_at` so a resume can be
+checked against the same information cutoff.
+
 ```sh
 make daily-cycle CYCLE_SPEC=/absolute/path/to/daily-cycle.json
 ```

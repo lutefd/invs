@@ -20,6 +20,9 @@ protected binding fails validation.
 Do not hand-edit the manifest to accept a mixed release; update it only as part of a
 reviewed release commit with new evidence.
 
+The daily-cycle and durable daily-cycle-report contracts are currently revision
+`1.1.0`; their schema hashes are pinned in the compatibility manifest.
+
 ## Forward upgrade
 
 Stop collection, feature, paper, and backup writers before changing the checkout.

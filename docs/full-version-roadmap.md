@@ -1612,10 +1612,12 @@ data tree, and `010cfc0` preflights report and log destinations before execution
 cutoff identities on resume, bringing the full gate to 223 Python tests.
 The release and workflow entry points also reject evidence or output paths that
 escape through symlinked ancestors, covered by `246702d`.
+`2658490` versions the daily-cycle and durable report schemas as `1.1.0` and
+refreshes the compatibility manifest hashes.
 
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 passing report set was pinned in `67c59ad`, and the latest runtime reports were
-rerun from `713e8a0`. The aggregate paper report output was made safe and
+rerun from `2658490`. The aggregate paper report output was made safe and
 no-overwrite in `27d3fdd`, with conflict termination corrected in `28319fc` and
 dangling output/temporary symlinks rejected in `40e110e`. The genuine-only
 `v1-release-acceptance` target landed in `3051376`; `22e4d50` makes it reject
@@ -1633,7 +1635,7 @@ release gate remains pending.
 The daily-cycle preflight was hardened in `a4f8868` to require the complete v1
 paper-account envelope before execution, with focused regression and acceptance
 coverage. The current full validation, resilience, installation-lifecycle, and
-composed pre-release reruns passed from `713e8a0`; this repository-side hardening
+composed pre-release reruns passed from `2658490`; this repository-side hardening
 and its explicit decision clock do not substitute for the genuine-forward requirement.
 
 The current host readiness snapshot is recorded in the [v1 operational readiness
