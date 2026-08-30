@@ -311,10 +311,11 @@ gate to 218 Python tests; the destination-preflight regression in `010cfc0` brou
 the gate to 219 Python tests; the release-ancestor guard in `246702d` adds focused
 preflight coverage. The after-close decision-clock regressions in `ee29219` brought
 the gate to 222 Python tests; the durable report/resume regression in `713e8a0`
-brings the current full gate to 223 Python tests, and `2658490` versions the
-daily-cycle contract revision to `1.1.0` with refreshed compatibility hashes. The
-active v1 evidence index
-records that latest result.
+brought the gate to 223 Python tests, and `2658490` versioned the daily-cycle
+contract as `1.1.0` with refreshed compatibility hashes. `58e1615` integrates the
+paper-input preflight into each resumable daily-cycle account path and versions the
+contract as `1.2.0`; the current full gate is 224 Python tests. The active v1
+evidence index records that latest result.
 
 The supported forward-evidence path is `make forward-record-capture` after a real
 recent paper session. Newly generated paper reports carry an invocation-time UTC

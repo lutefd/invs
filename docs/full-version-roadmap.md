@@ -1636,8 +1636,10 @@ release gate remains pending.
 
 The daily-cycle preflight was hardened in `a4f8868` to require the complete v1
 paper-account envelope before execution, with focused regression and acceptance
-coverage. The current full validation, resilience, installation-lifecycle, and
-composed pre-release reruns passed from `2658490`; this repository-side hardening
+coverage. `58e1615` integrates the same hash-pinned input preflight into each
+resumable paper-account path before account creation and versions the cycle contract
+as `1.2.0`. The current full validation, resilience, installation-lifecycle, and
+composed pre-release reruns passed from `58e1615`; this repository-side hardening
 and its explicit decision clock do not substitute for the genuine-forward requirement.
 
 The current host readiness snapshot is recorded in the [v1 operational readiness
