@@ -1,0 +1,57 @@
+# v1.0 pre-release evidence index — 2026-08-30
+
+## Release posture
+
+This is the v1.0 pre-release evidence index, not an accepted v1.0 release. The
+runtime evidence below was executed against commit
+`bc2d55819978f6d6b5a7fa3d25e237cf888f601f` with
+`INVS_BIND_ADDRESS=127.0.0.1` where validation needed to override the operator's
+local non-loopback `.env` setting. The tracked documentation refresh is
+`135939e`.
+
+The remaining release gate is a genuine wall-clock forward paper record. Historical
+simulation and recorded/replayed paper evidence are not substituted for that
+criterion.
+
+## Validation ladder
+
+| Command | Result | Evidence |
+| --- | --- | --- |
+| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 192 Python tests, 61 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make notebook` | Passed: empty-safe vertical-slice notebook executed | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make dashboard-smoke` | Passed: dashboard JSON and PostgreSQL `EXPLAIN` checks | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make migrate` | Passed: existing PostgreSQL volume remained migration-ready | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make historical-truth-db-test` | Passed: append-only, rollback, fresh-image, and migration replay checks | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make reconcile` | Passed: `issues=0` | Report generated at `2026-08-30T05:56:13Z` |
+| `INVS_BIND_ADDRESS=127.0.0.1 make health` | Passed: PostgreSQL accepting connections; long-lived services healthy | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make workflow-acceptance` | Passed with intentional `attention` status for thematic and cross-market reports | [Workflow integration report](2026-08-30-v1-workflow-integration.md) |
+| `INVS_BIND_ADDRESS=127.0.0.1 make v1-resilience-acceptance` | Passed: all ten stages and six scenarios | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
+
+## v1 implementation checkpoints
+
+- `f8abe40` — fail-closed runtime and contract compatibility manifest;
+- `31e34b8` — specification-driven, resumable local daily-cycle runner;
+- `d5b9c22` — content-addressed thematic and US/Brazil cross-market workflow reports;
+- `586d79e` — loopback/security checks, backup/restore hardening, health objectives,
+  and incident/capacity runbooks; and
+- `9a0f558` — resilience and historical-bias acceptance harness.
+
+The version compatibility and forward-upgrade procedure is in the
+[release guide](../release-compatibility.md). The operator path is in the
+[recovery runbook](../operations-recovery.md).
+
+## Accepted versus pending
+
+| Area | Current evidence | Release interpretation |
+| --- | --- | --- |
+| v0.1–v0.6 foundations | Accepted bounded reports and reproductions | Complete for their documented scopes |
+| Runtime and compatibility | Manifest validation passes; unsupported mixes fail closed | Accepted implementation boundary |
+| Security and recovery | Loopback defaults, secret scan, backup/restore, restore/reconcile drill pass | Accepted operational boundary |
+| Historical bias | 13-probe retained bias suite passes | Accepted challenge boundary |
+| Thematic/cross-market workflow | Both reports validate and link all layers | `attention` until forward evidence exists |
+| Brazil/commodity coverage | Explicit bounded fitness labels and missing coverage | Not a broad coverage claim |
+| Wall-clock forward paper record | Not present | Required for v1.0 release acceptance |
+
+Generated JSON reports under `data/research/acceptance/` are ignored runtime
+evidence. Regenerate them with the commands above; do not treat a retained replay
+report as a live-performance claim.

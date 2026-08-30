@@ -85,3 +85,5 @@ make v1-resilience-acceptance
 record exists. `v1-resilience-acceptance` is the local recovery and bias proof; its
 current result is recorded in
 [`2026-08-30-v1-resilience.md`](acceptance/2026-08-30-v1-resilience.md).
+The combined command results and remaining release gates are summarized in the
+[v1.0 pre-release evidence index](acceptance/2026-08-30-v1-pre-release-index.md).
