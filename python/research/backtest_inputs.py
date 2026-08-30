@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
@@ -535,24 +535,61 @@ def _resolve_under_root(root: Path, relative_path: str) -> Path:
     return path
 
 
-def load_backtest_inputs(spec: Mapping[str, Any], *, data_root: str | Path) -> BacktestInputs:
-    """Verify and load every local artifact referenced by a validated spec."""
+def load_input_artifacts(
+    references: Iterable[Mapping[str, Any]],
+    *,
+    data_root: str | Path,
+    allowed_fitness: Iterable[str] = ("backtest_safe",),
+    required_kinds: Iterable[str] = (),
+) -> BacktestInputs:
+    """Load hash-pinned artifacts for a backtest or forward paper decision.
 
-    normalized = validate_experiment_spec(spec)
+    The row-level parser is shared by both paths, but admission is explicit at
+    the caller boundary.  Backtests retain their strict ``backtest_safe``
+    requirement while paper accounts may also admit ``current_research_only``
+    inputs that are never presented as historical evidence.
+    """
+
     root = Path(data_root).expanduser().resolve()
+    fitnesses = frozenset(allowed_fitness)
     artifacts: dict[str, LoadedInputArtifact] = {}
-    for reference in normalized["inputs"]:
+    for index, reference in enumerate(references):
+        if not isinstance(reference, Mapping):
+            raise BacktestInputError(f"input reference {index} must be an object")
+        kind = reference.get("kind")
+        if not isinstance(kind, str) or kind not in _KINDS:
+            raise BacktestInputError(f"input reference {index} has an unsupported kind")
+        if kind in artifacts:
+            raise BacktestInputError(f"input references contain duplicate kind {kind}")
+        fitness = reference.get("fitness", reference.get("historical_fitness", "backtest_safe"))
+        if fitness not in fitnesses:
+            raise BacktestInputError(
+                f"input reference {index} fitness {fitness!r} is not admitted"
+            )
+        for field in ("artifact_id", "path", "sha256", "available_at"):
+            if field not in reference:
+                raise BacktestInputError(f"input reference {index} is missing {field}")
         path = _resolve_under_root(root, reference["path"])
-        artifacts[reference["kind"]] = _load_artifact(path, expected=reference)
+        artifacts[kind] = _load_artifact(path, expected=reference)
+
+    missing = sorted(set(required_kinds) - set(artifacts))
+    if missing:
+        raise BacktestInputError(f"input references are missing required kinds: {', '.join(missing)}")
+    try:
+        prices = artifacts["prices"].rows
+        calendar = artifacts["calendar"].rows
+        membership = artifacts["membership"].rows
+    except KeyError as error:
+        raise BacktestInputError(f"input references are missing required kind {error.args[0]}") from error
     corporate_actions = artifacts.get("corporate_actions")
     fx = artifacts.get("fx")
     risk_free = artifacts.get("risk_free")
     return BacktestInputs(
         root=root,
         artifacts=artifacts,
-        prices=artifacts["prices"].rows,
-        calendar=artifacts["calendar"].rows,
-        membership=artifacts["membership"].rows,
+        prices=prices,
+        calendar=calendar,
+        membership=membership,
         corporate_actions=corporate_actions.rows if corporate_actions is not None else (),
         fx=fx.rows if fx is not None else (),
         risk_free=risk_free.rows if risk_free is not None else (),
@@ -564,6 +601,18 @@ def load_backtest_inputs(spec: Mapping[str, Any], *, data_root: str | Path) -> B
     )
 
 
+def load_backtest_inputs(spec: Mapping[str, Any], *, data_root: str | Path) -> BacktestInputs:
+    """Verify and load every local artifact referenced by a validated spec."""
+
+    normalized = validate_experiment_spec(spec)
+    return load_input_artifacts(
+        normalized["inputs"],
+        data_root=data_root,
+        allowed_fitness=("backtest_safe",),
+        required_kinds=("prices", "calendar", "membership"),
+    )
+
+
 __all__ = [
     "INPUT_SCHEMA_VERSION",
     "BacktestInputError",
@@ -571,6 +620,7 @@ __all__ = [
     "LoadedInputArtifact",
     "decimal",
     "load_backtest_inputs",
+    "load_input_artifacts",
     "parse_date",
     "parse_utc",
 ]

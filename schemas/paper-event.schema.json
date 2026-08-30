@@ -18,7 +18,7 @@
     "event_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
     "session_date": { "$ref": "common.schema.json#/$defs/date" },
     "event_type": {
-      "enum": ["cash_deposit", "decision", "target_published", "risk_approved", "risk_rejected", "halt", "no_op", "approval", "manual_rejection", "order", "fill", "fee", "tax", "dividend", "split", "delisting", "valuation", "reconciliation"]
+      "enum": ["cash_deposit", "decision", "target_published", "risk_approved", "risk_rejected", "halt", "no_op", "approval", "manual_rejection", "order", "fill", "fee", "tax", "dividend", "split", "delisting", "valuation", "reconciliation", "fx_conversion"]
     },
     "decision_id": { "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
     "target_id": { "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
