@@ -82,6 +82,22 @@ record, or claim an accepted v1.0 release; those remain explicit evidence steps.
 INVS_BIND_ADDRESS=127.0.0.1 make v1-pre-release-acceptance
 ```
 
+After a real paper session has produced a validated forward record and aggregate
+paper report, use the genuine-only final target:
+
+```sh
+INVS_BIND_ADDRESS=127.0.0.1 \
+V1_FORWARD_RECORD=data/research/forward/v1/forward-record.json \
+V1_PAPER_REPORT=data/research/forward/v1/paper-report.json \
+make v1-release-acceptance
+```
+
+It requires both evidence references before invoking the full pre-release ladder.
+The nested workflow run therefore consumes genuine evidence and must pass the
+thematic scenario; the cross-market scenario may retain its documented
+non-backtest-safe commodity `attention` status. Without the references, the target
+exits before validation and cannot silently run the replay path.
+
 `workflow-acceptance` intentionally reports `attention` until the genuine forward
 record exists. `v1-forward-record-acceptance` is the negative proof that retained
 replay evidence cannot satisfy that gate. `v1-resilience-acceptance` is the local

@@ -237,6 +237,10 @@ schema versions before execution, and cover the failure path with a focused test
 and acceptance fixture. The full `make validate` and latest resilience, installation,
 and workflow reruns passed from `b4e89e5`; the integrated workflow still
 intentionally reports `attention` until genuine forward evidence exists.
+The composed `v1-pre-release-acceptance` target and its latest report evidence were
+then pinned at `b4e89e5` and `67c59ad`; the genuine-only `v1-release-acceptance`
+wrapper landed in `3051376` and refuses to enter the ladder without both forward
+evidence references.
 
 The [v1 resilience acceptance report](acceptance/2026-08-30-v1-resilience.md) passes
 the retained historical-bias and paper-ledger checks, CLI-level daily-cycle
@@ -301,9 +305,12 @@ by `make paper-acceptance-report`, landed in `b450f9f`, with its release hash
 refreshed in `c35ee45`. The command is read-only against the source account and
 proves duplicate-cycle idempotency, rebuild equality, isolated backup/restore, and
 reconciliation; a halted or otherwise incomplete session remains `attention`.
-The workflow harness output-isolation correction landed in `97e9029`: replay runs
-retain the fixed acceptance reports, while a genuine record defaults to its own
-`data/research/acceptance/v1/genuine/<record_id>/` directory.
+The protected output form landed in `27d3fdd` and was corrected in `28319fc`: a
+repository-relative `PAPER_REPORT_OUTPUT` is published atomically, existing
+outputs are never overwritten, and a conflict stops before the report container
+runs. The workflow harness output-isolation correction landed in `97e9029`: replay
+runs retain the fixed acceptance reports, while a genuine record defaults to its
+own `data/research/acceptance/v1/genuine/<record_id>/` directory.
 
 The final v1.0 release boundary is still pending a genuine wall-clock forward paper
 record and final end-to-end workflow acceptance. The pre-release evidence index is
@@ -388,6 +395,10 @@ to close the v0.2 calendar gate. See the
 - Latest v1 paper replay-compatibility boundary: `59c435f` (`test(paper): preserve legacy report compatibility`)
 - Latest v1 operator timing documentation: `7058d10` (`docs(v1): document forward report timing`)
 - Latest v1 report-time acceptance coverage: `c12074a` (`test(acceptance): cover forward report time bounds`)
+- Latest v1 pre-release acceptance composition: `b4e89e5` (`test(acceptance): add v1 pre-release aggregate target`)
+- Latest v1 acceptance evidence pin: `67c59ad` (`docs(v1): pin aggregate acceptance evidence`)
+- Latest v1 paper report-output protection: `28319fc` (`fix(paper): stop report output on conflicts`)
+- Latest v1 genuine release acceptance target: `3051376` (`test(acceptance): add genuine v1 release target`)
 - Latest v1 forward-record contract boundary: `e272e3d` (`feat(acceptance): bind genuine forward paper evidence`)
 - Latest v1 forward-record integration correction: `b471908` (`fix(acceptance): isolate forward validation imports`)
 - Latest v1 forward-record validation hardening: `be16303` (`fix(acceptance): replay ledger for forward evidence`)

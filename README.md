@@ -8,7 +8,9 @@ workflow validation gates pass within their documented scopes. The remaining
 release gate is a genuine wall-clock forward paper record followed by final
 workflow acceptance; retained historical, simulated, and replayed evidence is
 not substituted for that criterion. See the [v1.0 pre-release evidence index](docs/acceptance/2026-08-30-v1-pre-release-index.md)
-for the current evidence and limitations.
+for the current evidence and limitations. After that record and its aggregate
+paper report exist, `make v1-release-acceptance` is the guarded final command; it
+requires both genuine evidence references and cannot silently fall back to replay.
 
 The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for
 SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE and

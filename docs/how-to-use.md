@@ -1428,6 +1428,19 @@ V1_PAPER_ACCOUNT_IDS="<account-id>" \
 make workflow-acceptance
 ```
 
+For the complete final release gate, use the genuine-only composed target after
+both files exist:
+
+```sh
+V1_FORWARD_RECORD=data/research/forward/v1/forward-record.json \
+V1_PAPER_REPORT=data/research/forward/v1/paper-report.json \
+V1_PAPER_ACCOUNT_IDS="<account-id>" \
+make v1-release-acceptance
+```
+
+It reruns the repository-side ladder and refuses to start without genuine forward
+evidence references, so the command cannot silently accept the replay workflow.
+
 `V1_PAPER_ACCOUNT_IDS` is optional and defaults to every account in the forward
 record. Genuine mode requires `V1_PAPER_REPORT`; the report must contain those
 accounts and the accepted paper checks. The thematic workflow can then pass its

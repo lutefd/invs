@@ -14,6 +14,11 @@ earlier host evidence cited below. The follow-up full `make test` rerun from
 was used where validation needed to override the operator's local non-loopback
 `.env` setting.
 
+The genuine-only `v1-release-acceptance` target was added at
+`3051376`. It has not been run because no genuine forward record exists; its
+precondition was verified to exit before validation when `V1_FORWARD_RECORD` is
+missing.
+
 The remaining release gate is a genuine wall-clock forward paper record. Historical
 simulation and recorded/replayed paper evidence are not substituted for that
 criterion.
@@ -40,6 +45,7 @@ criterion.
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-install-upgrade-acceptance` | Passed: fresh install, pre-v1 upgrade, idempotent reapply, backup/restore, tamper rejection, and interrupted recovery | [Install/upgrade acceptance report](2026-08-30-v1-install-upgrade.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make paper-acceptance-report PAPER_ACCOUNT_ID=... PAPER_DATA_ROOT=/data/research/acceptance/v0.6/reproduction PAPER_LEDGER_ROOT=/data/research/acceptance/v0.6/reproduction/ledger` | Passed: derived all five v1 paper checks from the retained deterministic ledger without source mutation | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-pre-release-acceptance` | Passed: 213 Python tests, operational checks, migration replay, 11 resilience steps across 7 scenarios, 6 installation-lifecycle stages, replay guard, and workflow reports with intentional `attention` | Runtime output from 2026-08-30 at `b4e89e5`; exact report hashes are in the linked acceptance reports |
+| `V1_FORWARD_RECORD=... V1_PAPER_REPORT=... INVS_BIND_ADDRESS=127.0.0.1 make v1-release-acceptance` | Guarded: requires genuine forward evidence and aggregate paper report before running the complete ladder; not run because the genuine record is absent | `3051376` precondition check |
 
 ## v1 implementation checkpoints
 
@@ -71,7 +77,11 @@ criterion.
 - `59c435f` — preserve aggregate acceptance compatibility for pre-timestamp replay
   reports; and
 - `7058d10` — document the report-time eligibility rules in the operator guides; and
-- `c12074a` — cover pre-risk and post-capture report timestamps in acceptance tests.
+- `c12074a` — cover pre-risk and post-capture report timestamps in acceptance tests;
+- `67c59ad` — pin the aggregate pre-release acceptance evidence;
+- `27d3fdd` — protect aggregate paper report output with atomic no-overwrite publication;
+- `28319fc` — stop report generation on output conflicts; and
+- `3051376` — add the genuine-only final v1 release acceptance target.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the

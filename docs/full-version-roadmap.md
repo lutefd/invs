@@ -1600,6 +1600,13 @@ operator timing rules are documented and the pre-risk/post-capture rejection
 branches are covered by `59c435f`, `7058d10`, and `c12074a`; the current full test
 gate passes 213 Python tests.
 
+The composed `v1-pre-release-acceptance` target and its latest passing report set
+were pinned at `b4e89e5` and `67c59ad`. The aggregate paper report output was made
+safe and no-overwrite in `27d3fdd`, with conflict termination corrected in
+`28319fc`. The genuine-only `v1-release-acceptance` target landed in `3051376`; it
+requires both forward evidence references before running the complete ladder and
+cannot silently accept the replay workflow.
+
 This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
 `attention` because the retained paper evidence is recorded/replayed rather than a
 genuine wall-clock forward record. Brazil and commodity evidence also retain their
