@@ -298,3 +298,49 @@ def test_ledger_backup_restore_rebuilds_the_same_projection(tmp_path: Path) -> N
     assert rebuild_paper_account(account["account_id"], ledger_root=restored_root) == rebuild_paper_account(
         account["account_id"], ledger_root=ledger_root
     )
+
+
+def test_paper_cli_dispatches_operator_lifecycle(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from research.paper_cli import main
+
+    account, root = _account_fixture(tmp_path)
+    spec_path = root / "account.json"
+    spec_path.write_bytes(canonical_json(account) + b"\n")
+    ledger_root = root / "ledger"
+
+    assert main(["create-account", "--spec", str(spec_path), "--ledger-root", str(ledger_root)]) == 0
+    capsys.readouterr()
+    assert main(
+        [
+            "run",
+            "--spec",
+            str(spec_path),
+            "--data-root",
+            str(root),
+            "--ledger-root",
+            str(ledger_root),
+            "--session-date",
+            "2025-01-02",
+        ]
+    ) == 0
+    first = json.loads(capsys.readouterr().out)
+    assert first["decision_status"] == "proposed"
+
+    assert main(
+        [
+            "approve",
+            "--account-id",
+            account["account_id"],
+            "--decision-id",
+            first["decision_id"],
+            "--ledger-root",
+            str(ledger_root),
+            "--approved",
+        ]
+    ) == 0
+    capsys.readouterr()
+    assert main(["rebuild", "--account-id", account["account_id"], "--ledger-root", str(ledger_root)]) == 0
+    rebuilt = json.loads(capsys.readouterr().out)
+    assert rebuilt["event_count"] > 1
+    assert main(["reconcile", "--account-id", account["account_id"], "--ledger-root", str(ledger_root)]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "passed"
