@@ -2,7 +2,26 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE and the bounded ALFRED CPIAUCSL historical-vintage work package subsequently passed live acceptance, and the repository includes the closed deterministic `market-basic` and `market-momentum` feature engines. The v0.5 backtesting gate and v0.6 internal forward-paper gate are accepted at `180d5c9` and `95a79b5` (feature boundary `f02a57f`); live broker execution remains outside the accepted boundary. Future ALFRED runs require a configured `FRED_API_KEY`. A bounded official B3 InstrumentsConsolidated path now provides exact Brazil identity/listing evidence for configured current/reference snapshots; it is not complete historical lifecycle or universe-membership coverage. The bounded Yahoo `.SA` check remains a price-bridge result, not security-master evidence.
+Status: v1.0 is in pre-release integration, not an accepted v1.0 release. The
+repository-side compatibility, security, recovery, installation lifecycle, and
+workflow validation gates pass within their documented scopes. The remaining
+release gate is a genuine wall-clock forward paper record followed by final
+workflow acceptance; retained historical, simulated, and replayed evidence is
+not substituted for that criterion. See the [v1.0 pre-release evidence index](docs/acceptance/2026-08-30-v1-pre-release-index.md)
+for the current evidence and limitations.
+
+The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for
+SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE and
+the bounded ALFRED CPIAUCSL historical-vintage work package subsequently passed
+live acceptance, and the repository includes the closed deterministic
+`market-basic` and `market-momentum` feature engines. The v0.5 backtesting gate
+and v0.6 internal forward-paper gate are accepted at `180d5c9` and `95a79b5`
+(feature boundary `f02a57f`); live broker execution remains outside the
+accepted boundary. Future ALFRED runs require a configured `FRED_API_KEY`. A
+bounded official B3 InstrumentsConsolidated path now provides exact Brazil
+identity/listing evidence for configured current/reference snapshots; it is not
+complete historical lifecycle or universe-membership coverage. The bounded
+Yahoo `.SA` check remains a price-bridge result, not security-master evidence.
 
 The product path is documented in the [full-version roadmap](docs/full-version-roadmap.md), with granular execution views in the [roadmap index](docs/roadmap/README.md).
 The operator recovery procedure is in [docs/operations-recovery.md](docs/operations-recovery.md).
@@ -157,7 +176,11 @@ Run all of those checks and build every local image:
 make validate
 ```
 
-Operational status: the post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB. The passing r3 evidence contains raw run manifests and manifest-backed normalized output:
+The current v1.0 operational snapshot and validation results are recorded in
+the [pre-release evidence index](docs/acceptance/2026-08-30-v1-pre-release-index.md).
+The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for
+SEC, Yahoo, FRED, and BCB. Its passing r3 evidence contains raw run manifests
+and manifest-backed normalized output:
 
 | Source | Retained result evidence |
 | --- | --- |
