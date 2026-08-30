@@ -121,6 +121,7 @@ directory is needed.
 
 The aggregate paper report must contain the supplied account IDs and accepted
 paper checks. Generate it from the account ledger with the read-only
-`make paper-acceptance-report` target before running the workflow command; do not
-hand-edit the acceptance booleans. The cross-market report may retain `attention`
-for explicitly non-backtest-safe commodity evidence.
+`make paper-acceptance-report` target before running the workflow command, using
+`PAPER_REPORT_OUTPUT` for an atomic, no-overwrite output; do not hand-edit the
+acceptance booleans. The cross-market report may retain `attention` for explicitly
+non-backtest-safe commodity evidence.

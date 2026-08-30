@@ -1357,12 +1357,14 @@ make paper-acceptance-report \
   PAPER_ACCOUNT_ID=<account-id> \
   PAPER_DATA_ROOT=/data/research/acceptance/v0.6/operator \
   PAPER_LEDGER_ROOT=/data/research/acceptance/v0.6/operator/ledger \
-  > data/research/forward/v1/paper-report.json
+  PAPER_REPORT_OUTPUT=data/research/forward/v1/paper-report.json
 ```
 
 The command is read-only against the source ledger. It derives the forward-session,
 duplicate-cycle, rebuild, backup/restore, and reconciliation checks; it returns
 `status: attention` when a report is halted or another required check is not proven.
+When `PAPER_REPORT_OUTPUT` is supplied, the target requires a safe repository-relative
+path, refuses to overwrite an existing file, and publishes the report atomically.
 Use the resulting JSON as `V1_PAPER_REPORT` only when its account IDs match the
 captured forward record.
 
