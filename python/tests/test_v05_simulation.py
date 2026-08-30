@@ -443,3 +443,42 @@ def test_foreign_currency_funding_and_reporting_use_pinned_fx(tmp_path: Path) ->
     assert run.nav[-1]["reporting_nav"] == "58750"
     assert sum(row["event_type"] == "fx_conversion" for row in run.ledger) == 4
     assert all(row["currency"] == "BRL" for row in run.fills)
+
+
+def test_baseline_signals_are_deterministic_and_future_bounded() -> None:
+    from research.strategies import baseline_targets, equal_weight_targets
+
+    current_history = {
+        SECURITY_A: tuple(Decimal(value) for value in ("10", "11", "12", "13")),
+        SECURITY_B: tuple(Decimal(value) for value in ("20", "21", "22", "21")),
+    }
+    future_history = {
+        SECURITY_A: (*current_history[SECURITY_A], Decimal(999999)),
+        SECURITY_B: (*current_history[SECURITY_B], Decimal(1)),
+    }
+    parameters = {
+        "lookback_sessions": 2,
+        "skip_sessions": 1,
+        "top_k": 1,
+        "rebalance_frequency": "daily",
+    }
+
+    equal = equal_weight_targets([SECURITY_B, SECURITY_A])
+    momentum = baseline_targets(
+        "momentum_12_1",
+        security_ids=[SECURITY_A, SECURITY_B],
+        price_history=current_history,
+        session_index=3,
+        parameters=parameters,
+    )
+    future_momentum = baseline_targets(
+        "momentum_12_1",
+        security_ids=[SECURITY_A, SECURITY_B],
+        price_history=future_history,
+        session_index=3,
+        parameters=parameters,
+    )
+
+    assert equal == {SECURITY_A: Decimal("0.5"), SECURITY_B: Decimal("0.5")}
+    assert momentum == {SECURITY_A: Decimal(1)}
+    assert future_momentum == momentum

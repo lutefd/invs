@@ -25,6 +25,7 @@ from .experiments import (
     input_fingerprint,
     validate_experiment_spec,
 )
+from .strategies import baseline_targets
 
 BACKTEST_SCHEMA_VERSION: Final[str] = "1.0.0"
 METRICS_VERSION: Final[str] = "1.0.0"
@@ -256,27 +257,33 @@ def _active_members(
     return tuple(sorted(active))
 
 
-def _momentum_members(
-    spec: Mapping[str, Any], inputs: BacktestInputs, sessions: tuple[dict[str, Any], ...], index: int
-) -> tuple[str, ...]:
-    params = spec["strategy"]["parameters"]
-    lookback = params["lookback_sessions"]
-    skip = params["skip_sessions"]
-    end_index = index - skip
-    start_index = end_index - lookback
-    if start_index < 0 or end_index < 0:
-        return ()
+def _momentum_targets(
+    spec: Mapping[str, Any],
+    inputs: BacktestInputs,
+    sessions: tuple[dict[str, Any], ...],
+    index: int,
+    active: set[str],
+) -> dict[str, Decimal]:
     decision_at = sessions[index]["close_at"]
-    scores: list[tuple[Decimal, str]] = []
-    for security_id in _active_members(spec, inputs, sessions[index]):
-        start_row = _price_row(inputs, security_id, sessions[start_index]["session_date"], decision_at)
-        end_row = _price_row(inputs, security_id, sessions[end_index]["session_date"], decision_at)
-        if start_row is None or end_row is None or start_row["currency"] != end_row["currency"]:
-            continue
-        score = end_row["close"] / start_row["close"] - _ONE
-        scores.append((score, security_id))
-    scores.sort(key=lambda item: (-item[0], item[1]))
-    return tuple(security_id for _, security_id in scores[: params["top_k"]])
+    history = {
+        security_id: tuple(
+            (
+                row["close"]
+                if (row := _price_row(inputs, security_id, sessions[history_index]["session_date"], decision_at))
+                is not None
+                else None
+            )
+            for history_index in range(index + 1)
+        )
+        for security_id in sorted(active)
+    }
+    return baseline_targets(
+        "momentum_12_1",
+        security_ids=sorted(active),
+        price_history=history,
+        session_index=index,
+        parameters=spec["strategy"]["parameters"],
+    )
 
 
 def _rebalance_due(spec: Mapping[str, Any], session: Mapping[str, Any], previous: date | None) -> bool:
@@ -308,12 +315,10 @@ def _target_weights(
         else:
             targets = {}
     elif due:
-        selected = (
-            _momentum_members(spec, inputs, sessions, index)
-            if name == "momentum_12_1"
-            else tuple(sorted(active))
-        )
-        targets = {security_id: _ONE / Decimal(len(selected)) for security_id in selected} if selected else {}
+        if name == "momentum_12_1":
+            targets = _momentum_targets(spec, inputs, sessions, index, active)
+        else:
+            targets = baseline_targets("equal_weight", security_ids=sorted(active))
     else:
         targets = {}
     for security_id, quantity in state.quantities.items():
