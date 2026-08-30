@@ -81,10 +81,13 @@ make forward-record-capture \
 
 This command validates the immutable account, append-only ledger, latest paper
 report, and adjacent manifest before writing a hash-pinned forward record. The
-report must be no more than seven calendar days old, and an existing output may
-only be reused when its bytes are identical. Do not run it against the retained
-v0.6 reproduction tree: replay evidence is intentionally not accepted as a
-wall-clock forward record.
+report must be no more than seven calendar days old. Current reports include a
+canonical UTC `recorded_at` timestamp from report publication; genuine capture
+requires it to be at or after the report's risk check, no more than 24 hours after
+that check, and no later than the capture instant. An existing output may only be
+reused when its bytes are identical. Do not run it against the retained v0.6
+reproduction tree: replay evidence is intentionally not accepted as a wall-clock
+forward record.
 
 ## Reconcile before and after operations
 

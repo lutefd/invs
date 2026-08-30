@@ -1407,12 +1407,17 @@ make forward-record-capture \
 ```
 
 The command requires a recent reconciled report (no more than seven calendar days
-old), validates the account and ledger, and records hashes for the account,
-report, and adjacent ledger manifest. It refuses missing, stale, unreconciled, or
-conflicting evidence. Point a custom workflow's `forward_record.status` at
-`genuine` and reference this output with its SHA-256; retained v0.6 replay data is
-not eligible for this path. The maintained workflow acceptance harness can consume
-the captured record once an aggregate paper report for the same account is ready:
+old), validates the account and ledger, and records hashes for the account, report,
+and adjacent ledger manifest. Current paper reports include a canonical UTC
+`recorded_at` timestamp from report publication. Genuine capture also requires that
+timestamp to be at or after the report's risk check, no more than 24 hours after
+that check, and no later than the capture instant. It refuses missing, stale,
+unreconciled, or conflicting evidence. Reports from retained pre-gate replay
+fixtures remain valid for aggregate/replay acceptance but are not eligible for
+this genuine path. Point a custom workflow's `forward_record.status` at `genuine`
+and reference this output with its SHA-256. The maintained workflow acceptance
+harness can consume the captured record once an aggregate paper report for the
+same account is ready:
 
 ```sh
 V1_FORWARD_RECORD=data/research/forward/v1/forward-record.json \
