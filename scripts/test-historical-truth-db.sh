@@ -420,23 +420,51 @@ docker run -d --name "$fresh_container" \
 	-v "$fresh_volume":/var/lib/postgresql/data \
 	"$fresh_image" >/dev/null
 
-fresh_table_count=
+fresh_schema_state=
 for attempt in $(seq 1 120); do
-	fresh_table_count=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
+	fresh_schema_state=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
 		-U historical_truth_test -d historical_truth_test -Atc \
-		"SELECT count(*) FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'), to_regclass('public.corporate_action_versions'));" 2>/dev/null | tr -d '[:space:]' || true)
-	if [[ "$fresh_table_count" == "6" ]]; then
+		"SELECT count(*) || '|' || coalesce(to_regclass('public.paper_accounts')::text, '') FROM pg_class WHERE oid IN (to_regclass('public.security_identifier_versions'), to_regclass('public.security_listing_versions'), to_regclass('public.universe_memberships'), to_regclass('public.calendar_manifests'), to_regclass('public.trading_sessions'), to_regclass('public.corporate_action_versions'));" 2>/dev/null | tr -d '[:space:]' || true)
+	if [[ "$fresh_schema_state" == "6|paper_accounts" ]]; then
 		break
 	fi
 	if [[ "$attempt" == 120 ]]; then
-		printf 'fresh postgres initialization created %s historical tables\n' "${fresh_table_count:-none}" >&2
+		printf 'fresh postgres initialization created schema state %s\n' "${fresh_schema_state:-none}" >&2
 		docker logs "$fresh_container" >&2 || true
 		exit 1
 	fi
 	sleep 1
 done
-if [[ "$fresh_table_count" != "6" ]]; then
-	printf 'fresh initialization created %s historical tables, want 6\n' "$fresh_table_count" >&2
+if [[ "$fresh_schema_state" != "6|paper_accounts" ]]; then
+	printf 'fresh initialization created schema state %s, want 6|paper_accounts\n' "$fresh_schema_state" >&2
+	exit 1
+fi
+
+fresh_init_complete=0
+for attempt in $(seq 1 120); do
+	if docker logs "$fresh_container" 2>&1 | grep -q 'PostgreSQL init process complete'; then
+		fresh_init_complete=1
+		break
+	fi
+	sleep 1
+done
+if [[ "$fresh_init_complete" != "1" ]]; then
+	printf '%s\n' 'fresh postgres initialization did not reach its completion marker' >&2
+	docker logs "$fresh_container" >&2 || true
+	exit 1
+fi
+
+fresh_ready=0
+for attempt in $(seq 1 120); do
+	if docker exec "$fresh_container" pg_isready -U historical_truth_test -d historical_truth_test >/dev/null 2>&1; then
+		fresh_ready=1
+		break
+	fi
+	sleep 1
+done
+if [[ "$fresh_ready" != "1" ]]; then
+	printf '%s\n' 'fresh postgres did not become ready after initialization' >&2
+	docker logs "$fresh_container" >&2 || true
 	exit 1
 fi
 fresh_price_basis=$(docker exec "$fresh_container" psql -v ON_ERROR_STOP=1 -X \
