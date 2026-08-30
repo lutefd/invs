@@ -1,0 +1,9 @@
+{
+  "artifact_id": "74000000-0000-4000-8000-000000000001",
+  "commodity": "copper",
+  "coverage": "bounded industrial-activity fixture",
+  "fitness": "installation_replay_only",
+  "regions": ["BR", "US"],
+  "schema_version": "1.0.0",
+  "source": "bounded-copper-fixture"
+}

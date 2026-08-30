@@ -375,6 +375,18 @@
         "sha256": "0058a6ff4726867520e1650f5e21d99dff45e8a42a984b5989500ce0e8854bf2"
       },
       {
+        "name": "research-workflow",
+        "path": "schemas/research-workflow.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "481f831c8538722e885d17f0faad589ab57e64660dc8a8d94c46c7c8f94ad1df"
+      },
+      {
+        "name": "research-workflow-report",
+        "path": "schemas/research-workflow-report.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "f585df3d962b203f53ec9f9b8d19b4d6362cab2e9d94198d00fc0fc5a7396cb1"
+      },
+      {
         "name": "security-identifier-version",
         "path": "schemas/security-identifier-version.schema.json",
         "schema_version": "1.0.0",
@@ -560,6 +572,12 @@
         "path": "python/research/portfolio.py",
         "version": "1.0.0",
         "sha256": "d07104fd4dd3517f35b79be525c635e8452431e47bd8d07d855944f56512b333"
+      },
+      {
+        "name": "workflow",
+        "path": "python/research/workflow.py",
+        "version": "python-workflow-1.0.0",
+        "sha256": "40eb563d197dd89fc5285257002cde2741c0278053e47bec9ade762dd89a67b3"
       }
     ],
     "configuration": [
@@ -571,7 +589,7 @@
       {
         "name": "python-project",
         "path": "python/pyproject.toml",
-        "sha256": "382b1b0188a0f5964e96d513c4d891afe3ea62a6ec419bf93092451ae6e88bba"
+        "sha256": "d28482b1e4e5f20de597b49d49859db931326ca226cb9955630d45e4f1b8e265"
       },
       {
         "name": "compose",

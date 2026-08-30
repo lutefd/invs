@@ -204,3 +204,10 @@ cycle, and `daily-cycle-report.schema.json` defines its durable stage evidence. 
 cycle runner keeps the command order fixed, records one log per stage, resumes only
 stages whose prior exit code was zero, and runs the final observation stage even when
 a derived stage needs attention.
+
+`research-workflow.schema.json` defines the explicit links from a dated research
+report through selected backtest experiments to paper accounts. The companion
+`research-workflow-report.schema.json` preserves the source hashes, acceptance
+checks, data-fitness classifications, and limitations. Use `make workflow-acceptance`
+to regenerate the thematic and US/Brazil cross-market integration fixtures; an
+`attention` result is expected until genuine wall-clock paper evidence exists.

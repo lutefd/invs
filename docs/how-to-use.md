@@ -1348,6 +1348,25 @@ valuation and the latest projection. The `paper-portfolio` dashboard shows accou
 status, cataloged NAV events, and event-type counts; it does not replace the ledger
 and does not represent a broker or live-performance feed.
 
+### Integrated v1.0 workflow reports
+
+The v1 workflow report links the accepted research, backtest, and paper reports by
+content hash. It also records the selected experiment IDs, paper account IDs, data
+fitness labels, and any unsatisfied entry criteria. Reproduce the thematic and
+US/Brazil cross-market fixtures with:
+
+```sh
+make workflow-acceptance
+```
+
+The reports are written under `data/research/acceptance/v1/`. Their current status is
+`attention` by design: the linked v0.6 paper evidence is recorded/replayed and does
+not satisfy the genuine wall-clock forward-record requirement. A custom workflow
+specification must use `schemas/research-workflow.schema.json`; build or verify its
+immutable report with the `invs-workflow` CLI. A report reaches `passed` only when
+the declared forward evidence is wall-clock, account-linked, and not labeled as
+installation replay.
+
 ### Complete v1.0 daily cycle
 
 The complete local operator path is specification-driven so every derived artifact

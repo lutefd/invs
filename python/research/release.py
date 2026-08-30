@@ -426,6 +426,7 @@ def _validate_implementations(entries: Any, repo_root: Path) -> None:
         "risk",
         "measurement",
         "portfolio",
+        "workflow",
     }
     values = _list_of_objects(entries, field="contracts.implementations")
     seen: set[str] = set()

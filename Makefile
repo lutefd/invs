@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status reconcile backup backup-validate backup-or-validate restore release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-reproduction action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status reconcile backup backup-validate backup-or-validate restore release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-reproduction workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -313,6 +313,9 @@ paper-reproduction: config
 paper-acceptance: migrate
 	@scripts/test-paper-workspace.sh
 	@$(MAKE) paper-reproduction
+
+workflow-acceptance: config
+	@scripts/test-v1-workflow.sh
 
 action-snapshot: config
 	@test -n "$(DATA_SOURCE_ID)" || (echo "DATA_SOURCE_ID is required" >&2; exit 2)
