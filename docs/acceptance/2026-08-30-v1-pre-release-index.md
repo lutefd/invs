@@ -81,6 +81,7 @@ criterion.
 - `67c59ad` — pin the aggregate pre-release acceptance evidence;
 - `27d3fdd` — protect aggregate paper report output with atomic no-overwrite publication;
 - `28319fc` — stop report generation on output conflicts; and
+- `40e110e` — reject dangling output and temporary symlinks before report generation; and
 - `3051376` — add the genuine-only final v1 release acceptance target.
 
 The version compatibility and forward-upgrade procedure is in the

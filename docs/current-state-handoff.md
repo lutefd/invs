@@ -305,7 +305,8 @@ by `make paper-acceptance-report`, landed in `b450f9f`, with its release hash
 refreshed in `c35ee45`. The command is read-only against the source account and
 proves duplicate-cycle idempotency, rebuild equality, isolated backup/restore, and
 reconciliation; a halted or otherwise incomplete session remains `attention`.
-The protected output form landed in `27d3fdd` and was corrected in `28319fc`: a
+The protected output form landed in `27d3fdd`, conflict termination was corrected
+in `28319fc`, and dangling output/temporary symlinks were closed in `40e110e`: a
 repository-relative `PAPER_REPORT_OUTPUT` is published atomically, existing
 outputs are never overwritten, and a conflict stops before the report container
 runs. The workflow harness output-isolation correction landed in `97e9029`: replay
@@ -397,7 +398,7 @@ to close the v0.2 calendar gate. See the
 - Latest v1 report-time acceptance coverage: `c12074a` (`test(acceptance): cover forward report time bounds`)
 - Latest v1 pre-release acceptance composition: `b4e89e5` (`test(acceptance): add v1 pre-release aggregate target`)
 - Latest v1 acceptance evidence pin: `67c59ad` (`docs(v1): pin aggregate acceptance evidence`)
-- Latest v1 paper report-output protection: `28319fc` (`fix(paper): stop report output on conflicts`)
+- Latest v1 paper report-output protection: `40e110e` (`fix(paper): reject symlink report outputs`)
 - Latest v1 genuine release acceptance target: `3051376` (`test(acceptance): add genuine v1 release target`)
 - Latest v1 forward-record contract boundary: `e272e3d` (`feat(acceptance): bind genuine forward paper evidence`)
 - Latest v1 forward-record integration correction: `b471908` (`fix(acceptance): isolate forward validation imports`)
