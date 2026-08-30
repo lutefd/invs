@@ -223,10 +223,10 @@ paper-acceptance-report: config
 	@test -n "$(PAPER_LEDGER_ROOT)" || (echo "PAPER_LEDGER_ROOT is required" >&2; exit 2)
 	@if test -n "$(PAPER_REPORT_OUTPUT)"; then \
 		case "$(PAPER_REPORT_OUTPUT)" in /*|*..*) echo "PAPER_REPORT_OUTPUT must be a safe repository-relative path" >&2; exit 2;; esac; \
-		if test -e "$(PAPER_REPORT_OUTPUT)"; then echo "refusing to overwrite PAPER_REPORT_OUTPUT: $(PAPER_REPORT_OUTPUT)" >&2; exit 2; fi; \
+		if test -e "$(PAPER_REPORT_OUTPUT)" || test -L "$(PAPER_REPORT_OUTPUT)"; then echo "refusing to overwrite PAPER_REPORT_OUTPUT: $(PAPER_REPORT_OUTPUT)" >&2; exit 2; fi; \
 		mkdir -p "$$(dirname "$(PAPER_REPORT_OUTPUT)")"; \
 		temporary="$(PAPER_REPORT_OUTPUT).tmp"; \
-		if test -e "$$temporary"; then echo "temporary paper report already exists: $$temporary" >&2; exit 2; fi; \
+		if test -e "$$temporary" || test -L "$$temporary"; then echo "temporary paper report already exists: $$temporary" >&2; exit 2; fi; \
 		trap 'rm -f "$$temporary"' EXIT HUP INT TERM; \
 		$(COMPOSE) run --rm --no-deps jupyter python -m research.paper_cli acceptance-report \
 			--account-id "$(PAPER_ACCOUNT_ID)" \
