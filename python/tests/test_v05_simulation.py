@@ -482,3 +482,31 @@ def test_baseline_signals_are_deterministic_and_future_bounded() -> None:
     assert equal == {SECURITY_A: Decimal("0.5"), SECURITY_B: Decimal("0.5")}
     assert momentum == {SECURITY_A: Decimal(1)}
     assert future_momentum == momentum
+
+
+def test_result_publication_is_immutable_and_comparable(tmp_path: Path) -> None:
+    from research.backtest import simulate_backtest
+    from research.backtest_results import (
+        BacktestResultConflictError,
+        BacktestResultValidationError,
+        compare_backtest_results,
+        publish_backtest_result,
+        read_backtest_result,
+    )
+
+    spec, root = _base_fixture(tmp_path / "inputs")
+    run = simulate_backtest(spec, data_root=root)
+
+    manifest_path = publish_backtest_result(run, results_root=tmp_path / "results")
+
+    validated = read_backtest_result(manifest_path)
+    assert validated.manifest["result_id"] == run.result_id
+    assert publish_backtest_result(run, results_root=tmp_path / "results") == manifest_path
+    assert compare_backtest_results([manifest_path])["results"][0]["strategy"]["name"] == "equal_weight"
+
+    with pytest.raises(BacktestResultConflictError):
+        (manifest_path.parent / "nav.json").write_bytes(b"tampered\n")
+        publish_backtest_result(run, results_root=tmp_path / "results")
+
+    with pytest.raises(BacktestResultValidationError, match="hash or file"):
+        read_backtest_result(manifest_path)

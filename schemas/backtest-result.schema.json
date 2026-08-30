@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "result_id", "experiment_id", "experiment_sha256", "engine_version",
-    "input_fingerprint", "status", "artifacts", "summary", "metrics"
+    "input_fingerprint", "status", "context", "artifacts", "summary", "metrics"
   ],
   "properties": {
     "schema_version": { "const": "1.0.0" },
@@ -16,6 +16,7 @@
     "engine_version": { "type": "string", "minLength": 1 },
     "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
     "status": { "const": "completed" },
+    "context": { "$ref": "#/$defs/context" },
     "artifacts": {
       "type": "object",
       "additionalProperties": false,
@@ -63,16 +64,49 @@
         "holdout_attempts": { "type": "integer", "minimum": 0 }
       }
     },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "period", "universe", "cost_policy", "base_currency", "reporting_currency"],
+      "properties": {
+        "strategy": { "$ref": "backtest-experiment.schema.json#/$defs/strategy" },
+        "period": { "$ref": "backtest-experiment.schema.json#/$defs/dateRange" },
+        "universe": { "$ref": "backtest-experiment.schema.json#/$defs/universe" },
+        "cost_policy": { "$ref": "backtest-experiment.schema.json#/$defs/costPolicy" },
+        "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "reporting_currency": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/currency" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
     "metrics": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "values"],
+      "required": ["metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "values", "attribution"],
       "properties": {
         "metrics_version": { "const": "1.0.0" },
         "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
         "annualization_factor": { "type": "integer", "minimum": 1 },
         "risk_free_annual": { "$ref": "common.schema.json#/$defs/decimal" },
-        "values": { "type": "object", "minProperties": 1 }
+        "values": { "type": "object", "minProperties": 1 },
+        "attribution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["by_partition", "by_year"],
+          "properties": {
+            "by_partition": {
+              "type": "object",
+              "additionalProperties": { "$ref": "backtest-metrics.schema.json#/$defs/attributionRow" }
+            },
+            "by_year": {
+              "type": "object",
+              "additionalProperties": { "$ref": "backtest-metrics.schema.json#/$defs/attributionRow" }
+            }
+          }
+        }
       }
     }
   }

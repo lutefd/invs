@@ -23,6 +23,7 @@ invs-feature = "research.feature_cli:main"
 invs-feature-quality = "research.feature_quality_cli:main"
 invs-adjust = "research.adjustment_cli:main"
 invs-bias-audit = "research.bias_audit_cli:main"
+invs-backtest = "research.backtest_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["research"]

@@ -4,7 +4,7 @@
   "title": "Backtest metrics artifact",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "values"],
+  "required": ["schema_version", "metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "values", "attribution"],
   "properties": {
     "schema_version": { "const": "1.0.0" },
     "metrics_version": { "const": "1.0.0" },
@@ -20,6 +20,35 @@
         ]
       },
       "minProperties": 1
+    },
+    "attribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by_partition", "by_year"],
+      "properties": {
+        "by_partition": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/attributionRow" }
+        },
+        "by_year": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/attributionRow" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "attributionRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_nav", "end_nav", "return", "trade_count", "cost"],
+      "properties": {
+        "start_nav": { "$ref": "common.schema.json#/$defs/decimal" },
+        "end_nav": { "$ref": "common.schema.json#/$defs/decimal" },
+        "return": { "$ref": "common.schema.json#/$defs/decimal" },
+        "trade_count": { "type": "integer", "minimum": 0 },
+        "cost": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" }
+      }
     }
   }
 }

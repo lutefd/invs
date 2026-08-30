@@ -61,6 +61,7 @@ class BacktestRun:
     experiment_sha256: str
     input_fingerprint: str
     engine_version: str
+    context: dict[str, Any]
     nav: tuple[dict[str, Any], ...]
     holdings: tuple[dict[str, Any], ...]
     orders: tuple[dict[str, Any], ...]
@@ -102,6 +103,7 @@ class _State:
     total_slippage_base: Decimal = _ZERO
     total_tax_base: Decimal = _ZERO
     total_gross_base: Decimal = _ZERO
+    cost_by_session: dict[date, Decimal] = field(default_factory=lambda: defaultdict(Decimal))
     rejected_trade_count: int = 0
     out_of_market_sessions: int = 0
 
@@ -770,6 +772,7 @@ def _execute_orders(
         state.total_slippage_base += slippage_base
         state.total_tax_base += tax_base
         state.total_gross_base += gross_base
+        state.cost_by_session[session["session_date"]] += fee_base + spread_base + slippage_base + tax_base
 
 
 def _mark(
@@ -882,6 +885,32 @@ def _safe_metric(value: Decimal | None) -> str | None:
     return _dstr(value) if value is not None and value.is_finite() else None
 
 
+def _attribution(
+    nav_rows: tuple[dict[str, Any], ...],
+    state: _State,
+    fills: Iterable[dict[str, Any]],
+    key: Any,
+) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in nav_rows:
+        grouped[key(row)].append(row)
+    fill_dates = [date.fromisoformat(row["execution_session"]) for row in fills]
+    result: dict[str, dict[str, Any]] = {}
+    for label, rows in sorted(grouped.items()):
+        dates = {date.fromisoformat(row["session_date"]) for row in rows}
+        start_nav = _d(rows[0]["nav"])
+        end_nav = _d(rows[-1]["nav"])
+        cost = sum((state.cost_by_session[item] for item in dates), _ZERO)
+        result[label] = {
+            "start_nav": _dstr(start_nav),
+            "end_nav": _dstr(end_nav),
+            "return": _dstr(end_nav / start_nav - _ONE),
+            "trade_count": sum(item in dates for item in fill_dates),
+            "cost": _dstr(cost),
+        }
+    return result
+
+
 def _metrics(spec: Mapping[str, Any], state: _State, nav_rows: tuple[dict[str, Any], ...]) -> dict[str, Any]:
     nav_values = [_d(row["nav"]) for row in nav_rows]
     benchmark_values = [_d(row["benchmark_nav"]) for row in nav_rows]
@@ -889,6 +918,12 @@ def _metrics(spec: Mapping[str, Any], state: _State, nav_rows: tuple[dict[str, A
     benchmark_returns = _returns(benchmark_values)
     total_return = nav_values[-1] / nav_values[0] - _ONE
     benchmark_return = benchmark_values[-1] / benchmark_values[0] - _ONE
+    with localcontext() as context:
+        context.prec = _PRECISION
+        cagr = (
+            ((nav_values[-1] / nav_values[0]).ln() * (Decimal(ANNUALIZATION_FACTOR) / Decimal(max(len(nav_values) - 1, 1)))).exp()
+            - _ONE
+        )
     mean = sum(returns, _ZERO) / Decimal(len(returns)) if returns else None
     variance = (
         sum(((value - mean) ** 2 for value in returns), _ZERO) / Decimal(len(returns) - 1)
@@ -929,7 +964,7 @@ def _metrics(spec: Mapping[str, Any], state: _State, nav_rows: tuple[dict[str, A
     total_cost = state.total_fee_base + state.total_spread_base + state.total_slippage_base + state.total_tax_base
     values = {
         "total_return": _safe_metric(total_return),
-        "cagr": _safe_metric(total_return),
+        "cagr": _safe_metric(cagr),
         "annualized_volatility": _safe_metric(volatility),
         "sharpe": _safe_metric(sharpe),
         "sortino": _safe_metric(sortino),
@@ -957,6 +992,20 @@ def _metrics(spec: Mapping[str, Any], state: _State, nav_rows: tuple[dict[str, A
         "annualization_factor": ANNUALIZATION_FACTOR,
         "risk_free_annual": "0",
         "values": values,
+        "attribution": {
+            "by_partition": _attribution(
+                nav_rows,
+                state,
+                state.fills,
+                lambda row: row["partition"],
+            ),
+            "by_year": _attribution(
+                nav_rows,
+                state,
+                state.fills,
+                lambda row: row["session_date"][:4],
+            ),
+        },
     }
 
 
@@ -1064,6 +1113,14 @@ def simulate_backtest(spec: Mapping[str, Any], *, data_root: str | Any) -> Backt
         experiment_sha256=spec_hash,
         input_fingerprint=input_hash,
         engine_version=ENGINE_VERSION,
+        context={
+            "strategy": normalized["strategy"],
+            "period": normalized["period"],
+            "universe": normalized["universe"],
+            "cost_policy": normalized["cost_policy"],
+            "base_currency": normalized["accounting_policy"]["base_currency"],
+            "reporting_currency": normalized["accounting_policy"]["reporting_currency"],
+        },
         nav=tuple(nav_rows),
         holdings=tuple(holding_rows),
         orders=tuple(state.orders),
