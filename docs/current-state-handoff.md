@@ -279,6 +279,9 @@ corporate actions to prevent double adjustment. This contract and its regression
 landed in `a1ba6c7`, `22e71cf`, and `7153626`; the full `make test` gate then passed
 210 Python tests with the release manifest and schema catalog aligned, including
 the complete daily-cycle preflight and input-byte resumability checks.
+The follow-up legacy-report compatibility regression in `59c435f` brought the
+current full gate to 211 Python tests; the active v1 evidence index records that
+latest result.
 
 The supported forward-evidence path is `make forward-record-capture` after a real
 recent paper session. Newly generated paper reports carry an invocation-time UTC
@@ -286,7 +289,10 @@ recent paper session. Newly generated paper reports carry an invocation-time UTC
 be no later than the capture timestamp. The command validates the append-only
 ledger and reconciled report, records account/report/manifest hashes, and refuses
 stale, late, or replay-only evidence; no genuine wall-clock record exists in the
-repository yet. This fail-closed report-time binding landed in `b5200fa`.
+repository yet. This fail-closed report-time binding landed in `b5200fa`. The
+aggregate acceptance path remains compatible with retained pre-timestamp replay
+reports, covered by the regression in `59c435f`; those reports remain ineligible
+for genuine capture.
 
 The aggregate report needed by the v1 workflow is now derived from the same ledger
 by `make paper-acceptance-report`, landed in `b450f9f`, with its release hash
@@ -377,6 +383,8 @@ to close the v0.2 calendar gate. See the
 - Latest v1 daily-cycle preflight boundary: `a4f8868` (`fix(operations): validate daily-cycle paper specs`)
 - Latest v1 daily-cycle input-binding boundary: `e1ecd4e` (`fix(operations): bind daily-cycle resume to inputs`)
 - Latest v1 forward-report-time boundary: `b5200fa` (`fix(acceptance): bind forward evidence to report time`)
+- Latest v1 paper replay-compatibility boundary: `59c435f` (`test(paper): preserve legacy report compatibility`)
+- Latest v1 operator timing documentation: `7058d10` (`docs(v1): document forward report timing`)
 - Latest v1 forward-record contract boundary: `e272e3d` (`feat(acceptance): bind genuine forward paper evidence`)
 - Latest v1 forward-record integration correction: `b471908` (`fix(acceptance): isolate forward validation imports`)
 - Latest v1 forward-record validation hardening: `be16303` (`fix(acceptance): replay ledger for forward evidence`)
