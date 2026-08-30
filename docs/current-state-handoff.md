@@ -277,7 +277,8 @@ price artifacts while keeping historical backtests raw-only. A paper artifact mu
 use one price basis, and the loader rejects split-adjusted prices paired with
 corporate actions to prevent double adjustment. This contract and its regressions
 landed in `a1ba6c7`, `22e71cf`, and `7153626`; the full `make test` gate then passed
-204 Python tests with the release manifest and schema catalog aligned.
+208 Python tests with the release manifest and schema catalog aligned, including
+the complete daily-cycle preflight and input-byte resumability checks.
 
 The supported forward-evidence path is `make forward-record-capture` after a real
 recent paper session. It validates the append-only ledger and reconciled report,
@@ -370,6 +371,8 @@ to close the v0.2 calendar gate. See the
 - Latest v1 security/recovery boundary: `586d79e` (`feat(operations): enforce security and recovery checks`)
 - Latest v1 resilience/bias boundary: `9a0f558` (`test(acceptance): prove v1 recovery and bias scenarios`)
 - Latest v1 daily-cycle recovery acceptance boundary: `3f96623` (`test(acceptance): exercise daily-cycle CLI recovery`)
+- Latest v1 daily-cycle preflight boundary: `a4f8868` (`fix(operations): validate daily-cycle paper specs`)
+- Latest v1 daily-cycle input-binding boundary: `e1ecd4e` (`fix(operations): bind daily-cycle resume to inputs`)
 - Latest v1 forward-record contract boundary: `e272e3d` (`feat(acceptance): bind genuine forward paper evidence`)
 - Latest v1 forward-record integration correction: `b471908` (`fix(acceptance): isolate forward validation imports`)
 - Latest v1 forward-record validation hardening: `be16303` (`fix(acceptance): replay ledger for forward evidence`)
@@ -379,6 +382,7 @@ to close the v0.2 calendar gate. See the
 - Latest v1 paper price-basis boundary: `7153626` (`test(paper): reject mixed price bases`)
 - Latest v1 paper acceptance-report boundary: `b450f9f` (`feat(paper): derive ledger acceptance reports`)
 - Latest v1 paper compatibility hash: `c35ee45` (`chore(release): refresh paper compatibility hash`)
+- Latest v1 evidence synchronization boundary: `84c29dd` (`docs(v1): refresh resumability acceptance evidence`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`

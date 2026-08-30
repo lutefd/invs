@@ -54,6 +54,8 @@ for historical backtesting.
 
 ## Remaining release boundary
 
-The full v1.0 release remains pending its clean install/upgrade acceptance and a
-genuine recent wall-clock paper session. The matrix is a prerequisite for that
-acceptance, not a substitute for live forward evidence or broader provider coverage.
+The full v1.0 release remains pending a genuine recent wall-clock paper session.
+The matrix is a prerequisite for that acceptance, not a substitute for live
+forward evidence or broader provider coverage. The repository-side install and
+upgrade lifecycle is covered separately by the
+[v1 installation lifecycle acceptance report](2026-08-30-v1-install-upgrade.md).
