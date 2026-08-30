@@ -173,6 +173,27 @@ The exact evidence and validation ladder are recorded in the
 The v0.4 scope is complete. Strategies, backtesting, portfolio construction, paper
 trading, and live execution remain later roadmap boundaries.
 
+## v0.5 completion boundary
+
+The v0.5 point-in-time backtesting and experiment-tracking gate is accepted on
+2026-08-29 at `a143b57`. The implementation now includes strict hash-pinned
+experiment specifications, explicit decision and execution clocks, a daily
+long-only event loop, exact cash/positions/NAV accounting, corporate actions, FX,
+conservative costs and delays, transparent buy-and-hold/equal-weight/momentum
+baselines, versioned metrics and risk-free policy, immutable result artifacts,
+comparison, PostgreSQL experiment/run lineage, and authenticated checkpoint resume.
+
+The retained acceptance runs five bounded US/Brazil experiments, proves clean replay
+and input-perturbation identity behavior, exercises the isolated metadata retry and
+append-only path, and passes 13 deliberate lookahead/survivorship probes. The exact
+IDs, returns, costs, fixtures, commands, and validation ladder are recorded in the
+[v0.5 backtesting acceptance report](acceptance/2026-08-29-v0.5-backtesting.md).
+
+The internal Python simulator remains canonical. LEAN is not a v0.5 runtime
+dependency and no semantic-equivalence claim was made. Rolling calibration,
+portfolio construction, paper trading, broker submission, intraday simulation,
+shorting, and margin remain later boundaries.
+
 ## Yahoo `.SA` source-admission verification
 
 The bounded live verification is recorded in the
@@ -221,9 +242,12 @@ to close the v0.2 calendar gate. See the
 - Branch: `main`
 - v0.3 status: complete; see [the v0.3 acceptance report](acceptance/2026-08-29-v0.3-feature-platform.md)
 - v0.4 status: complete; see [the v0.4 acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md)
+- v0.5 status: complete; see [the v0.5 acceptance report](acceptance/2026-08-29-v0.5-backtesting.md)
 - Latest v0.4 acceptance boundary: `3ac61e1` (`test(acceptance): prove v0.4 hypothesis loop`)
+- Latest v0.5 implementation boundary: `a143b57` (`test(backtest): tighten artifact and ledger invariants`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
+- v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`
 - Latest v0.4 read/report boundary: `b6d6bd3` (`feat(metadata): add point-in-time research read models`)
 - Latest v0.4 theme fixture boundary: `161a23e` (`feat(theme): add reviewed ai infrastructure reference`)
 - Latest v0.3 implementation boundary: `c126d39` (`feat(features): support multi-dataset feature batches`)
@@ -1120,8 +1144,9 @@ projections for that slice. It did not include CVM or the later feature engine.
 The following are not accidental omissions:
 
 - No full historical point-in-time guarantee for current Yahoo, FRED, or BCB pulls.
-  Historical vintage providers and publication-time evidence are required before a
-  serious backtest claim.
+  The accepted v0.5 backtest is restricted to explicit `backtest_safe` fixtures and
+  hash-pinned artifacts; these current pulls cannot be promoted into that boundary
+  without separate historical-publication evidence.
 - The bounded ALFRED CPIAUCSL work package and combined v0.2 historical-truth audit
   are accepted. This is still bounded evidence, not broad all-market coverage.
 - Historical identity/listing/membership and calendar contracts now have a durable
@@ -1166,8 +1191,8 @@ The following are not accidental omissions:
   runners. A PostgreSQL catalog stores validated dataset-level batch metadata and
   lineage; separate read-only catalog and feature-quality reports expose partition
   coverage, typed nulls, freshness, rejects, source contribution, and raw locators.
-  Automatic catalog reconciliation, strategy, backtester, portfolio, execution,
-  labels, training data, and ML behavior remain later boundaries.
+  Automatic catalog reconciliation, portfolio construction, execution, labels,
+  training data, and ML behavior remain later boundaries.
 - v0.4 is complete at `3ac61e1`: reviewed AI-infrastructure theme context, immutable
   document/text artifacts, human-reviewed event proposals, point-in-time evidence
   packs, memo export/import, append-only hypotheses, frozen predictions, and pinned
@@ -1180,7 +1205,7 @@ The following are not accidental omissions:
 
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d` and v0.2 at `0bfdc27`; v0.3 is accepted at
-`5fc3783` with reporting correction `0454d0e`; v0.4 is accepted at `3ac61e1`.
-Keep receipt-time prices installation-replay only. The next smallest cohesive
-boundary is v0.5 point-in-time backtesting; strategy/backtester behavior remains
-deferred until that version's contracts and acceptance gate are implemented.
+`5fc3783` with reporting correction `0454d0e`; v0.4 is accepted at `3ac61e1`; and
+v0.5 is accepted at `a143b57`. Keep receipt-time prices installation-replay only.
+The next smallest cohesive boundary is v0.6 portfolio construction and paper
+trading; rolling calibration and broker behavior remain deferred.

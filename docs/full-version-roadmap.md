@@ -22,7 +22,7 @@ Planning snapshot:
 - The planning snapshot's implementation boundary described by
   [current-state-handoff.md](current-state-handoff.md) was `742e5ae`
   (`feat(features): publish deterministic market artifacts`); the current accepted
-  v0.4 boundary is `3ac61e1`.
+  v0.5 implementation boundary is `a143b57`.
 - The post-handoff continuation also includes the supported feature operator command
   at `e581c5d`, aligned feature documentation at `37e8812`, and the retained
   `market-basic` operator acceptance report at `b7dcac3`.
@@ -114,7 +114,11 @@ The following baseline limitations drive the version order:
 - The v0.4 theme graph, document-event pipeline, append-only hypothesis ledger,
   evidence-pack/memo path, read-only status reports, and pinned prediction outcomes
   are accepted through the [v0.4 hypothesis-loop report](acceptance/2026-08-29-v0.4-hypothesis-loop.md).
-- There is no backtester, portfolio engine, paper account, or live execution.
+- The v0.5 point-in-time backtest, immutable experiment/result contracts, daily
+  accounting ledger, baseline strategies, PostgreSQL run lineage, checkpoint
+  recovery, and bounded US/Brazil acceptance are accepted through the
+  [v0.5 backtesting report](acceptance/2026-08-29-v0.5-backtesting.md).
+- There is no portfolio-construction engine, paper account, or live execution.
 
 ## Source-selection discovery: Brazilian market data
 
@@ -1136,6 +1140,8 @@ are recorded in
 
 # v0.5 — Point-in-Time Backtesting and Experiment Tracking
 
+**Status:** Accepted at `a143b57`; see the [v0.5 backtesting acceptance report](acceptance/2026-08-29-v0.5-backtesting.md).
+
 ## Goal
 
 Build a transparent daily-frequency simulator that tests simple strategies without
@@ -1345,6 +1351,10 @@ The suite must intentionally fail when:
 v0.5 is complete when baseline US and Brazil experiments reproduce from immutable
 inputs, the accounting ledger balances, conservative costs and actions are applied,
 and the deliberate lookahead/survivorship failures are caught by tests.
+
+v0.5 is complete at `a143b57`. The exact reproduction, recovery, bias, and
+validation evidence is recorded in
+[`2026-08-29-v0.5-backtesting.md`](acceptance/2026-08-29-v0.5-backtesting.md).
 
 ---
 
@@ -1950,12 +1960,12 @@ A version is not done because its happy path runs once. It is done when:
 
 ## First execution queue
 
-v0.1, v0.2, v0.3, and v0.4 are accepted. The retained 13-probe US/Brazil audit
+v0.1, v0.2, v0.3, v0.4, and v0.5 are accepted. The retained 13-probe US/Brazil audit
 integrates the bounded identity, membership, calendar, price, action, FX, macro, and
 SEC filing chains, verifies 16 pinned evidence artifacts, and preserves
 installation-replay and unsupported scope decisions. The v0.3 feature platform is
 accepted through `5fc3783`; the v0.4 theme and hypothesis loop is accepted through
-`3ac61e1`; see their acceptance reports. The next narrow queue is v0.5
-point-in-time backtesting. The general backtester remains outside the accepted
-boundary until its strategy inputs, execution clocks, costs, and experiment lineage
-are independently specified and validated.
+`3ac61e1`; v0.5 is accepted at `a143b57`; see their acceptance reports. The next
+narrow queue is v0.6 portfolio construction and paper trading. The accepted v0.5
+backtest remains daily, long-only, and canonical to the internal Python simulator;
+rolling calibration, paper execution, and broker behavior remain future boundaries.

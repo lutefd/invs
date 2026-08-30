@@ -10,8 +10,10 @@ facts, FRED series, and BCB SGS series. CVM is now also live-accepted at the
 post-fix implementation head for the bounded IPE replay described below. CVM IPE
 is canonical filing metadata; CVM CAD is currently raw, ingestion-only evidence.
 
-This is research infrastructure. It is not a trading system, execution system,
-portfolio accounting system, forecast engine, or backtester.
+This is research infrastructure, not a live trading or execution system. The
+accepted v0.5 slice includes a bounded local daily backtest with immutable
+experiment and result artifacts; portfolio construction, paper trading, and broker
+execution remain later boundaries.
 
 ## 1. Prerequisites
 
@@ -1205,7 +1207,68 @@ make research-acceptance
 The exact accepted boundary and generated artifact IDs are recorded in the
 [v0.4 hypothesis-loop acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md).
 
-## 8. Notebook and Grafana
+## 8. Point-in-time backtests
+
+The accepted v0.5 backtest is a local, daily, long-only simulator. It reads only
+the JSON artifacts named by an immutable experiment specification, checks each
+row's `available_at` against the decision clock, uses historical membership and
+exchange sessions, and writes content-addressed result artifacts. It does not call
+provider clients or present-day convenience APIs.
+
+Run the retained bounded US/Brazil reproduction and its 13-probe bias audit with:
+
+```sh
+make backtest-reproduction
+```
+
+Run the isolated PostgreSQL experiment/run lineage, idempotency, retry, terminal
+event, report, and append-only guard acceptance with:
+
+```sh
+make backtest-acceptance
+```
+
+For an operator-supplied experiment, provide a complete spec and the local
+hash-pinned input directory to the containerized CLI:
+
+```sh
+docker compose run --rm --no-deps jupyter invs-backtest run \
+  --spec /data/research/spec.json \
+  --data-root /data/research/inputs \
+  --results-root /data/research/results
+```
+
+The result directory contains `nav.json`, `holdings.json`, `orders.json`,
+`fills.json`, `ledger.json`, `metrics.json`, and `manifest.json`. Validate or
+compare without mutation:
+
+```sh
+docker compose run --rm --no-deps jupyter invs-backtest validate \
+  --manifest /data/research/results/experiment-<id>/result-<id>/manifest.json
+
+docker compose run --rm --no-deps jupyter invs-backtest compare \
+  --manifest /data/research/results/experiment-<id>/result-<id>/manifest.json \
+  --manifest /data/research/results/experiment-<other-id>/result-<other-id>/manifest.json
+```
+
+To exercise crash recovery, add `--checkpoint-root` and
+`--stop-after-session N` to a run. The deliberate interruption raises a terminal
+error after writing an authenticated immutable checkpoint; rerun the same command
+with `--resume` to continue from it. The result manifest retains the experiment
+hash, input fingerprint, row hashes, policy versions, exact risk-free series, and
+the ledger artifacts.
+
+The v0.5 acceptance uses explicit `development`, `validation`, and `holdout`
+partitions. A `risk_free` artifact is optional only when the versioned metrics
+policy selects an artifact-based series; missing required periods fail closed.
+Rolling calibration declarations are validated, but rolling calibration execution
+is not part of the accepted runtime.
+
+The exact accepted experiment IDs, returns, costs, fixture events, and validation
+ladder are recorded in the
+[v0.5 backtesting acceptance report](acceptance/2026-08-29-v0.5-backtesting.md).
+
+## 9. Notebook and Grafana
 
 Execute the empty-safe vertical-slice notebook in a disposable Jupyter process:
 
@@ -1249,7 +1312,7 @@ make dashboard-smoke
 The smoke check rejects duplicate JSON keys and emits `EXPLAIN` statements for
 each dashboard query.
 
-## 9. Reconciliation, backup, and restore
+## 10. Reconciliation, backup, and restore
 
 Use the read-only reconciliation report before and after operational work:
 
@@ -1271,7 +1334,7 @@ make restore BACKUP_DIR=/path/to/backup RESTORE_DIR=/tmp/invs-restore RESTORE_DB
 The restore command refuses existing destinations and only creates a database
 whose name starts with `restore_`, so the application database is not replaced.
 
-## 10. Safety rules for research
+## 11. Safety rules for research
 
 1. Treat raw bytes and committed canonical manifests as the evidence boundary.
    PostgreSQL projections may be rebuilt; raw and canonical files should not be
@@ -1293,8 +1356,11 @@ whose name starts with `restore_`, so the application database is not replaced.
    registration data, not historical issuer state.
 8. Read only manifest-listed Parquet parts. A stray file in a partition is not
    automatically part of the dataset.
+9. Backtests must use the immutable experiment specification and its hash-pinned
+   input artifacts. Do not replace a missing row with a present-day value or edit
+   a published result directory in place.
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 ### PostgreSQL or migrations are unavailable
 
@@ -1362,7 +1428,7 @@ run succeeded and that its accepted candidate passed PostgreSQL finalization.
 Canonical Parquet can contain history even when a replaceable latest projection
 is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
 
-## 12. What this version can and cannot answer
+## 13. What this version can and cannot answer
 
 ### It can answer
 
@@ -1388,6 +1454,11 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
 - Which cataloged batch partitions are complete, partial, empty, or inconsistent by
   decision timestamp, including unaccounted partition counts and accepted row counts.
 - Current latest-only operational coverage and projection health in Grafana.
+- Which bounded daily baseline backtest result, order/fill/ledger artifacts, metric
+  policy, and input hashes were published from a local experiment specification.
+- Whether a bounded experiment reproduces byte-for-byte, whether an input change
+  requires a new experiment identity, and whether the retained US/Brazil bias
+  probes pass.
 
 ### It cannot honestly answer yet
 
@@ -1404,10 +1475,13 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   remain pending.
 - Feature-value null reasons, stale-input attribution, or source-contribution quality
   reporting; a catalog-level coverage/lineage report now exists. Broader market/risk
-  feature families beyond `market-momentum`, backtest, strategy signal, portfolio, forecast, ML model,
+  feature families beyond `market-momentum`, portfolio, forecast, ML model,
   execution order, and performance claims also remain out of scope. The catalog
   indexes only validated dataset-level batches, and the feature engine remains a
   deliberately small closed registry.
+- Portfolio construction, paper-account operation, broker submission, rolling
+  calibration execution, intraday simulation, shorting, margin, and live
+  performance claims remain out of scope.
 - A historical identity relationship solely from today's YAML universe mapping.
 - A latest fundamental snapshot in PostgreSQL; canonical fundamentals remain in
   Parquet, while PostgreSQL latest-only projections currently cover prices and
