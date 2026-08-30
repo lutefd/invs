@@ -150,7 +150,7 @@
         "name": "daily-cycle-report",
         "path": "schemas/daily-cycle-report.schema.json",
         "schema_version": "1.0.0",
-        "sha256": "09ff4672359090837658e3caee7db675791c794cb20c358238aacd5660586e5b"
+        "sha256": "9c1358b6fb359d2e546cafaaeacb14d78881924825bcef05e740fd3ca4639b39"
       },
       {
         "name": "data-source",

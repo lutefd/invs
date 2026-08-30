@@ -485,10 +485,25 @@ def _load_existing_report(
     if not path.is_file():
         return None
     report = _strict_json(path)
-    required = {"schema_version", "cycle_id", "session_date", "spec_sha256", "status", "started_at", "updated_at", "stages"}
+    required = {
+        "schema_version",
+        "cycle_id",
+        "session_date",
+        "decision_at",
+        "spec_sha256",
+        "status",
+        "started_at",
+        "updated_at",
+        "stages",
+    }
     if set(report) != required:
         raise DailyCycleError(f"existing cycle report has an invalid field set: {path}")
-    if report["schema_version"] != SCHEMA_VERSION or report["cycle_id"] != spec["cycle_id"] or report["session_date"] != spec["session_date"]:
+    if (
+        report["schema_version"] != SCHEMA_VERSION
+        or report["cycle_id"] != spec["cycle_id"]
+        or report["session_date"] != spec["session_date"]
+        or report["decision_at"] != spec["decision_at"]
+    ):
         raise DailyCycleError("existing cycle report identity does not match the cycle spec")
     if report["spec_sha256"] != _spec_hash(spec, root=root):
         raise DailyCycleError("existing cycle report belongs to a different cycle specification")
@@ -599,6 +614,7 @@ def run_cycle(spec: Mapping[str, Any], *, repo_root: str | Path) -> dict[str, An
                 "schema_version": SCHEMA_VERSION,
                 "cycle_id": normalized["cycle_id"],
                 "session_date": normalized["session_date"],
+                "decision_at": normalized["decision_at"],
                 "spec_sha256": _spec_hash(normalized, root=root),
                 "status": "running",
                 "started_at": now,
