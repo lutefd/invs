@@ -173,6 +173,21 @@ def test_cycle_spec_rejects_symlinked_input_file(tmp_path: Path) -> None:
         validate_cycle_spec(spec, repo_root=tmp_path)
 
 
+def test_cycle_spec_rejects_symlinked_ledger_path(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    outside = tmp_path / "outside-ledger"
+    outside.mkdir()
+    (data_root / "ledger-link").symlink_to(outside, target_is_directory=True)
+    spec = _spec(tmp_path)
+    spec["ledger_root"] = "ledger-link"
+
+    with pytest.raises(DailyCycleError, match="ledger_root must not traverse symlinks"):
+        validate_cycle_spec(spec, repo_root=tmp_path)
+
+    assert list(outside.iterdir()) == []
+
+
 def test_cycle_rejects_symlinked_report_path(tmp_path: Path) -> None:
     spec = _spec(tmp_path)
     report_path = tmp_path / ".runtime" / "cycles" / "test.json"

@@ -236,6 +236,7 @@ def validate_cycle_spec(value: Mapping[str, Any], *, repo_root: str | Path) -> d
     if value["data_root"] != "data":
         raise DailyCycleError("data_root must be the Compose-mounted data directory 'data'")
     ledger_root = _relative_path(value["ledger_root"], field="ledger_root")
+    _safe_repo_path(root / "data", ledger_root, field="ledger_root")
     backup_dir = _validate_backup_path(value["backup_dir"], root)
     report_path = _relative_path(value["report_path"], field="report_path")
     log_dir = _relative_path(value["log_dir"], field="log_dir")
