@@ -239,7 +239,9 @@ def validate_cycle_spec(value: Mapping[str, Any], *, repo_root: str | Path) -> d
     _safe_repo_path(root / "data", ledger_root, field="ledger_root")
     backup_dir = _validate_backup_path(value["backup_dir"], root)
     report_path = _relative_path(value["report_path"], field="report_path")
+    _safe_repo_path(root, report_path, field="report_path")
     log_dir = _relative_path(value["log_dir"], field="log_dir")
+    _safe_repo_path(root, log_dir, field="log_dir")
 
     collection = _exact(value["collection"], {"enabled"}, field="collection")
     if collection["enabled"] is not True:

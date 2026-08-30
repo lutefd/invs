@@ -188,6 +188,19 @@ def test_cycle_spec_rejects_symlinked_ledger_path(tmp_path: Path) -> None:
     assert list(outside.iterdir()) == []
 
 
+def test_cycle_spec_rejects_symlinked_log_directory(tmp_path: Path) -> None:
+    outside = tmp_path / "outside-logs"
+    outside.mkdir()
+    (tmp_path / "logs-link").symlink_to(outside, target_is_directory=True)
+    spec = _spec(tmp_path)
+    spec["log_dir"] = "logs-link"
+
+    with pytest.raises(DailyCycleError, match="log_dir must not traverse symlinks"):
+        validate_cycle_spec(spec, repo_root=tmp_path)
+
+    assert list(outside.iterdir()) == []
+
+
 def test_cycle_rejects_symlinked_report_path(tmp_path: Path) -> None:
     spec = _spec(tmp_path)
     report_path = tmp_path / ".runtime" / "cycles" / "test.json"
