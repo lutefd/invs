@@ -61,7 +61,7 @@
         "observed_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
         "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
         "currency": { "$ref": "common.schema.json#/$defs/currency" },
-        "price_basis": { "const": "raw" },
+        "price_basis": { "enum": ["raw", "split_adjusted"] },
         "open": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
         "high": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
         "low": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },

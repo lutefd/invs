@@ -96,7 +96,7 @@
         "name": "backtest-input",
         "path": "schemas/backtest-input.schema.json",
         "schema_version": "1.0.0",
-        "sha256": "2dd4c40b2f7f98d7447177ffd41efd8a93a24ca069e287ae9287766c5650d3f9"
+        "sha256": "d125a25dbd14b26a7798d426e93e7250b5897b0fb6d4a599fd925710ec43dae8"
       },
       {
         "name": "backtest-ledger",
