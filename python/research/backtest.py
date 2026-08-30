@@ -668,6 +668,19 @@ def _calendar_sessions(spec: Mapping[str, Any], inputs: BacktestInputs) -> tuple
             raise BacktestMissingDataError(
                 f"calendar session {row['session_date']} is not available by its open"
             )
+    covered_kinds = {
+        _date_partition(spec, session["session_date"])["kind"]
+        for session in sessions
+    }
+    missing_kinds = [
+        partition_kind
+        for partition_kind in ("development", "validation", "holdout")
+        if partition_kind not in covered_kinds
+    ]
+    if missing_kinds:
+        raise BacktestMissingDataError(
+            f"experiment partitions have no exchange sessions: {', '.join(missing_kinds)}"
+        )
     return sessions
 
 

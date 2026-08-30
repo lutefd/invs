@@ -377,6 +377,23 @@ def test_artifact_risk_free_series_is_point_in_time_and_published(tmp_path: Path
     assert all(Decimal(row["daily_rate"]) == expected_daily for row in run.metrics["risk_free_series"])
 
 
+def test_empty_declared_partition_is_rejected(tmp_path: Path) -> None:
+    from research.backtest import BacktestMissingDataError, simulate_backtest
+
+    spec, root = _base_fixture(tmp_path)
+    changed = deepcopy(spec)
+    changed.pop("experiment_id")
+    changed["partitions"] = [
+        {"name": "development", "kind": "development", "start_date": "2025-01-02", "end_date": "2025-01-03"},
+        {"name": "validation", "kind": "validation", "start_date": "2025-01-04", "end_date": "2025-01-05"},
+        {"name": "holdout", "kind": "holdout", "start_date": "2025-01-06", "end_date": "2025-01-06"},
+    ]
+    invalid = build_experiment_spec(changed)
+
+    with pytest.raises(BacktestMissingDataError, match="validation"):
+        simulate_backtest(invalid, data_root=root)
+
+
 def test_checkpointed_interruption_resumes_to_the_clean_result(tmp_path: Path) -> None:
     from research.backtest import BacktestInterruptedError, simulate_backtest
 
