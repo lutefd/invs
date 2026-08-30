@@ -198,3 +198,9 @@ An upgrade must run that preflight against the intended checkout, take a backup 
 `make backup`, apply forward migrations only, and validate the restored installation
 before it resumes collection or paper activity. A changed contract requires a new
 manifest revision rather than silently accepting a mixed release.
+
+`daily-cycle.schema.json` defines the required input references for a complete local
+cycle, and `daily-cycle-report.schema.json` defines its durable stage evidence. The
+cycle runner keeps the command order fixed, records one log per stage, resumes only
+stages whose prior exit code was zero, and runs the final observation stage even when
+a derived stage needs attention.

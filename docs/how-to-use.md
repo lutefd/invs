@@ -1348,6 +1348,23 @@ valuation and the latest projection. The `paper-portfolio` dashboard shows accou
 status, cataloged NAV events, and event-type counts; it does not replace the ledger
 and does not represent a broker or live-performance feed.
 
+### Complete v1.0 daily cycle
+
+The complete local operator path is specification-driven so every derived artifact
+has an explicit input and recovery boundary. Start from the strict contract in
+`schemas/daily-cycle.schema.json`, then run:
+
+```sh
+make daily-cycle CYCLE_SPEC=docs/examples/daily-cycle.json
+```
+
+The runner performs release preflight, collection, filesystem reconciliation,
+feature-batch publication, each configured paper account's create/run/reconcile
+steps, an immutable backup (or backup validation on resume), final reconciliation,
+and the operational status check. It writes a machine-readable report and one log
+per stage. A cycle report is resumable only when its specification hash, commands,
+and prior exit codes still match; changed inputs require a new cycle ID/specification.
+
 ## 10. Notebook and Grafana
 
 Execute the empty-safe vertical-slice notebook in a disposable Jupyter process:

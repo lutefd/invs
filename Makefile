@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-acceptance paper-reproduction action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status reconcile backup backup-validate backup-or-validate restore release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-reproduction action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -110,6 +110,11 @@ rerun:
 daily: setup config
 	@scripts/daily.sh "$(DAILY_DATE)"
 
+daily-cycle: setup config
+	@test -n "$(CYCLE_SPEC)" || (echo "CYCLE_SPEC is required" >&2; exit 2)
+	@test -f "$(CYCLE_SPEC)" || (echo "CYCLE_SPEC does not exist: $(CYCLE_SPEC)" >&2; exit 2)
+	@scripts/daily-cycle.sh --spec "$(CYCLE_SPEC)"
+
 ops-status: setup config
 	@scripts/ops-status.sh
 
@@ -119,6 +124,18 @@ reconcile: setup config
 backup: setup config
 	@test -n "$(BACKUP_DIR)" || (echo "BACKUP_DIR is required" >&2; exit 2)
 	@scripts/backup.sh "$(BACKUP_DIR)"
+
+backup-validate: config
+	@test -n "$(BACKUP_DIR)" || (echo "BACKUP_DIR is required" >&2; exit 2)
+	@scripts/backup-validate.sh "$(BACKUP_DIR)"
+
+backup-or-validate: setup config
+	@test -n "$(BACKUP_DIR)" || (echo "BACKUP_DIR is required" >&2; exit 2)
+	@if test -e "$(BACKUP_DIR)"; then \
+		$(MAKE) backup-validate BACKUP_DIR="$(BACKUP_DIR)"; \
+	else \
+		$(MAKE) backup BACKUP_DIR="$(BACKUP_DIR)"; \
+	fi
 
 restore: config
 	@test -n "$(BACKUP_DIR)" || (echo "BACKUP_DIR is required" >&2; exit 2)
@@ -130,6 +147,36 @@ release-validate: config
 		-v "$(CURDIR):/repo:ro" \
 		jupyter sh -c "pip install -q -e '.[dev]' && python -m research.release_cli validate \
 			--manifest /repo/release/compatibility.json --repo-root /repo --check-runtime"
+
+paper-create-account: config
+	@test -n "$(PAPER_SPEC)" || (echo "PAPER_SPEC is required" >&2; exit 2)
+	@test -n "$(PAPER_LEDGER_ROOT)" || (echo "PAPER_LEDGER_ROOT is required" >&2; exit 2)
+	@test -f "$(PAPER_SPEC)" || (echo "PAPER_SPEC does not exist: $(PAPER_SPEC)" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps \
+		-v "$(PAPER_SPEC):/tmp/paper-spec.json:ro" \
+		jupyter python -m research.paper_cli create-account \
+			--spec /tmp/paper-spec.json \
+			--ledger-root "$(PAPER_LEDGER_ROOT)"
+
+paper-run: config
+	@test -n "$(PAPER_SPEC)" || (echo "PAPER_SPEC is required" >&2; exit 2)
+	@test -n "$(PAPER_LEDGER_ROOT)" || (echo "PAPER_LEDGER_ROOT is required" >&2; exit 2)
+	@test -n "$(PAPER_SESSION_DATE)" || (echo "PAPER_SESSION_DATE is required" >&2; exit 2)
+	@test -f "$(PAPER_SPEC)" || (echo "PAPER_SPEC does not exist: $(PAPER_SPEC)" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps \
+		-v "$(PAPER_SPEC):/tmp/paper-spec.json:ro" \
+		jupyter python -m research.paper_cli run \
+			--spec /tmp/paper-spec.json \
+			--data-root /data \
+			--ledger-root "$(PAPER_LEDGER_ROOT)" \
+			--session-date "$(PAPER_SESSION_DATE)"
+
+paper-reconcile: config
+	@test -n "$(PAPER_ACCOUNT_ID)" || (echo "PAPER_ACCOUNT_ID is required" >&2; exit 2)
+	@test -n "$(PAPER_LEDGER_ROOT)" || (echo "PAPER_LEDGER_ROOT is required" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps jupyter python -m research.paper_cli reconcile \
+		--account-id "$(PAPER_ACCOUNT_ID)" \
+		--ledger-root "$(PAPER_LEDGER_ROOT)"
 
 feature: config
 	@test -n "$(SECURITY_ID)" || (echo "SECURITY_ID is required" >&2; exit 2)
@@ -316,6 +363,7 @@ test: config release-validate
 		-v "$(CURDIR)/docker:/repo/docker:ro" \
 		-v "$(CURDIR)/schemas:/repo/schemas:ro" \
 		-e INVS_REPO_ROOT=/repo \
+		-e PYTHONPATH=/workspace:/repo \
 		-e INVS_DASHBOARD_PATH=/repo/docker/grafana/dashboards/market-overview.json \
 		-e INVS_SCHEMA_ROOT=/repo/schemas \
 		jupyter sh -c "pip install -q -e '.[dev]' && python -m pytest && python -m ruff check research tests"

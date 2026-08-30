@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://invs.local/schemas/daily-cycle-report.schema.json",
+  "title": "INVS daily cycle report",
+  "description": "Durable stage evidence for one local collect-to-paper cycle.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "cycle_id",
+    "session_date",
+    "spec_sha256",
+    "status",
+    "started_at",
+    "updated_at",
+    "stages"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "cycle_id": { "type": "string", "minLength": 1 },
+    "session_date": { "type": "string", "format": "date" },
+    "spec_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": { "enum": ["running", "passed", "attention"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/stage" }
+    }
+  },
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "command",
+        "status",
+        "exit_code",
+        "log_path",
+        "started_at",
+        "finished_at"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "status": { "enum": ["pending", "running", "passed", "failed", "skipped", "resumed"] },
+        "exit_code": { "type": ["integer", "null"] },
+        "log_path": { "type": "string", "minLength": 1 },
+        "started_at": { "type": ["string", "null"], "format": "date-time" },
+        "finished_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  }
+}

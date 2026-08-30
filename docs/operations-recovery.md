@@ -1,5 +1,10 @@
 # Recovery, reconciliation, and daily operations
 
+The v1.0 operator boundary is an explicit collect-to-paper cycle. It preserves the
+v0.x commands below while adding a manifest-driven runner that records each stage,
+its dependency outcome, and its log path. The cycle specification and report are
+strict versioned contracts; do not replace them with an ad-hoc shell sequence.
+
 This runbook covers the durable foundation only. It does not make a historical
 truth or trading-system claim. The reconciliation and restore implementation was
 accepted at `0f73e39`; the full v0.1 foundation and operations gate was accepted at
@@ -142,11 +147,27 @@ original application database.
 
 ## Daily host schedule
 
-The v0.1 scheduler remains host-level. Do not add Dagster or Prefect for this
-boundary. `make daily` is the supported operator wrapper: it serializes the batch
-with a host lock, uses one stable UTC date key, preserves the collector's
-effective run-input metadata, and runs reconciliation and the local status check
-even when collection fails.
+The scheduler remains host-level. Do not add Dagster or Prefect for this boundary.
+For the complete v1.0 path, provide a strict cycle specification and run:
+
+```sh
+make daily-cycle CYCLE_SPEC=docs/examples/daily-cycle.json
+```
+
+The specification must declare one UTC session date, one collection source and run
+key, the feature-batch universe/schedule/calendar/registry inputs, at least one
+paper account specification, a ledger location, and a new backup destination
+outside the checkout. The runner takes the shared `.runtime/daily.lock`, runs the
+fixed order preflight → collection → reconcile → feature batch → paper account
+cycles → backup → final reconcile → observation, and writes its report under the
+declared `report_path`. A failed dependency skips only its downstream stages;
+`make ops-status` still runs for diagnosis. Rerunning the same specification
+resumes successful stages and uses `backup-or-validate` so an already-created
+backup is never overwritten.
+
+The v0.x-compatible `make daily` wrapper remains available for collection,
+reconcile, and status-only maintenance runs. It serializes the batch with the
+same stable UTC date-key convention, but it is not the v1.0 complete-cycle gate.
 
 The default schedule is:
 
@@ -154,7 +175,7 @@ The default schedule is:
 15 02 * * * cd /home/luis/dev/invs && make daily >> /home/luis/dev/invs/logs/cron.log 2>&1
 ```
 
-The wrapper writes one log per UTC run under `logs/` and takes
+The legacy wrapper writes one log per UTC run under `logs/` and takes
 `.runtime/daily.lock` with `flock`; an overlapping invocation exits with status
 75. The default run key is `daily-YYYY-MM-DD`, and a failed run must be retried
 with a new explicit key, for example:

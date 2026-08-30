@@ -141,6 +141,18 @@
         "sha256": "0f5ac06fae640f934dec2aff8385481d8485c615e133d842967d2270b48e93bc"
       },
       {
+        "name": "daily-cycle",
+        "path": "schemas/daily-cycle.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "a5dfddbff326471e3006938d12d554914bf2bf3fe97a58b0ad3e30bf361775ce"
+      },
+      {
+        "name": "daily-cycle-report",
+        "path": "schemas/daily-cycle-report.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "09ff4672359090837658e3caee7db675791c794cb20c358238aacd5660586e5b"
+      },
+      {
         "name": "data-source",
         "path": "schemas/data-source.schema.json",
         "schema_version": "1.0.0",
