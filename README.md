@@ -2,7 +2,7 @@
 
 A small, self-hosted research stack for collecting point-in-time market data into immutable raw files and normalized Parquet, querying it with DuckDB/Jupyter, and monitoring ingestion through PostgreSQL/Grafana.
 
-Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE and the bounded ALFRED CPIAUCSL historical-vintage work package subsequently passed live acceptance, and the repository includes the closed deterministic `market-basic` and `market-momentum` feature engines. Future ALFRED runs require a configured `FRED_API_KEY`. A bounded official B3 InstrumentsConsolidated path now provides exact Brazil identity/listing evidence for configured current/reference snapshots; it is not complete historical lifecycle or universe-membership coverage. The bounded Yahoo `.SA` check remains a price-bridge result, not security-master evidence.
+Status: this is the first actively developed v1/v0 foundation, not an obsolete product. The post-metadata v0 acceptance passed on 2026-08-12 at commit `9ce22d0` for SEC, Yahoo, FRED, and BCB; the scope limitations below still apply. CVM IPE and the bounded ALFRED CPIAUCSL historical-vintage work package subsequently passed live acceptance, and the repository includes the closed deterministic `market-basic` and `market-momentum` feature engines. The v0.5 backtesting gate and v0.6 internal forward-paper gate are accepted at `180d5c9` and `f02a57f`; live broker execution remains outside the accepted boundary. Future ALFRED runs require a configured `FRED_API_KEY`. A bounded official B3 InstrumentsConsolidated path now provides exact Brazil identity/listing evidence for configured current/reference snapshots; it is not complete historical lifecycle or universe-membership coverage. The bounded Yahoo `.SA` check remains a price-bridge result, not security-master evidence.
 
 The product path is documented in the [full-version roadmap](docs/full-version-roadmap.md), with granular execution views in the [roadmap index](docs/roadmap/README.md).
 The operator recovery procedure is in [docs/operations-recovery.md](docs/operations-recovery.md).
@@ -14,6 +14,12 @@ immutable document/text artifacts, human-reviewed event proposals, point-in-time
 evidence packs, append-only hypotheses, frozen predictions, and pinned measured
 outcomes. Reproduce its local end-to-end acceptance with `make research-acceptance`;
 see the [v0.4 hypothesis-loop report](docs/acceptance/2026-08-29-v0.4-hypothesis-loop.md).
+
+The accepted v0.6 paper workspace adds deterministic target construction, versioned
+risk checks, manual/auto approval, close-to-next-open simulated fills, an append-only
+rebuildable ledger, PostgreSQL account/event cataloging, and a `paper-portfolio`
+dashboard. Reproduce its bounded recovery drill with `make paper-acceptance`; see
+the [v0.6 paper-trading report](docs/acceptance/2026-08-29-v0.6-paper-trading.md).
 
 ## Requirements
 
@@ -163,7 +169,13 @@ Validate the provisioned market dashboard as strict JSON and ask PostgreSQL to p
 make dashboard-smoke
 ```
 
-The market dashboard shows configured securities even when no accepted Yahoo snapshot exists, exposes explicit no-snapshot rows for macro sources, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED and BCB series still live only in YAML, so the dashboard deliberately reports source-level presence rather than claiming per-series coverage.
+The market dashboard shows configured securities even when no accepted Yahoo snapshot exists, exposes explicit no-snapshot rows for macro sources, and keeps SEC labeled ingestion-only because there is no fundamental snapshot table. Expected FRED and BCB series still live only in YAML, so the dashboard deliberately reports source-level presence rather than claiming per-series coverage. The separate `paper-portfolio` dashboard exposes PostgreSQL paper-account event projections; the local paper ledger remains the source of truth.
+
+Run the complete bounded v0.6 paper recovery drill with:
+
+```sh
+make paper-acceptance
+```
 
 Reconcile durable state before and after recovery:
 

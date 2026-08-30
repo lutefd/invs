@@ -58,8 +58,9 @@ v0.1 is accepted at `63d479d`, and v0.2 is accepted at `0bfdc27`. The retained
 [US/Brazil point-in-time bias audit](../acceptance/2026-08-24-v0.2-point-in-time-bias-audit.md)
 passes 13 exact boundary probes and verifies 16 evidence artifacts while keeping
 receipt-time prices installation-replay only and unsupported actions blocking. The
-v0.3, v0.4, and v0.5 gates are now accepted; the next planned version is v0.6
-portfolio construction and paper trading. No strategy or backtester scope was pulled
+v0.3, v0.4, and v0.5 gates are now accepted, and the v0.6 portfolio-construction
+and paper-trading gate is accepted at `f02a57f`; the next planned version is v1.0.
+No strategy or backtester scope was pulled
 into the v0.2 exit work. The
 historical-contract slice in `4d483ac` added ADRs 0006 and 0007,
 strict identity/listing/membership/calendar schemas, and executable synthetic
@@ -129,16 +130,24 @@ read-only theme/status reports. The isolated acceptance reconstructs one complet
 theme-backed research loop and verifies the required fail-closed mutations; see the
 [v0.4 hypothesis-loop acceptance report](../acceptance/2026-08-29-v0.4-hypothesis-loop.md).
 
-Feature-level null reporting, broader taxonomy coverage, portfolio construction,
-paper trading, and live execution remain later roadmap boundaries. Rolling
-calibration execution is also deferred beyond the accepted v0.5 fixed-baseline
-boundary.
+Feature-level null reporting, broader taxonomy coverage, and live execution remain
+later roadmap boundaries. Rolling calibration execution is also deferred beyond the
+accepted fixed-baseline boundary.
 
 v0.5 is **accepted** at `180d5c9`. The bounded daily backtest now has immutable
 experiment identity, explicit decision/execution clocks, actions/costs/FX, baseline
 strategies, versioned metrics, result comparison, PostgreSQL run lineage,
 checkpoint recovery, and a retained five-experiment US/Brazil reproduction with a
 13-probe bias audit; see the [v0.5 backtesting acceptance report](../acceptance/2026-08-29-v0.5-backtesting.md).
+
+v0.6 is **accepted** at `f02a57f`. The internal forward-paper engine now constructs
+deterministic targets, enforces versioned risk outside strategy code, runs manual or
+recorded auto approvals through close-to-next-open simulated fills, and rebuilds
+positions/NAV from an append-only ledger. The 22-session recovery drill covers two
+strategy sleeves, corporate actions, no-op sessions, stale and risk failures,
+duplicate delivery, backup restore, and reconciliation; the PostgreSQL catalog and
+`paper-portfolio` dashboard expose operator projections. See the
+[v0.6 paper-trading acceptance report](../acceptance/2026-08-29-v0.6-paper-trading.md).
 
 The common downloaded-resource result contract and provider failure-preservation
 tests landed in `8f2680f`; the separate filing and feature-artifact notebook
@@ -157,5 +166,7 @@ the PETZ3 lifecycle/membership proof plus the combined Brazil audit are accepted
 Broad long-history coverage remains outside the admitted boundary. Yahoo remains a
 separate, unadmitted price-bridge candidate.
 
-General portfolio construction and paper-trading implementation remains sequenced
-after the accepted backtest and experiment phase.
+The v0.6 simulation gate is complete. The next execution focus is v1.0 integration:
+connect the accepted collect-to-paper components, harden the operator workflow, and
+accumulate a genuine forward record. Broker submission and live execution remain
+post-v1 decisions.

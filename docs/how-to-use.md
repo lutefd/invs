@@ -12,8 +12,9 @@ is canonical filing metadata; CVM CAD is currently raw, ingestion-only evidence.
 
 This is research infrastructure, not a live trading or execution system. The
 accepted v0.5 slice includes a bounded local daily backtest with immutable
-experiment and result artifacts; portfolio construction, paper trading, and broker
-execution remain later boundaries.
+experiment and result artifacts. The accepted v0.6 slice adds an internal,
+recorded/replayed forward-paper process; broker execution and real-money use remain
+later boundaries.
 
 ## 1. Prerequisites
 
@@ -1268,7 +1269,86 @@ The exact accepted experiment IDs, returns, costs, fixture events, and validatio
 ladder are recorded in the
 [v0.5 backtesting acceptance report](acceptance/2026-08-29-v0.5-backtesting.md).
 
-## 9. Notebook and Grafana
+## 9. Portfolio construction and paper trading
+
+The v0.6 paper process is forward-only at the account boundary. An immutable
+account specification pins the strategy version, universe, input artifacts, decision
+clock, accounting/cost/risk policies, approval mode, and promoted backtest identity.
+The local append-only ledger is the source of truth; PostgreSQL stores an immutable
+account/event envelope for operator reporting, and Grafana reads that projection.
+
+The paper input loader accepts both `current_research_only` and `backtest_safe`
+artifacts. This allows an explicitly recorded forward or installation-replay paper
+run without weakening the v0.5 backtest requirement that historical inputs be
+`backtest_safe`. Missing or stale prices halt a decision, and a failed risk check
+produces no orders.
+
+The committed recovery drill exercises the full bounded process:
+
+```sh
+make paper-acceptance
+```
+
+This applies the paper metadata migration, proves idempotent PostgreSQL account/event
+registration and append-only guards, then runs the deterministic 22-session paper
+reproduction. The reproduction report is retained at
+`data/research/acceptance/v0.6/reproduction/paper-reproduction.json`.
+
+For an operator-supplied account, create a spec with input references and keep the
+ledger in a dedicated data directory. The Compose `jupyter` service mounts the
+repository's `data/` directory at `/data`:
+
+```sh
+mkdir -p data/research/acceptance/v0.6/operator/ledger
+
+docker compose run --rm --no-deps jupyter invs-paper create-account \
+  --spec /data/research/acceptance/v0.6/operator/spec.json \
+  --ledger-root /data/research/acceptance/v0.6/operator/ledger
+
+docker compose run --rm --no-deps jupyter invs-paper run \
+  --spec /data/research/acceptance/v0.6/operator/spec.json \
+  --data-root /data/research/acceptance/v0.6/operator \
+  --ledger-root /data/research/acceptance/v0.6/operator/ledger \
+  --session-date 2025-01-02
+```
+
+For a manual account, approve or reject the returned decision before the proposed
+orders can settle. Auto-approval is allowed only when it is recorded in the immutable
+account policy:
+
+```sh
+docker compose run --rm --no-deps jupyter invs-paper approve \
+  --account-id <account-id> \
+  --decision-id <decision-id> \
+  --ledger-root /data/research/acceptance/v0.6/operator/ledger \
+  --approved
+```
+
+Read the daily report and verify the projection after each cycle:
+
+```sh
+docker compose run --rm --no-deps jupyter invs-paper report \
+  --account-id <account-id> \
+  --ledger-root /data/research/acceptance/v0.6/operator/ledger \
+  --session-date 2025-01-02
+
+docker compose run --rm --no-deps jupyter invs-paper rebuild \
+  --account-id <account-id> \
+  --ledger-root /data/research/acceptance/v0.6/operator/ledger
+
+docker compose run --rm --no-deps jupyter invs-paper reconcile \
+  --account-id <account-id> \
+  --ledger-root /data/research/acceptance/v0.6/operator/ledger
+```
+
+Each decision and approval has deterministic idempotency. Repeating a command returns
+the existing result rather than duplicating orders or cash movements. `rebuild`
+derives positions, cash, and NAV from ledger events, while `reconcile` checks every
+valuation and the latest projection. The `paper-portfolio` dashboard shows account
+status, cataloged NAV events, and event-type counts; it does not replace the ledger
+and does not represent a broker or live-performance feed.
+
+## 10. Notebook and Grafana
 
 Execute the empty-safe vertical-slice notebook in a disposable Jupyter process:
 
@@ -1295,7 +1375,8 @@ are:
 
 - `pipeline-health`: run statuses, errors, counts, raw evidence, and coverage;
 - `market-overview`: configured securities and latest Yahoo price/FRED macro
-  projections.
+  projections; and
+- `paper-portfolio`: paper-account status, NAV valuation events, and event mix.
 
 The dashboards query PostgreSQL's replaceable latest-only projections. They do
 not replace canonical Parquet history, and they do not synthesize a missing
@@ -1312,7 +1393,7 @@ make dashboard-smoke
 The smoke check rejects duplicate JSON keys and emits `EXPLAIN` statements for
 each dashboard query.
 
-## 10. Reconciliation, backup, and restore
+## 11. Reconciliation, backup, and restore
 
 Use the read-only reconciliation report before and after operational work:
 
@@ -1334,7 +1415,7 @@ make restore BACKUP_DIR=/path/to/backup RESTORE_DIR=/tmp/invs-restore RESTORE_DB
 The restore command refuses existing destinations and only creates a database
 whose name starts with `restore_`, so the application database is not replaced.
 
-## 11. Safety rules for research
+## 12. Safety rules for research
 
 1. Treat raw bytes and committed canonical manifests as the evidence boundary.
    PostgreSQL projections may be rebuilt; raw and canonical files should not be
@@ -1360,7 +1441,7 @@ whose name starts with `restore_`, so the application database is not replaced.
    input artifacts. Do not replace a missing row with a present-day value or edit
    a published result directory in place.
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### PostgreSQL or migrations are unavailable
 
@@ -1428,7 +1509,7 @@ run succeeded and that its accepted candidate passed PostgreSQL finalization.
 Canonical Parquet can contain history even when a replaceable latest projection
 is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
 
-## 13. What this version can and cannot answer
+## 14. What this version can and cannot answer
 
 ### It can answer
 
@@ -1459,6 +1540,11 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
 - Whether a bounded experiment reproduces byte-for-byte, whether an input change
   requires a new experiment identity, and whether the retained US/Brazil bias
   probes pass.
+- How a bounded forward-paper account constructs targets, applies risk decisions,
+  records approvals and simulated fills, handles corporate actions, and reports
+  NAV from its immutable local ledger.
+- Whether a paper account can rebuild positions/NAV exactly after restart or backup
+  restore, and whether its PostgreSQL account/event projection reconciles.
 
 ### It cannot honestly answer yet
 
@@ -1479,9 +1565,8 @@ is absent. CVM filings and CAD do not populate the price/macro snapshot tables.
   execution order, and performance claims also remain out of scope. The catalog
   indexes only validated dataset-level batches, and the feature engine remains a
   deliberately small closed registry.
-- Portfolio construction, paper-account operation, broker submission, rolling
-  calibration execution, intraday simulation, shorting, margin, and live
-  performance claims remain out of scope.
+- Broker submission, real-money performance, rolling calibration execution, intraday
+  simulation, shorting, and margin remain out of scope.
 - A historical identity relationship solely from today's YAML universe mapping.
 - A latest fundamental snapshot in PostgreSQL; canonical fundamentals remain in
   Parquet, while PostgreSQL latest-only projections currently cover prices and

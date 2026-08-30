@@ -170,8 +170,9 @@ authorization. The deterministic snapshot correction is `0b97702`.
 
 The exact evidence and validation ladder are recorded in the
 [v0.4 hypothesis-loop acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md).
-The v0.4 scope is complete. Strategies, backtesting, portfolio construction, paper
-trading, and live execution remain later roadmap boundaries.
+The v0.4 scope is complete. At that boundary, strategies, backtesting, portfolio
+construction, paper trading, and live execution remained later roadmap boundaries;
+the v0.5 and v0.6 sections below record the subsequent accepted slices.
 
 ## v0.5 completion boundary
 
@@ -190,9 +191,32 @@ IDs, returns, costs, fixtures, commands, and validation ladder are recorded in t
 [v0.5 backtesting acceptance report](acceptance/2026-08-29-v0.5-backtesting.md).
 
 The internal Python simulator remains canonical. LEAN is not a v0.5 runtime
-dependency and no semantic-equivalence claim was made. Rolling calibration,
-portfolio construction, paper trading, broker submission, intraday simulation,
-shorting, and margin remain later boundaries.
+dependency and no semantic-equivalence claim was made. Rolling calibration, broker
+submission, intraday simulation, shorting, and margin remained later boundaries at
+the v0.5 exit; portfolio construction and internal paper trading are accepted in
+the v0.6 section below.
+
+## v0.6 completion boundary
+
+The v0.6 portfolio-construction and paper-trading gate is accepted at implementation
+boundary `f02a57f`. The slice was delivered through the ADR/schema boundary in
+`734ceef`, the forward portfolio and ledger engine in `3d9b461`, the operator CLI in
+`2f05b93`, the PostgreSQL catalog in `65da807`, the fractional-reserve correction in
+`1eacda9`, the deterministic recovery drill in `d2fbee9`, the catalog acceptance in
+`d92a15e`, and the paper dashboard in `f02a57f`.
+
+The retained acceptance replays 22 sessions for separate equal-weight and momentum
+accounts. It proves five rebalances, no-op sessions, manual and auto approval,
+close-to-next-open fills, split/dividend/delisting handling, duplicate proposal and
+approval idempotency, stale-data halting, risk rejection without orders, exact ledger
+rebuild, backup restore, and reconciliation. The PostgreSQL acceptance proves
+idempotent account/event registration, append-only guards, sequence enforcement, and
+latest-event reporting. Evidence and commands are recorded in the
+[v0.6 paper-trading acceptance report](acceptance/2026-08-29-v0.6-paper-trading.md).
+
+The accepted boundary is an internal, recorded/replayed forward-paper process. It
+does not include real-money or broker submission, intraday execution, leverage,
+shorting, margin, or a claim of live performance.
 
 ## Yahoo `.SA` source-admission verification
 
@@ -243,11 +267,14 @@ to close the v0.2 calendar gate. See the
 - v0.3 status: complete; see [the v0.3 acceptance report](acceptance/2026-08-29-v0.3-feature-platform.md)
 - v0.4 status: complete; see [the v0.4 acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md)
 - v0.5 status: complete; see [the v0.5 acceptance report](acceptance/2026-08-29-v0.5-backtesting.md)
+- v0.6 status: complete; see [the v0.6 acceptance report](acceptance/2026-08-29-v0.6-paper-trading.md)
 - Latest v0.4 acceptance boundary: `3ac61e1` (`test(acceptance): prove v0.4 hypothesis loop`)
 - Latest v0.5 implementation boundary: `180d5c9` (`fix(backtest): order metric attribution deterministically`)
+- Latest v0.6 implementation boundary: `f02a57f` (`feat(observability): add paper portfolio dashboard`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`
+- v0.6 operator paths: `make paper-acceptance` and `make paper-reproduction`
 - Latest v0.4 read/report boundary: `b6d6bd3` (`feat(metadata): add point-in-time research read models`)
 - Latest v0.4 theme fixture boundary: `161a23e` (`feat(theme): add reviewed ai infrastructure reference`)
 - Latest v0.3 implementation boundary: `c126d39` (`feat(features): support multi-dataset feature batches`)
@@ -1191,8 +1218,8 @@ The following are not accidental omissions:
   runners. A PostgreSQL catalog stores validated dataset-level batch metadata and
   lineage; separate read-only catalog and feature-quality reports expose partition
   coverage, typed nulls, freshness, rejects, source contribution, and raw locators.
-  Automatic catalog reconciliation, portfolio construction, execution, labels,
-  training data, and ML behavior remain later boundaries.
+  Automatic catalog reconciliation, broader feature coverage, labels, training data,
+  and ML behavior remain later boundaries.
 - v0.4 is complete at `3ac61e1`: reviewed AI-infrastructure theme context, immutable
   document/text artifacts, human-reviewed event proposals, point-in-time evidence
   packs, memo export/import, append-only hypotheses, frozen predictions, and pinned
@@ -1201,11 +1228,17 @@ The following are not accidental omissions:
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
 
+- v0.6 is complete at `f02a57f`; its local ledger, paper CLI, PostgreSQL catalog,
+  recovery acceptance, and dashboard are now the current paper-operation boundary.
+  The next boundary is v1.0 integration and genuine forward-period accumulation;
+  broker/live execution remains post-v1.
+
 ## Exact next actions
 
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d` and v0.2 at `0bfdc27`; v0.3 is accepted at
-`5fc3783` with reporting correction `0454d0e`; v0.4 is accepted at `3ac61e1`; and
-v0.5 is accepted at `180d5c9`. Keep receipt-time prices installation-replay only.
-The next smallest cohesive boundary is v0.6 portfolio construction and paper
-trading; rolling calibration and broker behavior remain deferred.
+`5fc3783` with reporting correction `0454d0e`; v0.4 is accepted at `3ac61e1`; v0.5
+is accepted at `180d5c9`; and v0.6 is accepted at `f02a57f`. Keep receipt-time
+prices installation-replay only. The next smallest cohesive boundary is v1.0
+integration and operational hardening; rolling calibration and broker behavior remain
+deferred.

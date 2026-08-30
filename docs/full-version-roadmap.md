@@ -22,7 +22,7 @@ Planning snapshot:
 - The planning snapshot's implementation boundary described by
   [current-state-handoff.md](current-state-handoff.md) was `742e5ae`
   (`feat(features): publish deterministic market artifacts`); the current accepted
-  v0.5 implementation boundary is `180d5c9`.
+  v0.6 implementation boundary is `f02a57f`.
 - The post-handoff continuation also includes the supported feature operator command
   at `e581c5d`, aligned feature documentation at `37e8812`, and the retained
   `market-basic` operator acceptance report at `b7dcac3`.
@@ -118,7 +118,8 @@ The following baseline limitations drive the version order:
   accounting ledger, baseline strategies, PostgreSQL run lineage, checkpoint
   recovery, and bounded US/Brazil acceptance are accepted through the
   [v0.5 backtesting report](acceptance/2026-08-29-v0.5-backtesting.md).
-- There is no portfolio-construction engine, paper account, or live execution.
+- The v0.6 internal portfolio-construction and paper-account boundary is accepted;
+  live broker execution remains out of scope.
 
 ## Source-selection discovery: Brazilian market data
 
@@ -294,6 +295,13 @@ wait for machine learning or document intelligence.
 Capacity should favor the critical path over strict calendar boundaries. Data should
 continue collecting throughout all phases so that the forward paper period grows even
 while later components are built.
+
+The v0.6 gate is accepted at `f02a57f`. Its bounded recorded/replayed forward-paper
+acceptance covers 22 sessions, separate equal-weight and momentum sleeves, deterministic
+targets and risk decisions, close-to-next-open fills, corporate actions, stale/risk
+failure probes, restart/idempotency, ledger rebuild, backup restore, PostgreSQL event
+cataloging, and dashboard monitoring. The detailed evidence is in the
+[v0.6 paper-trading acceptance report](acceptance/2026-08-29-v0.6-paper-trading.md).
 
 ---
 
@@ -1360,6 +1368,8 @@ validation evidence is recorded in
 
 # v0.6 — Portfolio Construction and Paper Trading
 
+**Status:** Accepted at `f02a57f`; see the [v0.6 paper-trading acceptance report](acceptance/2026-08-29-v0.6-paper-trading.md).
+
 ## Goal
 
 Use the accepted research and backtest contracts in a forward-only daily process that
@@ -1532,6 +1542,12 @@ verify source freshness and completed manifests
 v0.6 is complete when the forward paper cycle can run daily, explain and reproduce
 each decision, reject unsafe/stale inputs, recover without duplicate effects, and
 rebuild all holdings and cash from the audit ledger.
+
+The exit gate passed for the bounded internal paper process. The local ledger is the
+source of truth, while PostgreSQL and Grafana provide immutable event envelopes and
+operator projections. The accepted evidence uses recorded/replayed inputs and does
+not claim live broker connectivity, real-money performance, intraday execution,
+leverage, shorting, or margin support.
 
 ---
 
@@ -1965,7 +1981,8 @@ integrates the bounded identity, membership, calendar, price, action, FX, macro,
 SEC filing chains, verifies 16 pinned evidence artifacts, and preserves
 installation-replay and unsupported scope decisions. The v0.3 feature platform is
 accepted through `5fc3783`; the v0.4 theme and hypothesis loop is accepted through
-`3ac61e1`; v0.5 is accepted at `180d5c9`; see their acceptance reports. The next
-narrow queue is v0.6 portfolio construction and paper trading. The accepted v0.5
-backtest remains daily, long-only, and canonical to the internal Python simulator;
-rolling calibration, paper execution, and broker behavior remain future boundaries.
+`3ac61e1`; v0.5 is accepted at `180d5c9`; v0.6 is accepted at `f02a57f`; see their
+acceptance reports. The next narrow queue is v1.0 integration and operational
+hardening. The accepted v0.5 backtest remains daily, long-only, and canonical to the
+internal Python simulator; rolling calibration, paper execution, and broker behavior
+remain future boundaries.
