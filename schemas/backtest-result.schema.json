@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/backtest-result.schema.json",
+  "title": "Backtest result manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "result_id", "experiment_id", "experiment_sha256", "engine_version",
+    "input_fingerprint", "status", "artifacts", "summary", "metrics"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "result_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "experiment_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "experiment_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "engine_version": { "type": "string", "minLength": 1 },
+    "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "status": { "const": "completed" },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nav", "holdings", "orders", "fills", "ledger", "metrics"],
+      "properties": {
+        "nav": { "$ref": "#/$defs/artifact" },
+        "holdings": { "$ref": "#/$defs/artifact" },
+        "orders": { "$ref": "#/$defs/artifact" },
+        "fills": { "$ref": "#/$defs/artifact" },
+        "ledger": { "$ref": "#/$defs/artifact" },
+        "metrics": { "$ref": "#/$defs/artifact" }
+      }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "metrics": { "$ref": "#/$defs/metrics" }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\\\u0000].*$",
+      "not": { "pattern": "(^|[/\\\\])\\.\\.([/\\\\]|$)" }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "row_count"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "row_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_count", "holdings_count", "order_count", "fill_count", "ledger_count"],
+      "properties": {
+        "session_count": { "type": "integer", "minimum": 0 },
+        "holdings_count": { "type": "integer", "minimum": 0 },
+        "order_count": { "type": "integer", "minimum": 0 },
+        "fill_count": { "type": "integer", "minimum": 0 },
+        "ledger_count": { "type": "integer", "minimum": 0 },
+        "rejected_trade_count": { "type": "integer", "minimum": 0 },
+        "holdout_attempts": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "values"],
+      "properties": {
+        "metrics_version": { "const": "1.0.0" },
+        "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "annualization_factor": { "type": "integer", "minimum": 1 },
+        "risk_free_annual": { "$ref": "common.schema.json#/$defs/decimal" },
+        "values": { "type": "object", "minProperties": 1 }
+      }
+    }
+  }
+}

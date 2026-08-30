@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/backtest-ledger.schema.json",
+  "title": "Backtest accounting ledger row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sequence", "session_date", "event_at", "event_type", "currency", "amount_local",
+    "amount_base", "note"
+  ],
+  "properties": {
+    "sequence": { "type": "integer", "minimum": 1 },
+    "session_date": { "$ref": "common.schema.json#/$defs/date" },
+    "event_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "event_type": {
+      "enum": ["initial_cash", "split", "dividend", "delisting", "order", "fill", "fee", "tax", "fx_conversion", "mark", "reject"]
+    },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "quantity": { "$ref": "common.schema.json#/$defs/decimal" },
+    "amount_local": { "$ref": "common.schema.json#/$defs/decimal" },
+    "amount_base": { "$ref": "common.schema.json#/$defs/decimal" },
+    "price": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "note": { "type": "string", "minLength": 1 }
+  }
+}

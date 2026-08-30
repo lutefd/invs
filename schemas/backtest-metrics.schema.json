@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/backtest-metrics.schema.json",
+  "title": "Backtest metrics artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "values"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "metrics_version": { "const": "1.0.0" },
+    "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "annualization_factor": { "type": "integer", "minimum": 1 },
+    "risk_free_annual": { "$ref": "common.schema.json#/$defs/decimal" },
+    "values": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          { "$ref": "common.schema.json#/$defs/decimal" },
+          { "type": "null" }
+        ]
+      },
+      "minProperties": 1
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/backtest-fill.schema.json",
+  "title": "Backtest fill row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "fill_id", "order_id", "execution_at", "execution_session", "security_id", "side",
+    "quantity", "reference_price", "fill_price", "gross_notional", "fee", "spread_cost",
+    "slippage_cost", "tax", "currency", "base_notional", "status"
+  ],
+  "properties": {
+    "fill_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "order_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "execution_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "execution_session": { "$ref": "common.schema.json#/$defs/date" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "side": { "enum": ["buy", "sell"] },
+    "quantity": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "reference_price": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "fill_price": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "gross_notional": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "fee": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "spread_cost": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "slippage_cost": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "tax": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "base_notional": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "status": { "const": "filled" }
+  }
+}

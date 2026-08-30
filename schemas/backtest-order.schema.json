@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/backtest-order.schema.json",
+  "title": "Backtest order row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "order_id", "decision_session", "execution_session", "security_id", "side", "quantity",
+    "reference_price", "currency", "target_weight", "reason", "status"
+  ],
+  "properties": {
+    "order_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "decision_session": { "$ref": "common.schema.json#/$defs/date" },
+    "execution_session": { "$ref": "common.schema.json#/$defs/date" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "side": { "enum": ["buy", "sell"] },
+    "quantity": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "reference_price": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "target_weight": { "$ref": "common.schema.json#/$defs/decimal" },
+    "reason": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["proposed", "filled", "rejected"] }
+  }
+}

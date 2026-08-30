@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/backtest-nav.schema.json",
+  "title": "Backtest NAV row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_date", "partition", "decision_at", "cash_by_currency", "cash_base",
+    "positions_value_base", "nav", "gross_exposure", "net_exposure", "benchmark_nav"
+  ],
+  "properties": {
+    "session_date": { "$ref": "common.schema.json#/$defs/date" },
+    "partition": { "type": "string", "minLength": 1 },
+    "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "cash_by_currency": { "type": "object", "additionalProperties": { "$ref": "common.schema.json#/$defs/decimal" } },
+    "cash_base": { "$ref": "common.schema.json#/$defs/decimal" },
+    "positions_value_base": { "$ref": "common.schema.json#/$defs/decimal" },
+    "nav": { "$ref": "common.schema.json#/$defs/decimal" },
+    "gross_exposure": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "net_exposure": { "$ref": "common.schema.json#/$defs/decimal" },
+    "benchmark_nav": { "$ref": "common.schema.json#/$defs/decimal" },
+    "reporting_nav": {
+      "anyOf": [
+        { "$ref": "common.schema.json#/$defs/decimal" },
+        { "type": "null" }
+      ]
+    }
+  }
+}

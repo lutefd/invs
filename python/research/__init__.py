@@ -52,6 +52,21 @@ from .evidence import (
     import_research_memo,
     read_evidence_pack,
 )
+from .experiments import (
+    ENGINE_VERSION as BACKTEST_ENGINE_VERSION,
+)
+from .experiments import (
+    BacktestSpecConflictError,
+    BacktestSpecError,
+    BacktestSpecValidationError,
+    ValidatedExperimentSpec,
+    build_experiment_spec,
+    experiment_sha256,
+    input_fingerprint,
+    read_experiment_spec,
+    validate_experiment_spec,
+    write_experiment_spec,
+)
 from .feature_quality import FeatureQualityReportError, build_feature_quality_report
 from .fundamental_growth import (
     compute_fundamental_growth_features,
@@ -119,6 +134,7 @@ from .taxonomy import (
 )
 
 __all__ = [
+    "BACKTEST_ENGINE_VERSION",
     "ELIGIBILITY_POLICY",
     "EVENT_TYPES",
     "FX_POLICY_VERSION",
@@ -128,6 +144,9 @@ __all__ = [
     "AdjustmentArtifactValidationError",
     "AmbiguousFXObservation",
     "AmbiguousHistoricalResolution",
+    "BacktestSpecConflictError",
+    "BacktestSpecError",
+    "BacktestSpecValidationError",
     "CalendarPolicy",
     "ComputationPolicy",
     "DatasetSchemaError",
@@ -163,9 +182,11 @@ __all__ = [
     "TaxonomyMapping",
     "TaxonomyRegistry",
     "TaxonomyRegistryError",
+    "ValidatedExperimentSpec",
     "after_close_execution_session",
     "build_event_proposal",
     "build_evidence_pack",
+    "build_experiment_spec",
     "build_feature_quality_report",
     "calendar_fingerprint",
     "calendar_manifest_as_of",
@@ -174,10 +195,12 @@ __all__ = [
     "compute_macro_state_features",
     "convert_currency",
     "corporate_actions_as_of",
+    "experiment_sha256",
     "export_research_memo",
     "fx_as_of",
     "fx_record_hash",
     "import_research_memo",
+    "input_fingerprint",
     "listing_as_of",
     "listings_as_of",
     "load_feature_registry",
@@ -196,6 +219,7 @@ __all__ = [
     "read_document_text",
     "read_event_proposal",
     "read_evidence_pack",
+    "read_experiment_spec",
     "read_feature_batch",
     "read_fundamental_growth_artifact",
     "read_macro_state_artifact",
@@ -204,9 +228,11 @@ __all__ = [
     "trading_session_at",
     "universe_as_of",
     "validate_adjustment_artifact",
+    "validate_experiment_spec",
     "validate_feature_batch",
     "validate_fundamental_growth_artifact",
     "validate_macro_state_artifact",
     "verify_source_spans",
     "write_event_proposal",
+    "write_experiment_spec",
 ]

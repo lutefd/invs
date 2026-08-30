@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/backtest-input.schema.json",
+  "title": "Backtest input artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_kind", "artifact_id", "available_at", "rows"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "artifact_kind": {
+      "type": "string",
+      "enum": ["prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro"]
+    },
+    "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "rows": { "type": "array" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "artifact_kind": { "const": "prices" } } },
+      "then": { "properties": { "rows": { "items": { "$ref": "#/$defs/priceRow" } } } }
+    },
+    {
+      "if": { "properties": { "artifact_kind": { "const": "calendar" } } },
+      "then": { "properties": { "rows": { "items": { "$ref": "#/$defs/calendarRow" } } } }
+    },
+    {
+      "if": { "properties": { "artifact_kind": { "const": "membership" } } },
+      "then": { "properties": { "rows": { "items": { "$ref": "#/$defs/membershipRow" } } } }
+    },
+    {
+      "if": { "properties": { "artifact_kind": { "const": "corporate_actions" } } },
+      "then": { "properties": { "rows": { "items": { "$ref": "#/$defs/actionRow" } } } }
+    },
+    {
+      "if": { "properties": { "artifact_kind": { "const": "fx" } } },
+      "then": { "properties": { "rows": { "items": { "$ref": "#/$defs/fxRow" } } } }
+    },
+    {
+      "if": { "properties": { "artifact_kind": { "enum": ["feature", "macro"] } } },
+      "then": { "properties": { "rows": { "items": { "$ref": "#/$defs/observationRow" } } } }
+    }
+  ],
+  "$defs": {
+    "decimal": { "$ref": "common.schema.json#/$defs/decimal" },
+    "nonNegativeDecimal": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "priceRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "security_id", "session_date", "observed_at", "available_at", "currency",
+        "price_basis", "open", "high", "low", "close", "volume", "has_volume"
+      ],
+      "properties": {
+        "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "session_date": { "$ref": "common.schema.json#/$defs/date" },
+        "observed_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "price_basis": { "const": "raw" },
+        "open": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+        "high": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+        "low": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+        "close": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+        "volume": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+        "has_volume": { "type": "boolean" },
+        "source_record_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "calendarRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_date", "open_at", "close_at", "available_at"],
+      "properties": {
+        "session_date": { "$ref": "common.schema.json#/$defs/date" },
+        "open_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "close_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "session_status": { "enum": ["open", "early_close"] }
+      }
+    },
+    "membershipRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_id", "valid_from", "valid_until", "member", "available_at"],
+      "properties": {
+        "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "valid_from": { "$ref": "common.schema.json#/$defs/date" },
+        "valid_until": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/date" },
+            { "type": "null" }
+          ]
+        },
+        "member": { "type": "boolean" },
+        "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "revision": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "actionRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "security_id", "action_type", "effective_date", "payment_date", "available_at", "currency", "ratio_numerator", "ratio_denominator", "cash_amount", "settlement_price"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "action_type": { "enum": ["split", "cash_dividend", "delisting"] },
+        "effective_date": { "$ref": "common.schema.json#/$defs/date" },
+        "payment_date": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/date" },
+            { "type": "null" }
+          ]
+        },
+        "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "ratio_numerator": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+        "ratio_denominator": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+        "cash_amount": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+        "settlement_price": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+            { "type": "null" }
+          ]
+        },
+        "target_security_id": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/uuid" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "fxRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixing_at", "base_currency", "quote_currency", "rate", "available_at"],
+      "properties": {
+        "fixing_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "quote_currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "rate": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+        "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+      }
+    },
+    "observationRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation_id", "observed_at", "available_at", "value"],
+      "properties": {
+        "observation_id": { "type": "string", "minLength": 1 },
+        "observed_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "value": { "$ref": "common.schema.json#/$defs/decimal" },
+        "revision": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

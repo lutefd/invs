@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/backtest-experiment.schema.json",
+  "title": "Backtest experiment specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "experiment_id", "strategy", "period", "universe", "inputs",
+    "benchmark", "decision_policy", "accounting_policy", "cost_policy", "risk_policy",
+    "partitions", "missing_data_policy"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "experiment_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "strategy": { "$ref": "#/$defs/strategy" },
+    "period": { "$ref": "#/$defs/dateRange" },
+    "universe": { "$ref": "#/$defs/universe" },
+    "inputs": {
+      "type": "array",
+      "minItems": 3,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/artifactRef" }
+    },
+    "benchmark": { "$ref": "#/$defs/benchmark" },
+    "decision_policy": { "$ref": "#/$defs/decisionPolicy" },
+    "accounting_policy": { "$ref": "#/$defs/accountingPolicy" },
+    "cost_policy": { "$ref": "#/$defs/costPolicy" },
+    "risk_policy": { "$ref": "#/$defs/riskPolicy" },
+    "partitions": {
+      "type": "array",
+      "minItems": 3,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/partition" }
+    },
+    "walk_forward_windows": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/walkForwardWindow" }
+    },
+    "missing_data_policy": { "enum": ["reject_trade", "halt_experiment"] },
+    "random_seed": {
+      "anyOf": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "null" }
+      ]
+    }
+  },
+  "$defs": {
+    "semver": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "gitCommit": {
+      "oneOf": [
+        { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        { "const": "unknown" }
+      ]
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\\\u0000].*$",
+      "not": { "pattern": "(^|[/\\\\])\\.\\.([/\\\\]|$)" }
+    },
+    "decimal": { "$ref": "common.schema.json#/$defs/decimal" },
+    "nonNegativeDecimal": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "git_commit", "parameters"],
+      "properties": {
+        "name": { "enum": ["buy_and_hold", "equal_weight", "momentum_12_1"] },
+        "version": { "$ref": "#/$defs/semver" },
+        "git_commit": { "$ref": "#/$defs/gitCommit" },
+        "parameters": { "type": "object" }
+      }
+    },
+    "dateRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_date", "end_date"],
+      "properties": {
+        "start_date": { "$ref": "common.schema.json#/$defs/date" },
+        "end_date": { "$ref": "common.schema.json#/$defs/date" }
+      }
+    },
+    "universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["universe_id", "version", "security_ids", "membership_fingerprint"],
+      "properties": {
+        "universe_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "version": { "$ref": "#/$defs/semver" },
+        "security_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "membership_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "artifact_id", "path", "sha256", "available_at"],
+      "properties": {
+        "kind": { "enum": ["prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro"] },
+        "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "historical_fitness": { "enum": ["backtest_safe", "installation_replay_only", "unsupported"] }
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_id", "currency"],
+      "properties": {
+        "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "currency": { "$ref": "common.schema.json#/$defs/currency" }
+      }
+    },
+    "decisionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "frequency", "signal_delay_sessions", "execution_price"],
+      "properties": {
+        "name": { "const": "after_close_next_session_open" },
+        "frequency": { "const": "daily" },
+        "signal_delay_sessions": { "const": 1 },
+        "execution_price": { "const": "open" }
+      }
+    },
+    "accountingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_currency", "reporting_currency", "initial_cash", "fractional_shares", "rebalance_frequency"],
+      "properties": {
+        "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "reporting_currency": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/currency" },
+            { "type": "null" }
+          ]
+        },
+        "initial_cash": { "$ref": "#/$defs/decimal" },
+        "fractional_shares": { "type": "boolean" },
+        "rebalance_frequency": { "enum": ["once", "daily", "monthly"] }
+      }
+    },
+    "costPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commission_bps", "fixed_fee", "minimum_fee", "spread_bps", "slippage_bps", "tax_bps"],
+      "properties": {
+        "version": { "$ref": "#/$defs/semver" },
+        "commission_bps": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "fixed_fee": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "minimum_fee": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "spread_bps": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "slippage_bps": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "tax_bps": { "$ref": "#/$defs/nonNegativeDecimal" }
+      }
+    },
+    "riskPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_gross_exposure", "max_position_weight", "max_participation"],
+      "properties": {
+        "max_gross_exposure": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_position_weight": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_participation": { "$ref": "#/$defs/nonNegativeDecimal" }
+      }
+    },
+    "partition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "start_date", "end_date"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
+        "kind": { "enum": ["development", "validation", "holdout"] },
+        "start_date": { "$ref": "common.schema.json#/$defs/date" },
+        "end_date": { "$ref": "common.schema.json#/$defs/date" }
+      }
+    },
+    "walkForwardWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "train", "calibration", "test"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
+        "train": { "$ref": "#/$defs/dateRange" },
+        "calibration": { "$ref": "#/$defs/dateRange" },
+        "test": { "$ref": "#/$defs/dateRange" }
+      }
+    }
+  }
+}
