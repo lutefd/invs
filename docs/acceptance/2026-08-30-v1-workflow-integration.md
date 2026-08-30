@@ -15,9 +15,12 @@ fixture also exposes its bounded copper evidence as `installation_replay_only`.
 
 The genuine path is now fail-closed: `paper-forward-record.schema.json` and the
 `invs-forward-record` capture CLI require a recent reconciled paper report and pin
-the account, report, and ledger-manifest hashes. A self-declared summary without
-those bound artifacts or a retained replay fixture cannot satisfy the genuine status
-check.
+the account, report, and ledger-manifest hashes. Newly generated reports include
+an invocation-time UTC `recorded_at`; genuine capture requires that timestamp to be
+after the risk check, no more than 24 hours later, and no later than capture. A
+self-declared summary without those bound artifacts, a missing/late report
+timestamp, or a retained replay fixture cannot satisfy the genuine status check.
+This hardening landed in `b5200fa`.
 
 ## Coverage
 

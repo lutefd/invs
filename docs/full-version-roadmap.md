@@ -1592,7 +1592,9 @@ contract and `make forward-record-capture`, landed in `e272e3d` with the import
 isolation correction in `b471908` and full ledger replay in `be16303`. The
 repeatable replay rejection acceptance landed in `cf37708`. The command can
 capture only a recent reconciled paper session and cannot promote retained replay
-evidence.
+evidence. The report-time hardening in `b5200fa` adds an invocation-time UTC
+`recorded_at` to new paper reports and rejects missing, pre-decision, late, or
+post-capture timestamps during genuine capture.
 
 This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
 `attention` because the retained paper evidence is recorded/replayed rather than a

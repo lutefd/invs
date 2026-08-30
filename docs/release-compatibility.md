@@ -101,10 +101,13 @@ The combined command results and remaining release gates are summarized in the
 After a real paper session, use `make forward-record-capture` with a repository-
 relative ledger root, account ID, and output path. It is the only supported way to
 produce the `forward_record.status: genuine` evidence reference: the command
-requires a recent reconciled report and records account, report, and ledger
-manifest hashes. Retained historical or installation-replay fixtures remain
-ineligible. Once a genuine record and aggregate paper report exist, run the
-maintained genuine workflow path with repository-relative references:
+requires a recent reconciled report, requires its invocation-time UTC `recorded_at`
+to follow the risk check by no more than 24 hours and not exceed the capture time,
+and records account, report, and ledger manifest hashes. Retained historical or
+installation-replay fixtures remain ineligible; old reports without `recorded_at`
+remain valid for replay acceptance but cannot qualify as genuine forward evidence.
+Once a genuine record and aggregate paper report exist, run the maintained genuine
+workflow path with repository-relative references:
 
 ```sh
 V1_FORWARD_RECORD=data/research/forward/v1/forward-record.json \
