@@ -253,6 +253,29 @@ def test_risk_rejection_is_persisted_without_orders(tmp_path: Path) -> None:
     assert not any(event["event_type"] == "order" for event in LedgerStore(ledger_root, account["account_id"]).events())
 
 
+def test_fractional_rebalance_does_not_false_reject_cash_reserve(tmp_path: Path) -> None:
+    from research.paper import approve_paper_decision, create_paper_account, run_paper_session
+
+    account, root = _account_fixture(tmp_path, risk_overrides={"minimum_cash_reserve": "0.1"})
+    ledger_root = root / "ledger"
+    create_paper_account(account, ledger_root=ledger_root)
+    first = run_paper_session(
+        account, data_root=root, ledger_root=ledger_root, session_date="2025-01-02"
+    )
+    approve_paper_decision(
+        account["account_id"],
+        ledger_root=ledger_root,
+        decision_id=first["decision_id"],
+        approved=True,
+    )
+    second = run_paper_session(
+        account, data_root=root, ledger_root=ledger_root, session_date="2025-01-03"
+    )
+
+    assert second["decision_status"] != "rejected"
+    assert "minimum_cash_reserve" not in second["risk"]["codes"]
+
+
 def test_unavailable_close_halts_decision_without_looking_ahead(tmp_path: Path) -> None:
     from research.paper import LedgerStore, create_paper_account, run_paper_session
 

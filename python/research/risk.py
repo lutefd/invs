@@ -16,6 +16,8 @@ from .portfolio import (
     timestamp,
 )
 
+_ROUNDING_TOLERANCE = Decimal("1e-24")
+
 
 def _d(value: Any, field: str) -> Decimal:
     return decimal(value, field=field, non_negative=True)
@@ -144,7 +146,8 @@ def assess_target(
         Decimal(0),
     )
     target_cash_after_cost = nav - sum(target_values, Decimal(0)) - estimated_costs
-    if target_cash_after_cost < nav * minimum_cash:
+    reserve_tolerance = max(_ROUNDING_TOLERANCE, nav * _ROUNDING_TOLERANCE)
+    if target_cash_after_cost + reserve_tolerance < nav * minimum_cash:
         _append_reason(
             codes,
             reasons,
