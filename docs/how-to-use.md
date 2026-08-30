@@ -1352,7 +1352,7 @@ resumed with the same value; it does not change the account's close-to-next-open
 economic execution policy. Omitting it keeps direct paper runs backward-compatible
 by using the session close, while a complete v1 daily-cycle specification must
 declare it explicitly. The equivalent Make target override is
-`PAPER_DECISION_AT=2025-01-02T22:00:00Z make paper-run`.
+`PAPER_DATA_ROOT=/data/research/acceptance/v0.6/operator PAPER_DECISION_AT=2025-01-02T22:00:00Z make paper-run`.
 
 For a manual account, approve or reject the returned decision before the proposed
 orders can settle. Auto-approval is allowed only when it is recorded in the immutable
