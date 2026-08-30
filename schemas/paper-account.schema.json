@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/paper-account.schema.json",
+  "title": "Forward paper account specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "account_id", "name", "strategy", "period", "universe",
+    "security_metadata", "inputs", "benchmark", "decision_policy", "accounting_policy",
+    "cost_policy", "risk_policy", "approval_policy", "missing_data_policy"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "account_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "name": { "type": "string", "minLength": 1 },
+    "strategy": { "$ref": "backtest-experiment.schema.json#/$defs/strategy" },
+    "period": { "$ref": "backtest-experiment.schema.json#/$defs/dateRange" },
+    "universe": { "$ref": "backtest-experiment.schema.json#/$defs/universe" },
+    "security_metadata": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/securityMetadata" }
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 3,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/artifactRef" }
+    },
+    "benchmark": { "$ref": "backtest-experiment.schema.json#/$defs/benchmark" },
+    "decision_policy": { "$ref": "#/$defs/decisionPolicy" },
+    "accounting_policy": { "$ref": "#/$defs/accountingPolicy" },
+    "cost_policy": { "$ref": "backtest-experiment.schema.json#/$defs/costPolicy" },
+    "risk_policy": { "$ref": "#/$defs/riskPolicy" },
+    "approval_policy": { "$ref": "#/$defs/approvalPolicy" },
+    "missing_data_policy": { "enum": ["halt_account", "halt_decision", "reject_trade"] },
+    "promoted_backtest": {
+      "anyOf": [
+        { "$ref": "#/$defs/backtestRef" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "$defs": {
+    "decimal": { "$ref": "common.schema.json#/$defs/decimal" },
+    "nonNegativeDecimal": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "semver": { "$ref": "backtest-experiment.schema.json#/$defs/semver" },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "artifact_id", "path", "sha256", "available_at", "fitness"],
+      "properties": {
+        "kind": { "enum": ["prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro", "risk_free"] },
+        "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "path": { "$ref": "backtest-experiment.schema.json#/$defs/relativePath" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+        "fitness": { "enum": ["current_research_only", "backtest_safe"] }
+      }
+    },
+    "securityMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_id", "country", "sector", "themes"],
+      "properties": {
+        "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "country": { "$ref": "common.schema.json#/$defs/countryCode" },
+        "sector": { "$ref": "common.schema.json#/$defs/slug" },
+        "themes": { "type": "array", "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/slug" } }
+      }
+    },
+    "decisionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frequency", "decision_at", "signal_delay_sessions", "execution_price", "stale_after_sessions", "max_price_gap"],
+      "properties": {
+        "frequency": { "const": "daily" },
+        "decision_at": { "const": "close" },
+        "signal_delay_sessions": { "const": 1 },
+        "execution_price": { "const": "open" },
+        "stale_after_sessions": { "type": "integer", "minimum": 0 },
+        "max_price_gap": { "$ref": "#/$defs/nonNegativeDecimal" }
+      }
+    },
+    "accountingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_currency", "initial_cash", "fractional_shares", "rebalance_frequency"],
+      "properties": {
+        "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "initial_cash": { "$ref": "#/$defs/decimal" },
+        "fractional_shares": { "type": "boolean" },
+        "rebalance_frequency": { "enum": ["once", "daily", "weekly", "monthly"] }
+      }
+    },
+    "riskPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version", "max_gross_exposure", "max_position_weight", "max_sector_exposure",
+        "max_country_exposure", "max_currency_exposure", "max_theme_exposure",
+        "minimum_cash_reserve", "max_turnover", "max_daily_notional", "max_price_gap",
+        "max_stale_sessions", "max_participation", "max_drawdown", "prohibited_security_ids"
+      ],
+      "properties": {
+        "version": { "$ref": "#/$defs/semver" },
+        "max_gross_exposure": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_position_weight": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_sector_exposure": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_country_exposure": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_currency_exposure": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_theme_exposure": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "minimum_cash_reserve": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_turnover": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_daily_notional": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_price_gap": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_stale_sessions": { "type": "integer", "minimum": 0 },
+        "max_participation": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "max_drawdown": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "prohibited_security_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/uuid" } }
+      }
+    },
+    "approvalPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": { "mode": { "enum": ["manual", "auto"] } }
+    },
+    "backtestRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["experiment_id", "manifest_path", "manifest_sha256"],
+      "properties": {
+        "experiment_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "manifest_path": { "$ref": "backtest-experiment.schema.json#/$defs/relativePath" },
+        "manifest_sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    }
+  }
+}

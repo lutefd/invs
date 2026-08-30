@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/paper-target.schema.json",
+  "title": "Immutable paper target portfolio",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "target_id", "account_id", "decision_id", "target_revision",
+    "decision_session", "decision_at", "strategy", "input_fingerprint", "inputs",
+    "nav_base", "cash_base", "positions_value_base", "targets", "construction", "risk"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "target_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "account_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "decision_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "target_revision": { "type": "integer", "minimum": 1 },
+    "decision_session": { "$ref": "common.schema.json#/$defs/date" },
+    "decision_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "strategy": { "$ref": "backtest-experiment.schema.json#/$defs/strategy" },
+    "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "inputs": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/inputPin" } },
+    "nav_base": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "cash_base": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "positions_value_base": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "targets": { "type": "array", "items": { "$ref": "#/$defs/targetRow" } },
+    "construction": { "$ref": "#/$defs/construction" },
+    "risk": { "$ref": "#/$defs/risk" }
+  },
+  "$defs": {
+    "decimal": { "$ref": "common.schema.json#/$defs/decimal" },
+    "nonNegativeDecimal": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "inputPin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "artifact_id", "sha256"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "targetRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_id", "target_weight", "target_quantity", "price", "currency", "market_value_base", "country", "sector", "themes"],
+      "properties": {
+        "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "target_weight": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "target_quantity": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "price": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "market_value_base": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "country": { "$ref": "common.schema.json#/$defs/countryCode" },
+        "sector": { "$ref": "common.schema.json#/$defs/slug" },
+        "themes": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/slug" } }
+      }
+    },
+    "construction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective", "fallback", "turnover_penalty", "cash_reserve"],
+      "properties": {
+        "objective": { "enum": ["equal_weight", "rank_weighted", "buy_and_hold"] },
+        "fallback": { "enum": ["none", "cash" ] },
+        "turnover_penalty": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "cash_reserve": { "$ref": "#/$defs/nonNegativeDecimal" }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "policy_version", "codes", "reasons", "checked_at"],
+      "properties": {
+        "status": { "enum": ["approved", "rejected", "halted"] },
+        "policy_version": { "type": "string", "minLength": 1 },
+        "codes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "reasons": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "checked_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" }
+      }
+    }
+  }
+}

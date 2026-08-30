@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/paper-report.schema.json",
+  "title": "Daily paper account report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "report_id", "account_id", "session_date", "decision_id", "input_fingerprint",
+    "decision_status", "risk", "approval", "orders", "nav_base", "cash_base", "positions_value_base",
+    "gross_exposure", "drawdown", "ledger_sequence_start", "ledger_sequence_end", "reconciled"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "report_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "account_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "session_date": { "$ref": "common.schema.json#/$defs/date" },
+    "decision_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "decision_status": { "enum": ["proposed", "approved", "rejected", "halted", "no_op", "settled"] },
+    "risk": { "$ref": "paper-target.schema.json#/$defs/risk" },
+    "approval": { "enum": ["pending", "approved", "rejected", "auto_approved", "not_required"] },
+    "orders": { "type": "array", "items": { "$ref": "paper-order.schema.json" } },
+    "nav_base": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "cash_base": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "positions_value_base": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "gross_exposure": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "drawdown": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "ledger_sequence_start": { "type": "integer", "minimum": 1 },
+    "ledger_sequence_end": { "type": "integer", "minimum": 1 },
+    "reconciled": { "type": "boolean" },
+    "warnings": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  }
+}

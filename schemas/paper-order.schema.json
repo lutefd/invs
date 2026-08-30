@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/paper-order.schema.json",
+  "title": "Paper order proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "order_id", "client_order_id", "account_id", "target_id", "decision_id",
+    "target_revision", "decision_session", "execution_session", "security_id", "side", "quantity",
+    "reference_price", "currency", "expected_notional_base", "expected_cost_base", "reason", "status"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "order_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "client_order_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "account_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "target_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "decision_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "target_revision": { "type": "integer", "minimum": 1 },
+    "decision_session": { "$ref": "common.schema.json#/$defs/date" },
+    "execution_session": { "$ref": "common.schema.json#/$defs/date" },
+    "security_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "side": { "enum": ["buy", "sell"] },
+    "quantity": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "reference_price": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "expected_notional_base": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "expected_cost_base": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" },
+    "reason": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["proposed", "approved", "rejected", "cancelled", "filled"] }
+  }
+}

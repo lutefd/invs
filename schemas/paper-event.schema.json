@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/paper-event.schema.json",
+  "title": "Append-only paper account event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "event_id", "idempotency_key", "account_id", "sequence", "event_at",
+    "session_date", "event_type", "quantity_delta", "amount_local_delta", "amount_base_delta",
+    "nav_base", "cash_base", "positions_value_base", "details", "record_hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "event_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "idempotency_key": { "type": "string", "minLength": 1 },
+    "account_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "event_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "session_date": { "$ref": "common.schema.json#/$defs/date" },
+    "event_type": {
+      "enum": ["cash_deposit", "decision", "target_published", "risk_approved", "risk_rejected", "halt", "no_op", "approval", "manual_rejection", "order", "fill", "fee", "tax", "dividend", "split", "delisting", "valuation", "reconciliation"]
+    },
+    "decision_id": { "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
+    "target_id": { "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
+    "order_id": { "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
+    "security_id": { "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }] },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "quantity_delta": { "$ref": "common.schema.json#/$defs/decimal" },
+    "amount_local_delta": { "$ref": "common.schema.json#/$defs/decimal" },
+    "amount_base_delta": { "$ref": "common.schema.json#/$defs/decimal" },
+    "nav_base": { "anyOf": [{ "$ref": "common.schema.json#/$defs/nonNegativeDecimal" }, { "type": "null" }] },
+    "cash_base": { "anyOf": [{ "$ref": "common.schema.json#/$defs/nonNegativeDecimal" }, { "type": "null" }] },
+    "positions_value_base": { "anyOf": [{ "$ref": "common.schema.json#/$defs/nonNegativeDecimal" }, { "type": "null" }] },
+    "details": { "type": "object" },
+    "record_hash": { "$ref": "common.schema.json#/$defs/sha256" }
+  }
+}
