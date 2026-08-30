@@ -319,7 +319,8 @@ def test_daily_engine_delays_orders_to_next_eligible_session_and_balances(tmp_pa
     assert run.nav[1]["nav"] == "11500"
     assert run.nav[2]["nav"] == "11750"
     for row in run.nav:
-        assert row["nav"] == str(int(row["cash_base"]) + int(row["positions_value_base"]))
+        assert Decimal(row["nav"]) == Decimal(row["cash_base"]) + Decimal(row["positions_value_base"])
+    assert [row["sequence"] for row in run.ledger] == list(range(1, len(run.ledger) + 1))
     assert run.metrics["values"]["total_return"] == "0.175"
 
 

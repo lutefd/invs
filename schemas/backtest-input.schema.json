@@ -9,7 +9,7 @@
     "schema_version": { "const": "1.0.0" },
     "artifact_kind": {
       "type": "string",
-      "enum": ["prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro"]
+      "enum": ["prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro", "risk_free"]
     },
     "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
     "available_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
@@ -38,6 +38,10 @@
     },
     {
       "if": { "properties": { "artifact_kind": { "enum": ["feature", "macro"] } } },
+      "then": { "properties": { "rows": { "items": { "$ref": "#/$defs/observationRow" } } } }
+    },
+    {
+      "if": { "properties": { "artifact_kind": { "const": "risk_free" } } },
       "then": { "properties": { "rows": { "items": { "$ref": "#/$defs/observationRow" } } } }
     }
   ],
