@@ -517,6 +517,10 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 	if calendarInputs.Source != "nyse" || calendarInputs.Provider.Kind != "market_calendar" || calendarInputs.Provider.CalendarYear != 2026 || calendarInputs.Provider.CalendarMIC != "XNYS" || calendarInputs.Provider.CalendarCoverageStart != "2026-01-01" || calendarInputs.Provider.Vintage != "current_reference_receipt_time" {
 		t.Fatalf("calendar run inputs = %+v", calendarInputs)
 	}
+	nasdaqCalendarInputs := calendarRunInputs("nasdaq_calendar", "XNAS", config.CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-01-01", CoverageEnd: "2026-12-31"})
+	if nasdaqCalendarInputs.Source != "nasdaq_calendar" || nasdaqCalendarInputs.Provider.Kind != "market_calendar" || nasdaqCalendarInputs.Provider.CalendarYear != 2026 || nasdaqCalendarInputs.Provider.CalendarMIC != "XNAS" || nasdaqCalendarInputs.Provider.CalendarCoverageStart != "2026-01-01" || nasdaqCalendarInputs.Provider.Vintage != "current_reference_receipt_time" {
+		t.Fatalf("Nasdaq calendar run inputs = %+v", nasdaqCalendarInputs)
+	}
 	historicalCalendarInputs := historicalCalendarRunInputs("nasdaq_calendar", "XNAS", config.HistoricalCalendarProvider{
 		Year: 2025, CoverageStart: "2025-12-24", CoverageEnd: "2025-12-25",
 		RegularOpenLocal: "09:30", RegularCloseLocal: "16:00",
@@ -576,7 +580,7 @@ func TestCollectorRunInputBuildersCaptureEffectiveProviderRequests(t *testing.T)
 		t.Fatalf("corporate-action run inputs = %+v", actionInputs)
 	}
 
-	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, ptaxInputs, b3Inputs, b3PriceInputs, calendarInputs, historicalCalendarInputs, membershipInputs, listingHistoryInputs, actionInputs} {
+	for _, inputs := range []metadata.RunInputs{secInputs, priceInputs, fredInputs, alfredInputs, bcbInputs, ptaxInputs, b3Inputs, b3PriceInputs, calendarInputs, nasdaqCalendarInputs, historicalCalendarInputs, membershipInputs, listingHistoryInputs, actionInputs} {
 		got, err := metadata.NewRunMetadata(inputs)
 		if err != nil {
 			t.Fatalf("NewRunMetadata(%s): %v", inputs.Source, err)
@@ -987,6 +991,35 @@ func TestCollectorNYSECalendarPublishesHolidayAndEarlyClose(t *testing.T) {
 	}
 	if published.Sessions[0].SessionStatus != "closed" || published.Sessions[1].SessionStatus != "open" || !published.Sessions[1].IsEarlyClose || published.Sessions[1].CloseAt == nil || published.Sessions[1].CloseAt.Format(time.RFC3339) != "2026-11-27T18:00:00Z" {
 		t.Fatalf("NYSE sessions = %+v", published.Sessions)
+	}
+}
+
+func TestCollectorNasdaqCalendarPublishesHolidayAndEarlyClose(t *testing.T) {
+	body, err := os.ReadFile("../../internal/providers/nasdaq/testdata/calendar-2026.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := &orderingRawStore{}
+	var published metadata.HistoricalTruthBatch
+	app := &app{
+		cfg:  config.Config{Providers: config.Providers{NasdaqCalendar: config.CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-11-26", CoverageEnd: "2026-11-27"}}},
+		raw:  raw,
+		http: collectorHTTPFake{payload: body},
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: testRun(), onHistorical: func(batch metadata.HistoricalTruthBatch) {
+			published = batch
+		}},
+		batchKey: "nasdaq-calendar-test",
+		now:      func() time.Time { return time.Date(2026, 8, 23, 20, 0, 0, 123456789, time.UTC) },
+	}
+	if err := app.run(context.Background(), "nasdaq-calendar"); err != nil {
+		t.Fatal(err)
+	}
+	if len(raw.events) != 2 || len(published.Calendars) != 1 || len(published.Sessions) != 2 {
+		t.Fatalf("raw/published = %v/%+v", raw.events, published)
+	}
+	if published.Sessions[0].SessionStatus != "closed" || published.Sessions[1].SessionStatus != "open" || !published.Sessions[1].IsEarlyClose || published.Sessions[1].CloseAt == nil || published.Sessions[1].CloseAt.Format(time.RFC3339) != "2026-11-27T18:00:00Z" {
+		t.Fatalf("Nasdaq sessions = %+v", published.Sessions)
 	}
 }
 

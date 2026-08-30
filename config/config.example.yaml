@@ -66,6 +66,11 @@ providers:
     year: 2026
     coverage_start: 2026-01-01
     coverage_end: 2026-12-31
+  nasdaq_calendar:
+    enabled: false
+    year: 2026
+    coverage_start: 2026-01-01
+    coverage_end: 2026-12-31
   nasdaq_membership:
     enabled: false
     universe_id: nasdaq_100

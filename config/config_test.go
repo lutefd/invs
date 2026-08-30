@@ -291,6 +291,7 @@ func TestValidateB3ListingHistoryRequiresMembershipBackedExactMapping(t *testing
 func TestValidateExchangeCalendarProviders(t *testing.T) {
 	c := validConfig()
 	c.Providers.NYSE = CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-01-01", CoverageEnd: "2026-12-31"}
+	c.Providers.NasdaqCalendar = CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-01-01", CoverageEnd: "2026-12-31"}
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -308,6 +309,24 @@ func TestValidateExchangeCalendarProviders(t *testing.T) {
 			mutate(&candidate.Providers.NYSE)
 			if err := candidate.Validate(); err == nil {
 				t.Fatal("invalid NYSE calendar configuration accepted")
+			}
+		})
+	}
+	nasdaq := validConfig()
+	nasdaq.Providers.NasdaqCalendar = CalendarProvider{Enabled: true, Year: 2026, CoverageStart: "2026-01-01", CoverageEnd: "2026-12-31"}
+	for name, mutate := range map[string]func(*CalendarProvider){
+		"missing year":  func(provider *CalendarProvider) { provider.Year = 0 },
+		"invalid start": func(provider *CalendarProvider) { provider.CoverageStart = "01/01/2026" },
+		"reversed coverage": func(provider *CalendarProvider) {
+			provider.CoverageStart, provider.CoverageEnd = provider.CoverageEnd, provider.CoverageStart
+		},
+		"year mismatch": func(provider *CalendarProvider) { provider.CoverageEnd = "2027-01-01" },
+	} {
+		t.Run("Nasdaq "+name, func(t *testing.T) {
+			candidate := nasdaq
+			mutate(&candidate.Providers.NasdaqCalendar)
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("invalid Nasdaq calendar configuration accepted")
 			}
 		})
 	}

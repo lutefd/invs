@@ -201,7 +201,7 @@ func (a *app) nowUTC() time.Time {
 
 func main() {
 	configPath := flag.String("config", "config/config.yaml", "configuration YAML")
-	source := flag.String("source", "all", "collector source: all, sec, sec-actions, prices, fred, alfred, bcb, ptax, b3, b3-prices, b3-action-replay, b3-calendar, b3-calendar-history, b3-membership, b3-listing-history, nasdaq-calendar-history, nasdaq-membership, nyse, or cvm")
+	source := flag.String("source", "all", "collector source: all, sec, sec-actions, prices, fred, alfred, bcb, ptax, b3, b3-prices, b3-action-replay, b3-calendar, b3-calendar-history, b3-membership, b3-listing-history, nasdaq-calendar, nasdaq-calendar-history, nasdaq-membership, nyse, or cvm")
 	runKey := flag.String("run-key", "", "stable batch retry key; omitted generates a unique invocation key")
 	cancelRun := flag.Bool("cancel-run", false, "explicitly cancel one active orphan run")
 	cancelSource := flag.String("cancel-source", "", "metadata source code for cancellation lookup, for example yahoo")
@@ -329,7 +329,7 @@ func cancelOrphanRun(ctx context.Context, store operatorMetadataStore, options c
 }
 
 func (a *app) run(ctx context.Context, source string) error {
-	valid := map[string]bool{"all": true, "sec": true, "sec-actions": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "ptax": true, "b3": true, "b3-prices": true, "b3-action-replay": true, "b3-calendar": true, "b3-calendar-history": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-calendar-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
+	valid := map[string]bool{"all": true, "sec": true, "sec-actions": true, "prices": true, "fred": true, "alfred": true, "bcb": true, "ptax": true, "b3": true, "b3-prices": true, "b3-action-replay": true, "b3-calendar": true, "b3-calendar-history": true, "b3-membership": true, "b3-listing-history": true, "nasdaq-calendar": true, "nasdaq-calendar-history": true, "nasdaq-membership": true, "nyse": true, "cvm": true}
 	if !valid[source] {
 		return fmt.Errorf("unknown source %q", source)
 	}
@@ -365,6 +365,9 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if source == "nasdaq-calendar-history" && !a.cfg.Providers.NasdaqCalendarHistory.Enabled {
 		return errors.New("Nasdaq historical calendar provider is disabled")
+	}
+	if source == "nasdaq-calendar" && !a.cfg.Providers.NasdaqCalendar.Enabled {
+		return errors.New("Nasdaq calendar provider is disabled")
 	}
 	if source == "sec-actions" && !a.cfg.Providers.SECActionHistory.Enabled {
 		return errors.New("SEC action-history provider is disabled")
@@ -435,6 +438,11 @@ func (a *app) run(ctx context.Context, source string) error {
 	}
 	if (source == "all" || source == "nyse") && a.cfg.Providers.NYSE.Enabled {
 		if err := a.collectNYSECalendar(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (source == "all" || source == "nasdaq-calendar") && a.cfg.Providers.NasdaqCalendar.Enabled {
+		if err := a.collectNasdaqCalendar(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -1364,6 +1372,72 @@ func (a *app) collectNYSECalendar(ctx context.Context) error {
 	version := calendarVersion("xnys", provider.Year, evidenceHash)
 	batch, err := marketcalendar.Compile(marketcalendar.Definition{
 		DataSourceID: run.DataSourceID, MIC: "XNYS", ExchangeTimezone: "America/New_York",
+		CalendarVersion: version, CoverageStart: coverageStart, CoverageEnd: coverageEnd,
+		RegularOpenLocal: result.CoreHours.OpenLocal, RegularCloseLocal: result.CoreHours.CloseLocal,
+		AvailableAt: availableAt, RecordedAt: availableAt, SourceReference: evidenceReference,
+		RawPayloadHash: evidenceHash, Revision: calendarRevision(availableAt), Events: events,
+	})
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	if err := a.publishCalendar(ctx, batch); err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	m.OutputRows = len(batch.Calendars) + len(batch.Sessions)
+	m.Cursor["status"] = "canonical_published"
+	m.Cursor["calendar_version"] = version
+	m.Cursor["session_fingerprint"] = batch.Calendars[0].SessionFingerprint
+	m.Cursor["session_rows"] = len(batch.Sessions)
+	return a.finish(ctx, run, m, nil, nil, nil)
+}
+
+func (a *app) collectNasdaqCalendar(ctx context.Context) error {
+	provider := a.cfg.Providers.NasdaqCalendar
+	m := metrics{
+		Source: "nasdaq_calendar", RunKey: "nasdaq-calendar", StartedAt: a.nowUTC(),
+		Cursor: map[string]any{"provider": "nasdaq_calendar", "kind": "market_calendar", "year": provider.Year, "historical_fitness": "current_reference_receipt_time"},
+	}
+	run, skip, err := a.start(ctx, &m, calendarRunInputs("nasdaq_calendar", "XNAS", provider))
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+	result, collectErr := nasdaq.NewClient(a.http).CollectCalendar(ctx, nasdaq.CalendarRequest{Year: provider.Year})
+	if storeErr := a.storeCalendarResources(ctx, &m, "nasdaq_calendar", provider.Year, result.Resources); storeErr != nil {
+		collectErr = errors.Join(collectErr, fmt.Errorf("Nasdaq calendar raw evidence: %w", storeErr))
+	}
+	if collectErr != nil {
+		return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
+	}
+	m.Received = len(result.Events)
+	coverageStart, coverageEnd, err := calendarCoverage(provider, "America/New_York")
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	evidenceHash, evidenceReference, availableAt, err := a.storeCalendarEvidence(ctx, &m, "nasdaq_calendar", "XNAS", provider, result.Resources)
+	if err != nil {
+		return errors.Join(err, a.finish(ctx, run, m, err, nil, nil))
+	}
+	events := make([]marketcalendar.Event, 0, len(result.Events))
+	for _, event := range result.Events {
+		compiled := marketcalendar.Event{Date: event.Date, SourceReference: event.RawRecordLocator}
+		switch event.Status {
+		case "closed":
+			compiled.Status = "closed"
+		case "early_close":
+			compiled.Status = "open"
+			compiled.CloseLocal = event.SpecialCloseLocal
+		default:
+			compileErr := fmt.Errorf("Nasdaq calendar event %s has unsupported status %q", event.Date.Format(time.DateOnly), event.Status)
+			return errors.Join(compileErr, a.finish(ctx, run, m, compileErr, nil, nil))
+		}
+		events = append(events, compiled)
+	}
+	version := calendarVersion("xnas", provider.Year, evidenceHash)
+	batch, err := marketcalendar.Compile(marketcalendar.Definition{
+		DataSourceID: run.DataSourceID, MIC: "XNAS", ExchangeTimezone: "America/New_York",
 		CalendarVersion: version, CoverageStart: coverageStart, CoverageEnd: coverageEnd,
 		RegularOpenLocal: result.CoreHours.OpenLocal, RegularCloseLocal: result.CoreHours.CloseLocal,
 		AvailableAt: availableAt, RecordedAt: availableAt, SourceReference: evidenceReference,

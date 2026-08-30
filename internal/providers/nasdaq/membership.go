@@ -34,12 +34,13 @@ type Getter interface {
 }
 
 type Client struct {
-	http Getter
-	now  func() time.Time
+	http        Getter
+	calendarURL string
+	now         func() time.Time
 }
 
 func NewClient(getter Getter) *Client {
-	return &Client{http: getter, now: time.Now}
+	return &Client{http: getter, calendarURL: DefaultCalendarURL, now: time.Now}
 }
 
 type MembershipRequest struct {

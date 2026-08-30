@@ -72,6 +72,7 @@ type Providers struct {
 	B3Membership          IndexMembershipProvider    `yaml:"b3_membership"`
 	B3ListingHistory      ListingHistoryProvider     `yaml:"b3_listing_history"`
 	NasdaqMembership      IndexMembershipProvider    `yaml:"nasdaq_membership"`
+	NasdaqCalendar        CalendarProvider           `yaml:"nasdaq_calendar"`
 	NasdaqCalendarHistory HistoricalCalendarProvider `yaml:"nasdaq_calendar_history"`
 	B3CalendarHistory     HistoricalCalendarProvider `yaml:"b3_calendar_history"`
 	SECActionHistory      CorporateActionProvider    `yaml:"sec_action_history"`
@@ -561,6 +562,9 @@ func (c Config) Validate() error {
 	if c.Providers.NYSE.Enabled {
 		errs = append(errs, validateCalendarProvider("providers.nyse", c.Providers.NYSE)...)
 	}
+	if c.Providers.NasdaqCalendar.Enabled {
+		errs = append(errs, validateCalendarProvider("providers.nasdaq_calendar", c.Providers.NasdaqCalendar)...)
+	}
 	if c.Providers.NasdaqMembership.Enabled {
 		errs = append(errs, validateIndexMembershipProvider("providers.nasdaq_membership", c.Providers.NasdaqMembership, c.Universe, "US", "NASDAQ", "XNAS", "USD", "www.globenewswire.com", "/news-release/")...)
 	}
@@ -611,7 +615,7 @@ func (c Config) Validate() error {
 			seenYears[year] = true
 		}
 	}
-	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.PTAX.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3HistoricalPrices.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NasdaqCalendarHistory.Enabled && !c.Providers.B3CalendarHistory.Enabled && !c.Providers.SECActionHistory.Enabled && !c.Providers.B3ActionReplay.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
+	if !c.Providers.SEC.Enabled && !c.Providers.Prices.Enabled && !c.Providers.FRED.Enabled && !c.Providers.ALFRED.Enabled && !c.Providers.BCB.Enabled && !c.Providers.PTAX.Enabled && !c.Providers.B3.Enabled && !c.Providers.B3HistoricalPrices.Enabled && !c.Providers.B3Membership.Enabled && !c.Providers.B3ListingHistory.Enabled && !c.Providers.NasdaqMembership.Enabled && !c.Providers.NasdaqCalendar.Enabled && !c.Providers.NasdaqCalendarHistory.Enabled && !c.Providers.B3CalendarHistory.Enabled && !c.Providers.SECActionHistory.Enabled && !c.Providers.B3ActionReplay.Enabled && !c.Providers.NYSE.Enabled && !c.Providers.CVM.Enabled {
 		errs = append(errs, errors.New("at least one provider must be enabled"))
 	}
 	seenIssuer, seenSecurity := map[string]bool{}, map[string]bool{}

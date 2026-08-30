@@ -236,10 +236,10 @@ func TestCatalogIncludesNasdaqMembershipSource(t *testing.T) {
 	t.Fatal("Nasdaq membership source is missing from catalog")
 }
 
-func TestCatalogSeparatesHistoricalCalendarSources(t *testing.T) {
+func TestCatalogSeparatesCalendarSources(t *testing.T) {
 	want := map[string]string{
 		"b3_calendar":     "https://www.b3.com.br/data/files/",
-		"nasdaq_calendar": "https://www.nasdaqtrader.com/content/technicalsupport/",
+		"nasdaq_calendar": "https://www.nasdaqtrader.com/Trader.aspx?id=Calendar",
 	}
 	for _, candidate := range sources {
 		baseURL, exists := want[candidate.code]
@@ -247,7 +247,7 @@ func TestCatalogSeparatesHistoricalCalendarSources(t *testing.T) {
 			continue
 		}
 		if candidate.kind != "market_calendar" || candidate.baseURL != baseURL {
-			t.Fatalf("historical calendar source = %+v", candidate)
+			t.Fatalf("calendar source = %+v", candidate)
 		}
 		delete(want, candidate.code)
 	}
