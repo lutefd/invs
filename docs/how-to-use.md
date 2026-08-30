@@ -4,6 +4,8 @@ This guide is for the current working v0/v1 foundation in this repository. It
 covers operating the local runtime, collecting the configured sources, inspecting
 the evidence, running point-in-time research, and publishing deterministic market
 feature artifacts and batches.
+The version compatibility and forward-upgrade procedure is in the
+[v1.0 release guide](release-compatibility.md).
 
 The accepted v0 vertical slice is Yahoo daily prices, SEC company metadata and
 facts, FRED series, and BCB SGS series. CVM is now also live-accepted at the
@@ -1367,6 +1369,18 @@ immutable report with the `invs-workflow` CLI. A report reaches `passed` only wh
 the declared forward evidence is wall-clock, account-linked, and not labeled as
 installation replay.
 
+Run the v1 recovery and historical-bias challenge suite separately:
+
+```sh
+make v1-resilience-acceptance
+```
+
+It rechecks migration re-apply, bias-audit and paper-ledger reproduction, daily
+resume behavior, disposable backup integrity, and a live backup → clean-root
+PostgreSQL restore → reconciliation path. Its report is written to
+`data/research/acceptance/v1/v1-resilience.json`; the accepted 2026-08-30 result and
+its limitations are in the [resilience acceptance report](acceptance/2026-08-30-v1-resilience.md).
+
 ### Complete v1.0 daily cycle
 
 The complete local operator path is specification-driven so every derived artifact
@@ -1374,7 +1388,7 @@ has an explicit input and recovery boundary. Start from the strict contract in
 `schemas/daily-cycle.schema.json`, then run:
 
 ```sh
-make daily-cycle CYCLE_SPEC=docs/examples/daily-cycle.json
+make daily-cycle CYCLE_SPEC=/absolute/path/to/daily-cycle.json
 ```
 
 The runner performs release preflight, collection, filesystem reconciliation,
@@ -1446,6 +1460,7 @@ The complete backup, clean-root restore, and host-level daily schedule are in
 ```sh
 make security-check
 make backup-restore-acceptance
+make v1-resilience-acceptance
 make backup BACKUP_DIR=/path/to/new/backup
 make restore BACKUP_DIR=/path/to/backup RESTORE_DIR=/tmp/invs-restore RESTORE_DB=restore_invs
 ```

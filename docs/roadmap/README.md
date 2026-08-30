@@ -59,8 +59,12 @@ v0.1 is accepted at `63d479d`, and v0.2 is accepted at `0bfdc27`. The retained
 passes 13 exact boundary probes and verifies 16 evidence artifacts while keeping
 receipt-time prices installation-replay only and unsupported actions blocking. The
 v0.3, v0.4, and v0.5 gates are now accepted, and the v0.6 portfolio-construction
-and paper-trading gate is accepted at `95a79b5` (feature boundary `f02a57f`); the
-next planned version is v1.0.
+and paper-trading gate is accepted at `95a79b5` (feature boundary `f02a57f`).
+v1.0 is now **in progress**: the compatibility contract, operator hardening,
+integrated workflow boundary, and resilience/bias acceptance are implemented, with
+evidence in the [v1 resilience report](../acceptance/2026-08-30-v1-resilience.md).
+The final release gate still requires a genuine wall-clock forward paper record;
+the workflow reports remain `attention` until that evidence exists.
 No strategy or backtester scope was pulled
 into the v0.2 exit work. The
 historical-contract slice in `4d483ac` added ADRs 0006 and 0007,

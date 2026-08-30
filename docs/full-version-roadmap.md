@@ -1574,6 +1574,21 @@ local platform.
   by historical simulation.
 - All known data sources are labeled by historical fitness and operational health.
 
+## Current v1.0 implementation boundary — 2026-08-30
+
+v1.0 is in progress. The compatibility contract is enforced by `make
+release-validate`; the specification-driven local daily-cycle runner, integrated
+thematic and cross-market workflow reports, security/backup/restore runbooks, and
+the resilience/bias harness are implemented in the checkpoints `f8abe40`,
+`31e34b8`, `d5b9c22`, `586d79e`, and `9a0f558`. The [resilience acceptance
+report](acceptance/2026-08-30-v1-resilience.md) passes its six recovery/bias
+scenarios and all ten underlying stages.
+
+This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
+`attention` because the retained paper evidence is recorded/replayed rather than a
+genuine wall-clock forward record. Brazil and commodity evidence also retain their
+bounded fitness labels, and the final release evidence index remains pending.
+
 ## Scope
 
 ### 1. End-to-end release contract
@@ -1977,13 +1992,14 @@ A version is not done because its happy path runs once. It is done when:
 
 ## First execution queue
 
-v0.1, v0.2, v0.3, v0.4, and v0.5 are accepted. The retained 13-probe US/Brazil audit
+v0.1 through v0.6 are accepted for their bounded scopes. The retained 13-probe US/Brazil audit
 integrates the bounded identity, membership, calendar, price, action, FX, macro, and
 SEC filing chains, verifies 16 pinned evidence artifacts, and preserves
 installation-replay and unsupported scope decisions. The v0.3 feature platform is
 accepted through `5fc3783`; the v0.4 theme and hypothesis loop is accepted through
 `3ac61e1`; v0.5 is accepted at `180d5c9`; v0.6 is accepted at `95a79b5`; see their
-acceptance reports. The next narrow queue is v1.0 integration and operational
-hardening. The accepted v0.5 backtest remains daily, long-only, and canonical to the
-internal Python simulator; rolling calibration, paper execution, and broker behavior
-remain future boundaries.
+acceptance reports. The active queue is v1.0 release completion: a genuine forward
+paper record, final end-to-end workflow acceptance, and the release evidence index.
+The accepted v0.5 backtest remains daily, long-only, and canonical to the internal
+Python simulator; rolling calibration, paper execution, and broker behavior remain
+future boundaries.

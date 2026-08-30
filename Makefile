@@ -97,7 +97,12 @@ health:
 
 urls:
 	@$(COMPOSE) exec -T jupyter jupyter server list
-	@echo "Grafana: http://0.0.0.0:$${GRAFANA_PORT:-3000}"
+	@published="$$($(COMPOSE) port grafana 3000 2>/dev/null || true)"; \
+		if test -n "$$published"; then \
+			echo "Grafana: http://$$published"; \
+		else \
+			echo "Grafana: http://$${INVS_BIND_ADDRESS:-127.0.0.1}:$${GRAFANA_PORT:-3000}"; \
+		fi
 
 ingest: setup config
 	@$(COMPOSE) --profile collect run --rm collector --source $(SOURCE) $(RUN_KEY_ARG)

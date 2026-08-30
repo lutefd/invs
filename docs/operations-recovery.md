@@ -53,6 +53,20 @@ file permissions, Git tracking, and high-confidence secret/contact patterns in
 tracked documentation/release artifacts and retained logs. A deliberate non-loopback
 override fails the check until its authentication and network review are complete.
 
+The v1 recovery and historical-bias challenge suite exercises the retained
+migration, bias, paper-ledger, daily-resume, backup-integrity, and live clean-root
+restore paths:
+
+```sh
+make v1-resilience-acceptance
+```
+
+It writes the ignored runtime report under `data/research/acceptance/v1/` and keeps
+the temporary restored database disposable. The accepted result is recorded in the
+[v1 resilience acceptance report](acceptance/2026-08-30-v1-resilience.md). This is
+local operational evidence and does not create the genuine wall-clock forward paper
+record required for the v1.0 release gate.
+
 ## Reconcile before and after operations
 
 Run the full report from the repository root:
@@ -206,7 +220,7 @@ The scheduler remains host-level. Do not add Dagster or Prefect for this boundar
 For the complete v1.0 path, provide a strict cycle specification and run:
 
 ```sh
-make daily-cycle CYCLE_SPEC=docs/examples/daily-cycle.json
+make daily-cycle CYCLE_SPEC=/absolute/path/to/daily-cycle.json
 ```
 
 The specification must declare one UTC session date, one collection source and run

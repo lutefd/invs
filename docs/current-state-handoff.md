@@ -219,6 +219,26 @@ The accepted boundary is an internal, recorded/replayed forward-paper process. I
 does not include real-money or broker submission, intraday execution, leverage,
 shorting, margin, or a claim of live performance.
 
+## v1.0 pre-release integration boundary
+
+The v1.0 integration work is in progress as of 2026-08-30. The compatibility
+contract, specification-driven daily-cycle runner, integrated thematic/cross-market
+workflow reports, security and recovery controls, and resilience/bias acceptance
+landed in `f8abe40`, `31e34b8`, `d5b9c22`, `586d79e`, and `9a0f558` respectively.
+
+The [v1 resilience acceptance report](acceptance/2026-08-30-v1-resilience.md) passes
+the retained historical-bias and paper-ledger checks, daily-resume behavior,
+disposable backup integrity, and live backup → clean-root PostgreSQL restore →
+reconciliation path. The [v1 workflow integration report](acceptance/2026-08-30-v1-workflow-integration.md)
+links the research, backtest, and paper layers for thematic and US/Brazil
+cross-market scenarios, but intentionally remains `attention` because the retained
+paper evidence is recorded/replayed.
+
+The final v1.0 release boundary is still pending a genuine wall-clock forward paper
+record, final end-to-end workflow acceptance, and the release evidence index. The
+bounded Brazil and commodity fitness limitations remain in force; no broker or
+real-money execution claim is made.
+
 ## Yahoo `.SA` source-admission verification
 
 The bounded live verification is recorded in the
@@ -269,10 +289,17 @@ to close the v0.2 calendar gate. See the
 - v0.4 status: complete; see [the v0.4 acceptance report](acceptance/2026-08-29-v0.4-hypothesis-loop.md)
 - v0.5 status: complete; see [the v0.5 acceptance report](acceptance/2026-08-29-v0.5-backtesting.md)
 - v0.6 status: complete; see [the v0.6 acceptance report](acceptance/2026-08-29-v0.6-paper-trading.md)
+- v1.0 status: in progress; see the [resilience acceptance report](acceptance/2026-08-30-v1-resilience.md)
+- v1.0 workflow status: attention by design; see the [workflow integration report](acceptance/2026-08-30-v1-workflow-integration.md)
 - Latest v0.4 acceptance boundary: `3ac61e1` (`test(acceptance): prove v0.4 hypothesis loop`)
 - Latest v0.5 implementation boundary: `180d5c9` (`fix(backtest): order metric attribution deterministically`)
 - Latest v0.6 implementation boundary: `f02a57f` (`feat(observability): add paper portfolio dashboard`)
 - Latest v0.6 validation boundary: `95a79b5` (`fix(test): await fresh postgres initialization`)
+- Latest v1 compatibility boundary: `f8abe40` (`feat(release): add fail-closed v1 compatibility contract`)
+- Latest v1 daily-cycle boundary: `31e34b8` (`feat(operations): orchestrate the local daily research cycle`)
+- Latest v1 workflow boundary: `d5b9c22` (`feat(research): add integrated workflow reports`)
+- Latest v1 security/recovery boundary: `586d79e` (`feat(operations): enforce security and recovery checks`)
+- Latest v1 resilience/bias boundary: `9a0f558` (`test(acceptance): prove v1 recovery and bias scenarios`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`
@@ -1241,6 +1268,7 @@ Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d` and v0.2 at `0bfdc27`; v0.3 is accepted at
 `5fc3783` with reporting correction `0454d0e`; v0.4 is accepted at `3ac61e1`; v0.5
 is accepted at `180d5c9`; and v0.6 is accepted at `95a79b5`. Keep receipt-time
-prices installation-replay only. The next smallest cohesive boundary is v1.0
-integration and operational hardening; rolling calibration and broker behavior remain
-deferred.
+prices installation-replay only. The v1.0 integration and operational-hardening
+slices are now recorded above. The next smallest cohesive boundary is a genuine
+wall-clock forward paper record followed by final workflow/release acceptance;
+rolling calibration and broker behavior remain deferred.

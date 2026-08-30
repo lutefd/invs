@@ -6,6 +6,8 @@ Status: this is the first actively developed v1/v0 foundation, not an obsolete p
 
 The product path is documented in the [full-version roadmap](docs/full-version-roadmap.md), with granular execution views in the [roadmap index](docs/roadmap/README.md).
 The operator recovery procedure is in [docs/operations-recovery.md](docs/operations-recovery.md).
+The v1.0 compatibility and upgrade procedure is in
+[docs/release-compatibility.md](docs/release-compatibility.md).
 
 The current accepted vertical slice covers Yahoo daily prices, SEC company facts, FRED macro series, and BCB SGS macro series. It is research infrastructure, not a trading system, and it does not contain synthetic market observations. Canonical history remains in Parquet for DuckDB/Jupyter research. PostgreSQL has replaceable latest-only price and macro snapshot tables for Grafana; run finalization publishes accepted price/macro candidates to those projections in the same PostgreSQL transaction that closes the run. A partial run may publish successful entities while a parse-error entity publishes no snapshot.
 
@@ -64,7 +66,10 @@ and historical-truth changes in order; its schema checks make rerunning it idemp
 Run `make historical-truth-db-test` to exercise the append-only historical metadata
 constraints and fresh/rollback migration path.
 
-`make urls` prints the current tokenized Jupyter URL. Published PostgreSQL, Jupyter, and Grafana ports bind to `0.0.0.0`; use the server's reachable hostname or IP from another machine. Grafana uses port `3000` by default. If port 3000 is occupied, set `GRAFANA_PORT=3300` in `.env` before startup.
+`make urls` prints the current tokenized Jupyter URL. PostgreSQL, Jupyter, and Grafana
+ports bind to `127.0.0.1` by default; use an explicit `INVS_BIND_ADDRESS` override
+only after authentication and network review. Grafana uses port `3000` by default.
+If port 3000 is occupied, set `GRAFANA_PORT=3300` in `.env` before startup.
 
 ## Collect data
 

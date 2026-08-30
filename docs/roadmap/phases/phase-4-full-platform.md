@@ -30,14 +30,14 @@ acceptance, operations, compatibility, security, and usability phase.
 ## Phase gate checklist
 
 - [ ] Clean install, upgrade, backup, restore, and interrupted recovery pass.
-- [ ] Version compatibility manifest rejects unsupported component mixes.
+- [x] Version compatibility manifest rejects unsupported component mixes.
 - [ ] All data reachable by research/backtest code has a fitness classification.
 - [ ] Thematic question reaches a frozen thesis, reproducible backtest, and paper
   decision.
 - [ ] Cross-market/Brazil scenario exposes missing/current-only data honestly.
-- [ ] Historical-bias challenge suite passes.
+- [x] Historical-bias challenge suite passes.
 - [ ] Paper ledger reconstructs and reconciles.
-- [ ] Loopback defaults, secret handling, and release scans pass.
+- [x] Loopback defaults, secret handling, and release scans pass.
 - [ ] Known limitations identify unsupported claims and instruments precisely.
 
 ## Stop conditions
