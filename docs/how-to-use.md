@@ -1282,7 +1282,12 @@ account/event envelope for operator reporting, and Grafana reads that projection
 The paper input loader accepts both `current_research_only` and `backtest_safe`
 artifacts. This allows an explicitly recorded forward or installation-replay paper
 run without weakening the v0.5 backtest requirement that historical inputs be
-`backtest_safe`. Missing or stale prices halt a decision, and a failed risk check
+`backtest_safe`. Paper price artifacts may be labeled `raw` or `split_adjusted`,
+but every price row in one artifact must use the same basis. A `split_adjusted`
+paper artifact must not be paired with a `corporate_actions` input, because that
+would apply the same split twice; the loader rejects that combination. Other
+adjusted bases remain inadmissible, and historical backtests continue to require
+`price_basis=raw`. Missing or stale prices halt a decision, and a failed risk check
 produces no orders.
 
 The committed recovery drill exercises the full bounded process:
