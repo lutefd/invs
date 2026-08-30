@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance v1-pre-release-acceptance v1-release-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-acceptance-report paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance v1-pre-release-acceptance v1-release-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-validate-inputs paper-create-account paper-run paper-reconcile paper-acceptance paper-acceptance-report paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -205,6 +205,18 @@ paper-create-account: config
 		jupyter python -m research.paper_cli create-account \
 			--spec /tmp/paper-spec.json \
 			--ledger-root "$(PAPER_LEDGER_ROOT)"
+
+paper-validate-inputs: config
+	@test -n "$(PAPER_SPEC)" || (echo "PAPER_SPEC is required" >&2; exit 2)
+	@test -n "$(PAPER_SESSION_DATE)" || (echo "PAPER_SESSION_DATE is required" >&2; exit 2)
+	@test -f "$(PAPER_SPEC)" || (echo "PAPER_SPEC does not exist: $(PAPER_SPEC)" >&2; exit 2)
+	@$(COMPOSE) run --rm --no-deps \
+		-v "$(PAPER_SPEC):/tmp/paper-spec.json:ro" \
+		jupyter python -m research.paper_cli validate-inputs \
+			--spec /tmp/paper-spec.json \
+			--data-root "$(or $(PAPER_DATA_ROOT),/data)" \
+			--session-date "$(PAPER_SESSION_DATE)" \
+			$(if $(PAPER_DECISION_AT),--decision-at "$(PAPER_DECISION_AT)",)
 
 paper-run: config
 	@test -n "$(PAPER_SPEC)" || (echo "PAPER_SPEC is required" >&2; exit 2)

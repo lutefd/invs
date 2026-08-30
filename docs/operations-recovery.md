@@ -89,6 +89,21 @@ reused when its bytes are identical. Do not run it against the retained v0.6
 reproduction tree: replay evidence is intentionally not accepted as a wall-clock
 forward record.
 
+Before creating a new account, validate its exact session inputs without creating
+ledger state:
+
+```sh
+make paper-validate-inputs \
+  PAPER_SPEC=/path/to/paper-spec.json \
+  PAPER_DATA_ROOT=/data/research/forward/v1 \
+  PAPER_SESSION_DATE=2026-08-31 \
+  PAPER_DECISION_AT=2026-08-31T21:05:00Z
+```
+
+The preflight checks the immutable account envelope, input hashes, calendar
+availability, membership, and active-security close prices. A failed preflight is
+an input/setup issue; it does not leave a paper account or partial ledger behind.
+
 ## Reconcile before and after operations
 
 Run the full report from the repository root:

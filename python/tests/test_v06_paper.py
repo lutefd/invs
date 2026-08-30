@@ -542,6 +542,29 @@ def test_paper_cli_dispatches_operator_lifecycle(tmp_path: Path, capsys: pytest.
     spec_path.write_bytes(canonical_json(account) + b"\n")
     ledger_root = root / "ledger"
 
+    assert main(
+        [
+            "validate-inputs",
+            "--spec",
+            str(spec_path),
+            "--data-root",
+            str(root),
+            "--session-date",
+            "2025-01-02",
+            "--decision-at",
+            "2025-01-02T21:05:00Z",
+        ]
+    ) == 0
+    preflight = json.loads(capsys.readouterr().out)
+    assert preflight["action"] == "validated"
+    assert preflight["decision_at"] == "2025-01-02T21:05:00Z"
+    assert preflight["active_security_ids"] == [SECURITY_A, SECURITY_B]
+    assert {artifact["kind"] for artifact in preflight["artifacts"]} == {
+        "calendar",
+        "membership",
+        "prices",
+    }
+    assert not ledger_root.exists()
     assert main(["create-account", "--spec", str(spec_path), "--ledger-root", str(ledger_root)]) == 0
     capsys.readouterr()
     assert main(

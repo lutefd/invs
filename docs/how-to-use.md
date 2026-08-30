@@ -1319,6 +1319,12 @@ repository's `data/` directory at `/data`:
 ```sh
 mkdir -p data/research/acceptance/v0.6/operator/ledger
 
+docker compose run --rm --no-deps jupyter invs-paper validate-inputs \
+  --spec /data/research/acceptance/v0.6/operator/spec.json \
+  --data-root /data/research/acceptance/v0.6/operator \
+  --session-date 2025-01-02 \
+  --decision-at 2025-01-02T22:00:00Z
+
 docker compose run --rm --no-deps jupyter invs-paper create-account \
   --spec /data/research/acceptance/v0.6/operator/spec.json \
   --ledger-root /data/research/acceptance/v0.6/operator/ledger
@@ -1330,6 +1336,13 @@ docker compose run --rm --no-deps jupyter invs-paper run \
   --session-date 2025-01-02 \
   --decision-at 2025-01-02T22:00:00Z
 ```
+
+`validate-inputs` is read-only: it verifies the account, every referenced artifact
+hash and envelope, the selected calendar session, membership state, and current
+close before any ledger directory is created. Use the equivalent Make target as
+`PAPER_SPEC=/path/to/spec.json PAPER_DATA_ROOT=/data/research/acceptance/v0.6/operator
+PAPER_SESSION_DATE=2025-01-02 PAPER_DECISION_AT=2025-01-02T22:00:00Z make
+paper-validate-inputs`.
 
 `--decision-at` is the operator's explicit information cutoff. Use a canonical
 UTC timestamp at or after the session close and no later than the current time

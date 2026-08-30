@@ -24,6 +24,7 @@ from .portfolio import (
     PaperMissingDataError,
     PortfolioError,
     PortfolioState,
+    active_security_ids,
     build_target,
     cash_base,
     convert,
@@ -1249,6 +1250,77 @@ def _resolve_decision_at(value: str | datetime | None, session: Mapping[str, Any
     return resolved
 
 
+def preflight_paper_session(
+    account: Mapping[str, Any],
+    *,
+    data_root: str | Path,
+    session_date: str | date,
+    decision_at: str | datetime | None = None,
+) -> dict[str, Any]:
+    """Validate one paper session before creating or mutating ledger state.
+
+    This is deliberately read-only.  It validates the account and every
+    hash-pinned input, resolves the requested session clock, and proves that
+    each active security has a point-in-time close available at that cutoff.
+    The actual account creation and decision run remain separate operations.
+    """
+
+    normalized = validate_paper_account(account)
+    inputs = load_paper_inputs(normalized["inputs"], data_root=data_root)
+    sessions = sessions_for_account(normalized, inputs)
+    current_date = (
+        date.fromisoformat(session_date)
+        if isinstance(session_date, str)
+        else session_date
+    )
+    if not isinstance(current_date, date):
+        raise PaperSpecError("session_date must be an ISO date")
+    try:
+        base_session = next(
+            row for row in sessions if row["session_date"] == current_date
+        )
+    except StopIteration as error:
+        raise PaperSpecError(
+            f"session {current_date} is outside the paper account calendar"
+        ) from error
+
+    resolved_decision_at = _resolve_decision_at(decision_at, base_session)
+    session = dict(base_session)
+    session["decision_at"] = resolved_decision_at
+    active = active_security_ids(normalized, inputs, session)
+    for security_id in active:
+        if price_row(inputs, security_id, current_date, resolved_decision_at) is None:
+            raise PaperMissingDataError(
+                f"missing current close for active security {security_id} on {current_date}"
+            )
+
+    fitnesses = {item["fitness"] for item in normalized["inputs"]}
+    return {
+        "action": "validated",
+        "account_id": normalized["account_id"],
+        "session_date": current_date.isoformat(),
+        "decision_at": timestamp(resolved_decision_at),
+        "input_fingerprint": input_fingerprint(normalized["inputs"]),
+        "fitness": (
+            "current_research_only"
+            if "current_research_only" in fitnesses
+            else "backtest_safe"
+        ),
+        "active_security_ids": list(active),
+        "calendar_sessions": len(sessions),
+        "artifacts": [
+            {
+                "kind": artifact.kind,
+                "artifact_id": artifact.artifact_id,
+                "sha256": artifact.sha256,
+                "available_at": timestamp(artifact.available_at),
+                "rows": len(artifact.rows),
+            }
+            for artifact in sorted(inputs.artifacts.values(), key=lambda item: item.kind)
+        ],
+    }
+
+
 def _decision_id(
     account_id: str,
     session_date: date,
@@ -1891,6 +1963,7 @@ __all__ = [
     "build_paper_acceptance_report",
     "create_paper_account",
     "paper_account_sha256",
+    "preflight_paper_session",
     "read_paper_report",
     "rebuild_paper_account",
     "reconcile_paper_account",

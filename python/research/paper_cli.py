@@ -14,6 +14,7 @@ from .paper import (
     approve_paper_decision,
     build_paper_acceptance_report,
     create_paper_account,
+    preflight_paper_session,
     read_paper_report,
     rebuild_paper_account,
     reconcile_paper_account,
@@ -57,6 +58,13 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--ledger-root", required=True)
     run.add_argument("--session-date", required=True)
     run.add_argument("--decision-at")
+    preflight = commands.add_parser(
+        "validate-inputs", help="validate one paper session without creating ledger state"
+    )
+    preflight.add_argument("--spec", required=True)
+    preflight.add_argument("--data-root", required=True)
+    preflight.add_argument("--session-date", required=True)
+    preflight.add_argument("--decision-at")
     approve = commands.add_parser("approve", help="append a manual approval or rejection")
     approve.add_argument("--account-id", required=True)
     approve.add_argument("--decision-id", required=True)
@@ -95,6 +103,13 @@ def main(argv: list[str] | None = None) -> int:
                 _strict_json(Path(args.spec)),
                 data_root=args.data_root,
                 ledger_root=args.ledger_root,
+                session_date=args.session_date,
+                decision_at=args.decision_at,
+            )
+        elif args.command == "validate-inputs":
+            output = preflight_paper_session(
+                _strict_json(Path(args.spec)),
+                data_root=args.data_root,
                 session_date=args.session_date,
                 decision_at=args.decision_at,
             )
