@@ -5,7 +5,7 @@
 This is the v1.0 pre-release evidence index, not an accepted v1.0 release. The
 current operational snapshot below was captured from checkout commit
 `92508ffe2432ca9b5ec89e1853d2282338e60544`. The current validation and v1
-acceptance reruns were executed from commit `35e70e748c1fc53746bb59768f2e13e443665f92` with
+acceptance reruns were executed from commit `e1ecd4e32480a5a53ceace87d195200e80ca2f9a` with
 `INVS_BIND_ADDRESS=127.0.0.1` where validation needed to override the operator's
 local non-loopback `.env` setting. The tracked documentation commits do not alter
 the runtime compatibility contract; the later paper price-basis compatibility
@@ -19,7 +19,7 @@ criterion.
 
 | Command | Result | Evidence |
 | --- | --- | --- |
-| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 206 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 208 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 61 schemas, 3 registries, 16 migrations, and complete data-fitness surfaces | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ingest SOURCE=all` | Passed: all five enabled source runs completed without rejected resources | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ops-status` | Passed: current enabled sources and projections within threshold; disk usage 17% | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
@@ -60,7 +60,8 @@ criterion.
 - `7153626` — mixed price-basis rejection regression coverage;
 - `b450f9f` — read-only aggregate paper acceptance-report derivation from an immutable ledger; and
 - `c35ee45` — release compatibility hash refresh for the paper implementation; and
-- `a4f8868` — complete paper-account envelope validation before daily-cycle execution.
+- `a4f8868` — complete paper-account envelope validation before daily-cycle execution; and
+- `e1ecd4e` — bind daily-cycle resume identity to referenced input bytes.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the

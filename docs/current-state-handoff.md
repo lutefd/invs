@@ -235,7 +235,7 @@ The daily-cycle preflight was then hardened in `a4f8868` to require the complete
 v1 paper-account envelope, reject missing or unknown top-level fields and wrong
 schema versions before execution, and cover the failure path with a focused test
 and acceptance fixture. The full `make validate`, resilience, and installation
-lifecycle reruns passed from `35e70e7`; the integrated workflow still intentionally
+lifecycle reruns passed from `e1ecd4e`; the integrated workflow still intentionally
 reports `attention` until genuine forward evidence exists.
 
 The [v1 resilience acceptance report](acceptance/2026-08-30-v1-resilience.md) passes
