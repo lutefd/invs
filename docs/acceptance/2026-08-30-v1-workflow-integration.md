@@ -42,6 +42,13 @@ and `make paper-reproduction`. It then writes:
 - `data/research/acceptance/v1/thematic-workflow.json`; and
 - `data/research/acceptance/v1/cross-market-workflow.json`.
 
+Those are the default replay outputs. When `V1_FORWARD_RECORD` is supplied, the
+harness instead writes to
+`data/research/acceptance/v1/genuine/<record_id>/`, derived from the captured
+record's canonical ID, so a genuine run cannot overwrite retained replay evidence.
+Set `V1_WORKFLOW_OUTPUT_ROOT` to a different safe repository-relative directory
+when testing another workflow variant.
+
 The generated reports are ignored runtime evidence and are reproducible from the
 committed fixtures and prior acceptance commands. They must not be described as a
 v1 release acceptance until the forward-record check changes to `passed`.

@@ -50,6 +50,7 @@ criterion.
   for genuine forward evidence; and
 - `cf37708` — repeatable rejection of replay-only forward-record capture;
 - `c011ab6` — disposable fresh-install, upgrade, backup/restore, and interrupted-recovery acceptance;
+- `97e9029` — isolated replay and genuine workflow evidence output directories;
 - `a1ba6c7` — paper-only admission of explicitly labeled split-adjusted prices;
 - `22e71cf` — shared input-schema and release-manifest alignment for that boundary; and
 - `7153626` — mixed price-basis rejection regression coverage;

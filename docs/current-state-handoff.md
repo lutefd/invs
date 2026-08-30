@@ -273,6 +273,9 @@ by `make paper-acceptance-report`, landed in `b450f9f`, with its release hash
 refreshed in `c35ee45`. The command is read-only against the source account and
 proves duplicate-cycle idempotency, rebuild equality, isolated backup/restore, and
 reconciliation; a halted or otherwise incomplete session remains `attention`.
+The workflow harness output-isolation correction landed in `97e9029`: replay runs
+retain the fixed acceptance reports, while a genuine record defaults to its own
+`data/research/acceptance/v1/genuine/<record_id>/` directory.
 
 The final v1.0 release boundary is still pending a genuine wall-clock forward paper
 record and final end-to-end workflow acceptance. The pre-release evidence index is
@@ -355,6 +358,7 @@ to close the v0.2 calendar gate. See the
 - Latest v1 forward-record validation hardening: `be16303` (`fix(acceptance): replay ledger for forward evidence`)
 - Latest v1 forward-record acceptance guard: `cf37708` (`test(acceptance): reject replay-only forward records`)
 - Latest v1 installation lifecycle acceptance boundary: `c011ab6` (`test(acceptance): add isolated v1 install upgrade drill`)
+- Latest v1 workflow evidence isolation boundary: `97e9029` (`fix(acceptance): isolate workflow evidence variants`)
 - Latest v1 paper price-basis boundary: `7153626` (`test(paper): reject mixed price bases`)
 - Latest v1 paper acceptance-report boundary: `b450f9f` (`feat(paper): derive ledger acceptance reports`)
 - Latest v1 paper compatibility hash: `c35ee45` (`chore(release): refresh paper compatibility hash`)

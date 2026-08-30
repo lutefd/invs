@@ -1384,9 +1384,13 @@ US/Brazil cross-market fixtures with:
 make workflow-acceptance
 ```
 
-The reports are written under `data/research/acceptance/v1/`. Their current status is
-`attention` by design: the linked v0.6 paper evidence is recorded/replayed and does
-not satisfy the genuine wall-clock forward-record requirement. A custom workflow
+The default replay reports are written under `data/research/acceptance/v1/`. Their
+current status is `attention` by design: the linked v0.6 paper evidence is
+recorded/replayed and does not satisfy the genuine wall-clock forward-record
+requirement. When `V1_FORWARD_RECORD` is supplied, the harness writes each genuine
+run under `data/research/acceptance/v1/genuine/<record_id>/` so it preserves the
+retained replay reports. Set `V1_WORKFLOW_OUTPUT_ROOT` to a different safe
+repository-relative directory for an isolated workflow variant. A custom workflow
 specification must use `schemas/research-workflow.schema.json`; build or verify its
 immutable report with the `invs-workflow` CLI. A report reaches `passed` only when
 the declared forward evidence is wall-clock, account-linked, and not labeled as

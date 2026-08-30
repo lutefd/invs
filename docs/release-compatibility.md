@@ -113,6 +113,13 @@ V1_PAPER_ACCOUNT_IDS="<account-id>" \
 make workflow-acceptance
 ```
 
+The replay form keeps its reports under `data/research/acceptance/v1/`. With
+`V1_FORWARD_RECORD`, the harness derives a separate output directory at
+`data/research/acceptance/v1/genuine/<record_id>/`, preserving replay evidence and
+keeping each captured record's workflow reports together. Set
+`V1_WORKFLOW_OUTPUT_ROOT` when an explicitly named repository-relative variant
+directory is needed.
+
 The aggregate paper report must contain the supplied account IDs and accepted
 paper checks. Generate it from the account ledger with the read-only
 `make paper-acceptance-report` target before running the workflow command; do not
