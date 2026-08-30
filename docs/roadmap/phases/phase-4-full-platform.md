@@ -29,7 +29,7 @@ acceptance, operations, compatibility, security, and usability phase.
 
 ## Phase gate checklist
 
-- [ ] Clean install, upgrade, backup, restore, and interrupted recovery pass.
+- [x] Clean install, upgrade, backup, restore, and interrupted recovery pass; see the [v1 installation lifecycle acceptance](../../acceptance/2026-08-30-v1-install-upgrade.md).
 - [x] Version compatibility manifest rejects unsupported component mixes.
 - [x] All data reachable by research/backtest code has a fitness classification.
 - [ ] Thematic question reaches a frozen thesis, reproducible backtest, and paper

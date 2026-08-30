@@ -240,6 +240,13 @@ links the research, backtest, and paper layers for thematic and US/Brazil
 cross-market scenarios, but intentionally remains `attention` because the retained
 paper evidence is recorded/replayed.
 
+The [v1 installation lifecycle acceptance report](acceptance/2026-08-30-v1-install-upgrade.md)
+passes the isolated fresh install, additive pre-v1 upgrade, idempotent migration
+reapply, PostgreSQL/data backup and restore, tamper rejection, and daily-cycle
+interruption/resume stages at `c011ab6`. Its Docker project, volume, and restore
+database are disposable and are removed after the run; the live `invs` volume is
+not part of the test.
+
 The supported forward-evidence path is `make forward-record-capture` after a real
 recent paper session. It validates the append-only ledger and reconciled report,
 records account/report/manifest hashes, and refuses stale or replay-only evidence;
@@ -309,6 +316,7 @@ to close the v0.2 calendar gate. See the
 - v0.5 status: complete; see [the v0.5 acceptance report](acceptance/2026-08-29-v0.5-backtesting.md)
 - v0.6 status: complete; see [the v0.6 acceptance report](acceptance/2026-08-29-v0.6-paper-trading.md)
 - v1.0 status: in progress; see the [resilience acceptance report](acceptance/2026-08-30-v1-resilience.md)
+- v1.0 installation lifecycle: accepted repository-side; see the [install/upgrade acceptance report](acceptance/2026-08-30-v1-install-upgrade.md)
 - v1.0 workflow status: attention by design; see the [workflow integration report](acceptance/2026-08-30-v1-workflow-integration.md)
 - Latest v0.4 acceptance boundary: `3ac61e1` (`test(acceptance): prove v0.4 hypothesis loop`)
 - Latest v0.5 implementation boundary: `180d5c9` (`fix(backtest): order metric attribution deterministically`)
@@ -324,6 +332,7 @@ to close the v0.2 calendar gate. See the
 - Latest v1 forward-record integration correction: `b471908` (`fix(acceptance): isolate forward validation imports`)
 - Latest v1 forward-record validation hardening: `be16303` (`fix(acceptance): replay ledger for forward evidence`)
 - Latest v1 forward-record acceptance guard: `cf37708` (`test(acceptance): reject replay-only forward records`)
+- Latest v1 installation lifecycle acceptance boundary: `c011ab6` (`test(acceptance): add isolated v1 install upgrade drill`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`

@@ -78,6 +78,7 @@ make notebook
 make dashboard-smoke
 make migrate
 make historical-truth-db-test
+INVS_BIND_ADDRESS=127.0.0.1 make v1-install-upgrade-acceptance
 make reconcile
 make health
 make workflow-acceptance
@@ -92,6 +93,8 @@ recovery and bias proof; its current result is recorded in
 [`2026-08-30-v1-resilience.md`](acceptance/2026-08-30-v1-resilience.md).
 The data-fitness matrix and its fail-closed mutation checks are recorded in
 [`2026-08-30-v1-data-fitness.md`](acceptance/2026-08-30-v1-data-fitness.md).
+The disposable installation lifecycle proof is recorded in
+[`2026-08-30-v1-install-upgrade.md`](acceptance/2026-08-30-v1-install-upgrade.md).
 The combined command results and remaining release gates are summarized in the
 [v1.0 pre-release evidence index](acceptance/2026-08-30-v1-pre-release-index.md).
 

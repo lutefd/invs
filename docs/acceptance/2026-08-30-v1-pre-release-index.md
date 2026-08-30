@@ -29,6 +29,7 @@ criterion.
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-daily-cycle-acceptance` | Passed: actual CLI failure/resume path preserved backup and observation evidence | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-forward-record-acceptance` | Passed: retained replay-only paper evidence was rejected without writing a record | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-resilience-acceptance` | Passed: all eleven stages and seven scenarios | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
+| `INVS_BIND_ADDRESS=127.0.0.1 make v1-install-upgrade-acceptance` | Passed: fresh install, pre-v1 upgrade, idempotent reapply, backup/restore, tamper rejection, and interrupted recovery | [Install/upgrade acceptance report](2026-08-30-v1-install-upgrade.md) |
 
 ## v1 implementation checkpoints
 
@@ -46,6 +47,7 @@ criterion.
 - `be16303` — full paper-account/report validation and append-only ledger replay
   for genuine forward evidence; and
 - `cf37708` — repeatable rejection of replay-only forward-record capture.
+- `c011ab6` — disposable fresh-install, upgrade, backup/restore, and interrupted-recovery acceptance.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the
@@ -58,6 +60,7 @@ The version compatibility and forward-upgrade procedure is in the
 | v0.1–v0.6 foundations | Accepted bounded reports and reproductions | Complete for their documented scopes |
 | Runtime and compatibility | Manifest validation passes; unsupported mixes fail closed | Accepted implementation boundary |
 | Security and recovery | Loopback defaults, secret scan, backup/restore, restore/reconcile drill pass | Accepted operational boundary |
+| Installation lifecycle | Fresh install, additive pre-v1 upgrade, idempotent migration reapply, isolated backup/restore, and daily-cycle recovery pass | Accepted repository-side lifecycle boundary |
 | Historical bias | 13-probe retained bias suite passes | Accepted challenge boundary |
 | Thematic/cross-market workflow | Both reports validate and link all layers | `attention` until forward evidence exists |
 | Brazil/commodity coverage | Explicit bounded fitness labels and missing coverage | Not a broad coverage claim |
