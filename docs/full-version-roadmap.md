@@ -1587,8 +1587,9 @@ scenarios and all ten underlying stages.
 
 The genuine-forward gate is now fail-closed through the `paper-forward-record`
 contract and `make forward-record-capture`, landed in `e272e3d` with the import
-isolation correction in `b471908`. The command can capture only a recent
-reconciled paper session and cannot promote retained replay evidence.
+isolation correction in `b471908` and full ledger replay in `be16303`. The command
+can capture only a recent reconciled paper session and cannot promote retained
+replay evidence.
 
 This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
 `attention` because the retained paper evidence is recorded/replayed rather than a

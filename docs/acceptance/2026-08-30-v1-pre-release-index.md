@@ -4,7 +4,7 @@
 
 This is the v1.0 pre-release evidence index, not an accepted v1.0 release. The
 refreshed resilience evidence was executed against commit
-`b471908b3cfe52d82530cc3a8d42df006956b5af` with
+`be163034387b603396e4fe98253872d369fb52e4` with
 `INVS_BIND_ADDRESS=127.0.0.1` where validation needed to override the operator's
 local non-loopback `.env` setting. The tracked documentation commits do not alter
 the runtime compatibility contract.
@@ -17,13 +17,13 @@ criterion.
 
 | Command | Result | Evidence |
 | --- | --- | --- |
-| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 195 Python tests, 62 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 196 Python tests, 62 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 60 schemas, 16 migrations | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make notebook` | Passed: empty-safe vertical-slice notebook executed | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make dashboard-smoke` | Passed: dashboard JSON and PostgreSQL `EXPLAIN` checks | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make migrate` | Passed: existing PostgreSQL volume remained migration-ready | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make historical-truth-db-test` | Passed: append-only, rollback, fresh-image, and migration replay checks | Runtime output from 2026-08-30 |
-| `INVS_BIND_ADDRESS=127.0.0.1 make reconcile` | Passed: `issues=0` | Report generated at `2026-08-30T05:56:13Z` |
+| `INVS_BIND_ADDRESS=127.0.0.1 make reconcile` | Passed: `issues=0` | Report generated at `2026-08-30T06:55:56Z` |
 | `INVS_BIND_ADDRESS=127.0.0.1 make health` | Passed: PostgreSQL accepting connections; long-lived services healthy | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make workflow-acceptance` | Passed with intentional `attention` status for thematic and cross-market reports | [Workflow integration report](2026-08-30-v1-workflow-integration.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-daily-cycle-acceptance` | Passed: actual CLI failure/resume path preserved backup and observation evidence | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
@@ -41,7 +41,9 @@ criterion.
   shell entrypoint;
 - `e272e3d` — hash-pinned forward paper-record contract and capture CLI; and
 - `b471908` — integration correction keeping forward validation isolated from
-  feature-module imports.
+  feature-module imports; and
+- `be16303` — full paper-account/report validation and append-only ledger replay
+  for genuine forward evidence.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the
