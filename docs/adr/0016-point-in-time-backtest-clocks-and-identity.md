@@ -28,7 +28,7 @@ supports local JSON artifacts for:
 - historical membership intervals;
 - corporate actions, including splits, cash dividends, and delistings;
 - FX observations; and
-- optional point-in-time feature or macro references.
+- optional point-in-time feature, macro, or risk-free-series references.
 
 The runner verifies every referenced byte before reading it. It never imports a
 provider adapter, calls a network endpoint, reads a latest-only PostgreSQL
@@ -39,10 +39,10 @@ projection, or substitutes the current YAML universe. A selected input with
 
 The canonical experiment specification contains strategy identity and parameters,
 universe and membership fingerprint, calendar and input references, decision and
-execution clocks, accounting/cost/risk policies, date partitions, and optional random
-seed. The `experiment_id` is UUIDv5 over the canonical specification without the
-identity field itself. Runtime attempt IDs, wall-clock durations, logs, and container
-metadata are not identity inputs.
+execution clocks, accounting/cost/risk/metrics policies, date partitions, and optional
+random seed. The `experiment_id` is UUIDv5 over the canonical specification without
+the identity field itself. Runtime attempt IDs, wall-clock durations, logs, and
+container metadata are not identity inputs.
 
 An identical completed specification and input set therefore has one experiment
 identity. A changed input path, hash, policy, strategy version, universe fingerprint,
@@ -96,6 +96,11 @@ Commission, spread, slippage, minimum fee, and tax policies are explicit version
 values. The first fill price applies half the configured spread plus slippage in the
 trade direction; fees are charged in the traded security currency. Missing FX or
 invalid conversion rates reject the affected trade rather than inventing a rate.
+
+Metric definitions, annualization, return basis, missing-period behavior, and the
+risk-free source are explicit policy fields. A constant annual rate or a point-in-time
+risk-free artifact is recorded in the metrics artifact as the exact per-period series
+used for excess-return calculations.
 
 ### Strategies emit exposures, not orders
 
