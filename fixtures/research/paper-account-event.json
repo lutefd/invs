@@ -1,0 +1,16 @@
+{
+  "account_id": "40000000-0000-4000-8000-000000000201",
+  "sequence": 1,
+  "event_id": "50000000-0000-4000-8000-000000000201",
+  "idempotency_key": "cash-deposit:v0.6-paper-catalog-acceptance",
+  "event_at": "2026-01-01T12:00:00Z",
+  "session_date": "2026-01-01",
+  "event_type": "cash_deposit",
+  "currency": "USD",
+  "quantity_delta": "0",
+  "amount_local_delta": "10000",
+  "amount_base_delta": "10000",
+  "details": {
+    "reason": "initial_cash"
+  }
+}

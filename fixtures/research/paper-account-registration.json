@@ -1,0 +1,22 @@
+{
+  "account": {
+    "account_id": "40000000-0000-4000-8000-000000000201",
+    "schema_version": "1.0.0",
+    "name": "v0.6 paper catalog acceptance",
+    "base_currency": "USD",
+    "strategy_name": "equal_weight",
+    "strategy_version": "1.0.0",
+    "strategy_parameters": {
+      "rebalance_frequency": "weekly"
+    },
+    "start_date": "2026-01-01",
+    "end_date": "2026-12-31",
+    "input_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policy_version": "1.0.0",
+    "approval_mode": "manual",
+    "spec_path": "paper/catalog-acceptance/account.json",
+    "spec_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "engine_version": "python-paper-1.0.0",
+    "created_at": "2026-01-01T12:00:00Z"
+  }
+}

@@ -257,6 +257,10 @@ backtest-reproduction: config
 paper-reproduction: config
 	@scripts/test-paper-reproduction.sh
 
+paper-acceptance: migrate
+	@scripts/test-paper-workspace.sh
+	@$(MAKE) paper-reproduction
+
 action-snapshot: config
 	@test -n "$(DATA_SOURCE_ID)" || (echo "DATA_SOURCE_ID is required" >&2; exit 2)
 	@test -n "$(SECURITY_ID)" || (echo "SECURITY_ID is required" >&2; exit 2)
