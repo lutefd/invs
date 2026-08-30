@@ -244,7 +244,7 @@ and mismatched replays fail closed. `713e8a0` adds the same cutoff to the durabl
 daily-cycle report and explicitly rejects a changed cutoff on resume. `2658490`
 versions the daily-cycle and durable report contracts as `1.1.0` and refreshes the
 release compatibility hashes. The latest full validation, resilience, installation,
-and composed pre-release reruns passed from `2658490`; the integrated
+and composed pre-release reruns passed from `3b1ad11`; the integrated
 workflow still intentionally reports `attention` until genuine forward evidence
 exists. The same
 path-boundary sequence hardens daily-cycle input, report, and stage-log paths
@@ -252,7 +252,7 @@ against symlink traversal and report-temp races; `010cfc0` also preflights repor
 and log destinations before execution.
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 report evidence was pinned in `67c59ad` and the latest runtime reports were rerun
-from `2658490`. The genuine-only `v1-release-acceptance` wrapper landed in
+from `3b1ad11`. The genuine-only `v1-release-acceptance` wrapper landed in
 `3051376` and refuses to enter the ladder without both forward evidence references;
 `22e4d50` also rejects missing, traversing, absolute, or symlinked references before
 any validation or container work begins. `246702d` closes the remaining parent-
@@ -270,7 +270,7 @@ paper evidence is recorded/replayed.
 The [v1 installation lifecycle acceptance report](acceptance/2026-08-30-v1-install-upgrade.md)
 passes the isolated fresh install, additive pre-v1 upgrade, idempotent migration
 reapply, PostgreSQL/data backup and restore, tamper rejection, and daily-cycle
-interruption/resume stages; the latest rerun is pinned to `2658490` and the
+interruption/resume stages; the latest rerun is pinned to `3b1ad11` and the
 acceptance implementation landed in `c011ab6`. Its Docker project, volume, and restore
 database are disposable and are removed after the run; the live `invs` volume is
 not part of the test.
@@ -348,9 +348,10 @@ runs retain the fixed acceptance reports, while a genuine record defaults to its
 own `data/research/acceptance/v1/genuine/<record_id>/` directory.
 
 The final v1.0 release boundary is still pending a genuine wall-clock forward paper
-record and final end-to-end workflow acceptance. The pre-release evidence index is
-recorded, while the bounded Brazil and commodity fitness limitations remain in
-force; no broker or real-money execution claim is made.
+record and genuine end-to-end workflow/release acceptance. The replay-only
+pre-release evidence index is recorded, while the bounded Brazil and commodity
+fitness limitations remain in force; no broker or real-money execution claim is
+made.
 
 A read-only live preflight at `2026-08-30T14:33:50Z` found zero rows in the
 `paper_accounts` projection, no files under `data/research/forward/`, and one current
@@ -358,6 +359,14 @@ Yahoo PostgreSQL price projection for AAPL observed at `2026-08-28T20:00:00Z`. T
 next real session therefore requires an operator-supplied immutable paper-account
 specification and exact current-research-only input artifacts; retained v0.6 fixtures
 and backdated timestamps remain ineligible for the release gate.
+
+The operator input gap is now covered by `3b1ad11`: the read-only
+`invs-paper validate-inputs` command and `make paper-validate-inputs` target check
+the immutable account envelope, every hash-pinned input artifact, the selected
+calendar session and decision clock, active membership, and current close prices
+without creating an account or ledger state. On the next real session, run this
+preflight first, then create the user-approved account and execute the after-close
+daily cycle.
 
 The data-fitness classification gate is now accepted at `4a72ed0`. The release-pinned
 [`data-fitness matrix`](../release/data-fitness.json) covers five catalog datasets,
@@ -451,6 +460,7 @@ and [XNAS publication report](acceptance/2026-08-30-nasdaq-calendar-publication.
 - Latest v1 paper decision-clock boundary: `ee29219` (`feat(paper): support explicit after-close decision clocks`)
 - Latest v1 daily-cycle report-clock boundary: `713e8a0` (`feat(operations): expose daily-cycle decision clocks`)
 - Latest v1 daily-cycle contract revision: `2658490` (`fix(operations): version daily-cycle clock contracts`)
+- Latest v1 paper-session input preflight: `3b1ad11` (`feat(paper): add read-only session input preflight`)
 - Latest v1 release evidence path guard: `22e4d50` (`fix(acceptance): fail closed on release evidence paths`)
 - Latest v1 genuine release acceptance target: `3051376` (`test(acceptance): add genuine v1 release target`)
 - Latest v1 forward-record contract boundary: `e272e3d` (`feat(acceptance): bind genuine forward paper evidence`)
