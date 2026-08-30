@@ -296,7 +296,8 @@ Capacity should favor the critical path over strict calendar boundaries. Data sh
 continue collecting throughout all phases so that the forward paper period grows even
 while later components are built.
 
-The v0.6 gate is accepted at `f02a57f`. Its bounded recorded/replayed forward-paper
+The v0.6 gate is accepted at `95a79b5`, with feature implementation boundary
+`f02a57f`. Its bounded recorded/replayed forward-paper
 acceptance covers 22 sessions, separate equal-weight and momentum sleeves, deterministic
 targets and risk decisions, close-to-next-open fills, corporate actions, stale/risk
 failure probes, restart/idempotency, ledger rebuild, backup restore, PostgreSQL event
@@ -1368,7 +1369,7 @@ validation evidence is recorded in
 
 # v0.6 — Portfolio Construction and Paper Trading
 
-**Status:** Accepted at `f02a57f`; see the [v0.6 paper-trading acceptance report](acceptance/2026-08-29-v0.6-paper-trading.md).
+**Status:** Accepted at `95a79b5` (feature implementation boundary `f02a57f`); see the [v0.6 paper-trading acceptance report](acceptance/2026-08-29-v0.6-paper-trading.md).
 
 ## Goal
 
@@ -1981,7 +1982,7 @@ integrates the bounded identity, membership, calendar, price, action, FX, macro,
 SEC filing chains, verifies 16 pinned evidence artifacts, and preserves
 installation-replay and unsupported scope decisions. The v0.3 feature platform is
 accepted through `5fc3783`; the v0.4 theme and hypothesis loop is accepted through
-`3ac61e1`; v0.5 is accepted at `180d5c9`; v0.6 is accepted at `f02a57f`; see their
+`3ac61e1`; v0.5 is accepted at `180d5c9`; v0.6 is accepted at `95a79b5`; see their
 acceptance reports. The next narrow queue is v1.0 integration and operational
 hardening. The accepted v0.5 backtest remains daily, long-only, and canonical to the
 internal Python simulator; rolling calibration, paper execution, and broker behavior

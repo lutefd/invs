@@ -198,8 +198,9 @@ the v0.6 section below.
 
 ## v0.6 completion boundary
 
-The v0.6 portfolio-construction and paper-trading gate is accepted at implementation
-boundary `f02a57f`. The slice was delivered through the ADR/schema boundary in
+The v0.6 portfolio-construction and paper-trading gate is accepted at validation
+boundary `95a79b5`, with feature implementation boundary `f02a57f`. The slice was
+delivered through the ADR/schema boundary in
 `734ceef`, the forward portfolio and ledger engine in `3d9b461`, the operator CLI in
 `2f05b93`, the PostgreSQL catalog in `65da807`, the fractional-reserve correction in
 `1eacda9`, the deterministic recovery drill in `d2fbee9`, the catalog acceptance in
@@ -271,6 +272,7 @@ to close the v0.2 calendar gate. See the
 - Latest v0.4 acceptance boundary: `3ac61e1` (`test(acceptance): prove v0.4 hypothesis loop`)
 - Latest v0.5 implementation boundary: `180d5c9` (`fix(backtest): order metric attribution deterministically`)
 - Latest v0.6 implementation boundary: `f02a57f` (`feat(observability): add paper portfolio dashboard`)
+- Latest v0.6 validation boundary: `95a79b5` (`fix(test): await fresh postgres initialization`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`
@@ -1228,7 +1230,7 @@ The following are not accidental omissions:
 - The roadmap is now present; version exit status must be updated there only after
   its stated acceptance gate passes.
 
-- v0.6 is complete at `f02a57f`; its local ledger, paper CLI, PostgreSQL catalog,
+- v0.6 is complete at `95a79b5`; its local ledger, paper CLI, PostgreSQL catalog,
   recovery acceptance, and dashboard are now the current paper-operation boundary.
   The next boundary is v1.0 integration and genuine forward-period accumulation;
   broker/live execution remains post-v1.
@@ -1238,7 +1240,7 @@ The following are not accidental omissions:
 Follow [the roadmap execution index](roadmap/README.md). v0.1 is accepted at
 `63d479d` and v0.2 at `0bfdc27`; v0.3 is accepted at
 `5fc3783` with reporting correction `0454d0e`; v0.4 is accepted at `3ac61e1`; v0.5
-is accepted at `180d5c9`; and v0.6 is accepted at `f02a57f`. Keep receipt-time
+is accepted at `180d5c9`; and v0.6 is accepted at `95a79b5`. Keep receipt-time
 prices installation-replay only. The next smallest cohesive boundary is v1.0
 integration and operational hardening; rolling calibration and broker behavior remain
 deferred.

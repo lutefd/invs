@@ -59,7 +59,8 @@ v0.1 is accepted at `63d479d`, and v0.2 is accepted at `0bfdc27`. The retained
 passes 13 exact boundary probes and verifies 16 evidence artifacts while keeping
 receipt-time prices installation-replay only and unsupported actions blocking. The
 v0.3, v0.4, and v0.5 gates are now accepted, and the v0.6 portfolio-construction
-and paper-trading gate is accepted at `f02a57f`; the next planned version is v1.0.
+and paper-trading gate is accepted at `95a79b5` (feature boundary `f02a57f`); the
+next planned version is v1.0.
 No strategy or backtester scope was pulled
 into the v0.2 exit work. The
 historical-contract slice in `4d483ac` added ADRs 0006 and 0007,
@@ -140,7 +141,7 @@ strategies, versioned metrics, result comparison, PostgreSQL run lineage,
 checkpoint recovery, and a retained five-experiment US/Brazil reproduction with a
 13-probe bias audit; see the [v0.5 backtesting acceptance report](../acceptance/2026-08-29-v0.5-backtesting.md).
 
-v0.6 is **accepted** at `f02a57f`. The internal forward-paper engine now constructs
+v0.6 is **accepted** at `95a79b5`. The internal forward-paper engine now constructs
 deterministic targets, enforces versioned risk outside strategy code, runs manual or
 recorded auto approvals through close-to-next-open simulated fills, and rebuilds
 positions/NAV from an append-only ledger. The 22-session recovery drill covers two
