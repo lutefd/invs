@@ -22,7 +22,7 @@ for input_name in universe schedule calendar registry taxonomy; do
 	printf '%s\n' '{}' > "$input_root/$input_name.json"
 done
 paper_spec="$input_root/paper.json"
-printf '%s\n' '{"account_id":"40000000-0000-4000-8000-000000000001"}' > "$paper_spec"
+cp "$repo_root/fixtures/research/daily-cycle-paper-account.json" "$paper_spec"
 
 spec_path="$run_root/spec.json"
 jq -n \

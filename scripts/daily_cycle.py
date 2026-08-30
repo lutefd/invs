@@ -25,6 +25,27 @@ _SOURCE = re.compile(r"^[a-z0-9_-]+$")
 _RUN_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _SEMVER = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_PAPER_SCHEMA_VERSION = "1.0.0"
+_PAPER_ACCOUNT_REQUIRED_FIELDS = frozenset(
+    {
+        "schema_version",
+        "account_id",
+        "name",
+        "strategy",
+        "period",
+        "universe",
+        "security_metadata",
+        "inputs",
+        "benchmark",
+        "decision_policy",
+        "accounting_policy",
+        "cost_policy",
+        "risk_policy",
+        "approval_policy",
+        "missing_data_policy",
+    }
+)
+_PAPER_ACCOUNT_OPTIONAL_FIELDS = frozenset({"promoted_backtest"})
 
 
 class DailyCycleError(ValueError):
@@ -127,6 +148,19 @@ def _validate_backup_path(value: Any, repo_root: Path) -> str:
 
 def _validate_paper_spec(repo_root: Path, path: Path, account_id: str) -> None:
     document = _strict_json(path)
+    actual_fields = set(document)
+    missing_fields = sorted(_PAPER_ACCOUNT_REQUIRED_FIELDS - actual_fields)
+    unknown_fields = sorted(actual_fields - _PAPER_ACCOUNT_REQUIRED_FIELDS - _PAPER_ACCOUNT_OPTIONAL_FIELDS)
+    if missing_fields:
+        raise DailyCycleError(
+            f"paper spec {path} is missing required fields: {', '.join(missing_fields)}"
+        )
+    if unknown_fields:
+        raise DailyCycleError(
+            f"paper spec {path} contains unknown fields: {', '.join(unknown_fields)}"
+        )
+    if document["schema_version"] != _PAPER_SCHEMA_VERSION:
+        raise DailyCycleError(f"paper spec {path} has unsupported schema_version")
     if document.get("account_id") != account_id:
         raise DailyCycleError(f"paper spec {path} account_id does not match the cycle entry")
 

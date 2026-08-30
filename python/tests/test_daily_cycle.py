@@ -19,11 +19,90 @@ def _write(path: Path, value: object) -> None:
     path.write_text(json.dumps(value), encoding="utf-8")
 
 
+def _paper_account() -> dict[str, object]:
+    security_id = "10000000-0000-4000-8000-000000000001"
+    return {
+        "schema_version": "1.0.0",
+        "account_id": ACCOUNT_ID,
+        "name": "daily cycle test account",
+        "strategy": {
+            "name": "equal_weight",
+            "version": "1.0.0",
+            "git_commit": "unknown",
+            "parameters": {"rebalance_frequency": "daily"},
+        },
+        "period": {"start_date": "2026-01-01", "end_date": "2026-12-31"},
+        "universe": {
+            "universe_id": "20000000-0000-4000-8000-000000000001",
+            "version": "1.0.0",
+            "security_ids": [security_id],
+            "membership_fingerprint": "a" * 64,
+        },
+        "security_metadata": [
+            {"security_id": security_id, "country": "US", "sector": "technology", "themes": ["ai"]}
+        ],
+        "inputs": [
+            {
+                "kind": kind,
+                "artifact_id": f"30000000-0000-4000-8000-00000000000{index}",
+                "path": f"inputs/{kind}.json",
+                "sha256": "b" * 64,
+                "available_at": "2026-01-01T00:00:00Z",
+                "fitness": "current_research_only",
+            }
+            for index, kind in enumerate(("prices", "calendar", "membership"), start=1)
+        ],
+        "benchmark": {"security_id": security_id, "currency": "USD"},
+        "decision_policy": {
+            "frequency": "daily",
+            "decision_at": "close",
+            "signal_delay_sessions": 1,
+            "execution_price": "open",
+            "stale_after_sessions": 10,
+            "max_price_gap": "1",
+        },
+        "accounting_policy": {
+            "base_currency": "USD",
+            "initial_cash": "10000",
+            "fractional_shares": True,
+            "rebalance_frequency": "daily",
+        },
+        "cost_policy": {
+            "version": "1.0.0",
+            "commission_bps": "0",
+            "fixed_fee": "0",
+            "minimum_fee": "0",
+            "spread_bps": "0",
+            "slippage_bps": "0",
+            "tax_bps": "0",
+        },
+        "risk_policy": {
+            "version": "1.0.0",
+            "max_gross_exposure": "1",
+            "max_position_weight": "1",
+            "max_sector_exposure": "1",
+            "max_country_exposure": "1",
+            "max_currency_exposure": "1",
+            "max_theme_exposure": "1",
+            "minimum_cash_reserve": "0",
+            "max_turnover": "1",
+            "max_daily_notional": "100000",
+            "max_price_gap": "1",
+            "max_stale_sessions": 10,
+            "max_participation": "1",
+            "max_drawdown": "1",
+            "prohibited_security_ids": [],
+        },
+        "approval_policy": {"mode": "auto"},
+        "missing_data_policy": "halt_decision",
+    }
+
+
 def _spec(tmp_path: Path) -> dict:
     for name in ("universe.json", "schedule.json", "calendar.json", "registry.json", "taxonomy.json"):
         _write(tmp_path / "inputs" / name, {})
     paper_path = tmp_path / "inputs" / "paper.json"
-    _write(paper_path, {"account_id": ACCOUNT_ID})
+    _write(paper_path, _paper_account())
     return {
         "$schema": "../schemas/daily-cycle.schema.json",
         "schema_version": "1.0.0",
@@ -71,6 +150,15 @@ def test_cycle_spec_rejects_unknown_fields(tmp_path: Path) -> None:
     spec = _spec(tmp_path)
     spec["unexpected"] = True
     with pytest.raises(DailyCycleError):
+        validate_cycle_spec(spec, repo_root=tmp_path)
+
+
+def test_cycle_spec_rejects_incomplete_paper_spec(tmp_path: Path) -> None:
+    spec = _spec(tmp_path)
+    paper_path = tmp_path / "inputs" / "paper.json"
+    _write(paper_path, {"account_id": ACCOUNT_ID})
+
+    with pytest.raises(DailyCycleError, match="missing required fields"):
         validate_cycle_spec(spec, repo_root=tmp_path)
 
 
