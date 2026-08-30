@@ -6,13 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from research.forward_record import (
-    ForwardRecordError,
-    capture_forward_record,
-    load_forward_record,
-)
-from research.paper import create_paper_account
-
 ACCOUNT_ID = "40000000-0000-4000-8000-000000000201"
 SECURITY_ID = "10000000-0000-4000-8000-000000000201"
 UNIVERSE_ID = "20000000-0000-4000-8000-000000000201"
@@ -115,6 +108,9 @@ def _write_report(ledger_root: Path, session_date: str) -> None:
 
 
 def test_capture_binds_recent_reconciled_ledger_to_forward_evidence(tmp_path: Path) -> None:
+    from research.forward_record import capture_forward_record, load_forward_record
+    from research.paper import create_paper_account
+
     ledger_root = tmp_path / "ledger"
     create_paper_account(_account(), ledger_root=ledger_root)
     session_date = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
@@ -135,6 +131,13 @@ def test_capture_binds_recent_reconciled_ledger_to_forward_evidence(tmp_path: Pa
 
 
 def test_forward_evidence_rejects_old_session_even_with_valid_file_hashes(tmp_path: Path) -> None:
+    from research.forward_record import (
+        ForwardRecordError,
+        capture_forward_record,
+        load_forward_record,
+    )
+    from research.paper import create_paper_account
+
     ledger_root = tmp_path / "ledger"
     create_paper_account(_account(), ledger_root=ledger_root)
     session_date = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()

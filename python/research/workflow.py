@@ -14,8 +14,6 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from .forward_record import ForwardRecordError, validate_forward_record
-
 SCHEMA_VERSION = "1.0.0"
 WORKFLOW_VERSION = "python-workflow-1.0.0"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -232,6 +230,8 @@ def validate_workflow_spec(value: Mapping[str, Any], *, repo_root: str | Path) -
     if forward_evidence is not None:
         evidence_path = _resolve_ref(root, forward_evidence, field="forward_record.evidence")
         if forward_status == "genuine":
+            from .forward_record import ForwardRecordError, validate_forward_record
+
             try:
                 evidence = _strict_json(evidence_path)
                 if not isinstance(evidence, Mapping):

@@ -589,7 +589,7 @@
         "name": "workflow",
         "path": "python/research/workflow.py",
         "version": "python-workflow-1.0.0",
-        "sha256": "3d318b950a26f80882bb6b45aa510b480e1adc2ed099b61d40afe8c37b38f449"
+        "sha256": "cb56410ba3e31cac0bf35c0ab14151649280e380e34f4416191762511a821ba4"
       }
     ],
     "configuration": [
