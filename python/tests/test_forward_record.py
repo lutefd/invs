@@ -97,6 +97,7 @@ def _write_report(
     *,
     recorded_at: str | None = None,
     include_recorded_at: bool = True,
+    checked_at: str | None = None,
 ) -> None:
     report_dir = ledger_root / "accounts" / ACCOUNT_ID / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -113,7 +114,7 @@ def _write_report(
             "policy_version": "1.0.0",
             "codes": [],
             "reasons": [],
-            "checked_at": f"{session_date}T21:00:00Z",
+            "checked_at": checked_at or f"{session_date}T21:00:00Z",
         },
         "approval": "not_required",
         "orders": [],
@@ -185,6 +186,52 @@ def test_forward_evidence_rejects_late_report_recording(tmp_path: Path) -> None:
     _write_report(ledger_root, session_date, recorded_at=recorded_at.isoformat().replace("+00:00", "Z"))
 
     with pytest.raises(ForwardRecordError, match="more than 24 hours after its risk check"):
+        capture_forward_record(
+            repo_root=tmp_path,
+            ledger_root=ledger_root,
+            account_ids=[ACCOUNT_ID],
+            output=tmp_path / "forward-record.json",
+        )
+
+
+def test_forward_evidence_rejects_report_recorded_before_risk_check(tmp_path: Path) -> None:
+    from research.forward_record import ForwardRecordError, capture_forward_record
+    from research.paper import create_paper_account
+
+    ledger_root = tmp_path / "ledger"
+    create_paper_account(_account(), ledger_root=ledger_root)
+    session_date = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+    _write_report(
+        ledger_root,
+        session_date,
+        recorded_at=f"{session_date}T20:59:59Z",
+    )
+
+    with pytest.raises(ForwardRecordError, match="precedes its risk check"):
+        capture_forward_record(
+            repo_root=tmp_path,
+            ledger_root=ledger_root,
+            account_ids=[ACCOUNT_ID],
+            output=tmp_path / "forward-record.json",
+        )
+
+
+def test_forward_evidence_rejects_report_recorded_after_capture(tmp_path: Path) -> None:
+    from research.forward_record import ForwardRecordError, capture_forward_record
+    from research.paper import create_paper_account
+
+    ledger_root = tmp_path / "ledger"
+    create_paper_account(_account(), ledger_root=ledger_root)
+    session_date = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+    now = datetime.now(UTC)
+    _write_report(
+        ledger_root,
+        session_date,
+        checked_at=(now - timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
+        recorded_at=(now + timedelta(hours=1)).isoformat().replace("+00:00", "Z"),
+    )
+
+    with pytest.raises(ForwardRecordError, match="after forward capture"):
         capture_forward_record(
             repo_root=tmp_path,
             ledger_root=ledger_root,
