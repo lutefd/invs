@@ -286,6 +286,26 @@ func dispatch(ctx context.Context, repository *metadata.Repository, operation st
 			return nil, err
 		}
 		return repository.GetBacktestExperimentReport(ctx, value.ExperimentID)
+	case "register-paper-account":
+		var value metadata.PaperAccountRegistration
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.RegisterPaperAccount(ctx, value)
+	case "paper-account-event":
+		var value metadata.PaperAccountEvent
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.AppendPaperAccountEvent(ctx, value)
+	case "paper-account-report":
+		var value struct {
+			AccountID string `json:"account_id"`
+		}
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.GetPaperAccountReport(ctx, value.AccountID)
 	case "outcome":
 		var value metadata.ResearchPredictionOutcome
 		if err := decodeInput(input, &value); err != nil {
