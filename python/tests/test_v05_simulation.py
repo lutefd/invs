@@ -336,6 +336,39 @@ def test_clean_replay_is_byte_deterministic(tmp_path: Path) -> None:
     assert first == second
 
 
+def test_cost_attribution_sums_sessions_in_date_order(tmp_path: Path) -> None:
+    from research.backtest import simulate_backtest
+
+    base_spec, root = _base_fixture(tmp_path)
+    changed = deepcopy(base_spec)
+    changed.pop("experiment_id")
+    changed["cost_policy"] = {
+        "version": "1.0.0",
+        "commission_bps": "5",
+        "fixed_fee": "1",
+        "minimum_fee": "1",
+        "spread_bps": "4",
+        "slippage_bps": "3",
+        "tax_bps": "0",
+    }
+    spec = build_experiment_spec(changed)
+
+    run = simulate_backtest(spec, data_root=root)
+    for partition, attribution in run.metrics["attribution"]["by_partition"].items():
+        dates = {row["session_date"] for row in run.nav if row["partition"] == partition}
+        expected = sum(
+            (
+                Decimal(fill["fee"])
+                + Decimal(fill["spread_cost"])
+                + Decimal(fill["slippage_cost"])
+                + Decimal(fill["tax"])
+            )
+            for fill in run.fills
+            if fill["execution_session"] in dates
+        )
+        assert Decimal(attribution["cost"]) == expected
+
+
 def test_artifact_risk_free_series_is_point_in_time_and_published(tmp_path: Path) -> None:
     from research.backtest import simulate_backtest
 

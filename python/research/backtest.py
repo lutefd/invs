@@ -1343,7 +1343,7 @@ def _attribution(
         dates = {date.fromisoformat(row["session_date"]) for row in rows}
         start_nav = _d(rows[0]["nav"])
         end_nav = _d(rows[-1]["nav"])
-        cost = sum((state.cost_by_session[item] for item in dates), _ZERO)
+        cost = sum((state.cost_by_session[item] for item in sorted(dates)), _ZERO)
         result[label] = {
             "start_nav": _dstr(start_nav),
             "end_nav": _dstr(end_nav),
