@@ -595,7 +595,7 @@
         "name": "portfolio",
         "path": "python/research/portfolio.py",
         "version": "1.0.0",
-        "sha256": "d07104fd4dd3517f35b79be525c635e8452431e47bd8d07d855944f56512b333"
+        "sha256": "8000ba381d75ab46715fb7307555069cc9eba6f202009933e0093331f53e26ec"
       },
       {
         "name": "workflow",
