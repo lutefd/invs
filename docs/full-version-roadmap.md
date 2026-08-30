@@ -1608,12 +1608,14 @@ bring the full gate to 222 Python tests. Daily-cycle input, report, and stage-lo
 boundaries were hardened in `47034ae`, including symlink rejection and exclusive
 temporary report creation; `1d5d2ad` also confines the paper ledger to the mounted
 data tree, and `010cfc0` preflights report and log destinations before execution.
+`713e8a0` adds the cutoff to the durable daily-cycle report and rejects changed
+cutoff identities on resume, bringing the full gate to 223 Python tests.
 The release and workflow entry points also reject evidence or output paths that
 escape through symlinked ancestors, covered by `246702d`.
 
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 passing report set was pinned in `67c59ad`, and the latest runtime reports were
-rerun from `ee29219`. The aggregate paper report output was made safe and
+rerun from `713e8a0`. The aggregate paper report output was made safe and
 no-overwrite in `27d3fdd`, with conflict termination corrected in `28319fc` and
 dangling output/temporary symlinks rejected in `40e110e`. The genuine-only
 `v1-release-acceptance` target landed in `3051376`; `22e4d50` makes it reject
@@ -1631,7 +1633,7 @@ release gate remains pending.
 The daily-cycle preflight was hardened in `a4f8868` to require the complete v1
 paper-account envelope before execution, with focused regression and acceptance
 coverage. The current full validation, resilience, installation-lifecycle, and
-composed pre-release reruns passed from `ee29219`; this repository-side hardening
+composed pre-release reruns passed from `713e8a0`; this repository-side hardening
 and its explicit decision clock do not substitute for the genuine-forward requirement.
 
 The current host readiness snapshot is recorded in the [v1 operational readiness

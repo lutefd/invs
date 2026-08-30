@@ -258,7 +258,9 @@ its downstream stages; `make ops-status` still runs for diagnosis. The backup st
 is gated only by release preflight, so it still preserves partial raw/derived evidence
 after a collection, feature, or paper-stage failure. Rerunning the same specification
 resumes successful stages and uses `backup-or-validate` so an already-created backup
-is never overwritten; keep the same `decision_at` on resume.
+is never overwritten; keep the same `decision_at` on resume. The cycle report records
+that cutoff, so the operator can verify the recovery is using the original information
+boundary.
 
 The v0.x-compatible `make daily` wrapper remains available for collection,
 reconcile, and status-only maintenance runs. It serializes the batch with the

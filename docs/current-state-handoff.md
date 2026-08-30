@@ -240,8 +240,10 @@ schema requires and hashes the top-level cutoff, generated paper commands carry 
 and delayed valuation/risk lookups remain bounded by that cutoff while economic
 fills retain the account's close-to-next-open policy. Exact-close runs preserve
 legacy identities; after-close timestamps become part of decision/report identity
-and mismatched replays fail closed. The latest full validation, resilience,
-installation, and composed pre-release reruns passed from `ee29219`; the integrated
+and mismatched replays fail closed. `713e8a0` adds the same cutoff to the durable
+daily-cycle report and explicitly rejects a changed cutoff on resume. The latest
+full validation, resilience, installation, and composed pre-release reruns passed
+from `713e8a0`; the integrated
 workflow still intentionally reports `attention` until genuine forward evidence
 exists. The same
 path-boundary sequence hardens daily-cycle input, report, and stage-log paths
@@ -249,7 +251,7 @@ against symlink traversal and report-temp races; `010cfc0` also preflights repor
 and log destinations before execution.
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 report evidence was pinned in `67c59ad` and the latest runtime reports were rerun
-from `ee29219`. The genuine-only `v1-release-acceptance` wrapper landed in
+from `713e8a0`. The genuine-only `v1-release-acceptance` wrapper landed in
 `3051376` and refuses to enter the ladder without both forward evidence references;
 `22e4d50` also rejects missing, traversing, absolute, or symlinked references before
 any validation or container work begins. `246702d` closes the remaining parent-
@@ -267,7 +269,7 @@ paper evidence is recorded/replayed.
 The [v1 installation lifecycle acceptance report](acceptance/2026-08-30-v1-install-upgrade.md)
 passes the isolated fresh install, additive pre-v1 upgrade, idempotent migration
 reapply, PostgreSQL/data backup and restore, tamper rejection, and daily-cycle
-interruption/resume stages; the latest rerun is pinned to `ee29219` and the
+interruption/resume stages; the latest rerun is pinned to `713e8a0` and the
 acceptance implementation landed in `c011ab6`. Its Docker project, volume, and restore
 database are disposable and are removed after the run; the live `invs` volume is
 not part of the test.
@@ -303,9 +305,10 @@ in `c12074a` brought the gate to 213 Python tests. The daily-cycle path-boundary
 regressions in `47034ae` and the ledger-root guard in `1d5d2ad` brought the full
 gate to 218 Python tests; the destination-preflight regression in `010cfc0` brought
 the gate to 219 Python tests; the release-ancestor guard in `246702d` adds focused
-preflight coverage. The after-close decision-clock regressions in
-`ee29219` bring the current full gate to 222 Python tests. The active v1 evidence
-index records that latest result.
+preflight coverage. The after-close decision-clock regressions in `ee29219` brought
+the gate to 222 Python tests; the durable report/resume regression in `713e8a0`
+brings the current full gate to 223 Python tests. The active v1 evidence index
+records that latest result.
 
 The supported forward-evidence path is `make forward-record-capture` after a real
 recent paper session. Newly generated paper reports carry an invocation-time UTC
@@ -322,7 +325,8 @@ by acceptance tests in `c12074a`.
 The paper and daily-cycle paths now support receipt-delayed close data without
 looking ahead: `ee29219` binds an explicit after-close UTC cutoff into the daily-cycle
 specification hash, generated paper command, decision/report identity, valuation,
-and risk evidence. The default direct paper invocation still uses the session close,
+and risk evidence. The durable cycle report also records the cutoff for operator
+inspection. The default direct paper invocation still uses the session close,
 and the complete cycle requires the cutoff so a resume cannot silently move its
 information boundary. This improves readiness for a genuine session but does not
 create one; no genuine wall-clock forward record exists yet.
@@ -435,6 +439,7 @@ and [XNAS publication report](acceptance/2026-08-30-nasdaq-calendar-publication.
 - Latest v1 daily-cycle ledger-boundary hardening: `1d5d2ad` (`fix(operations): confine daily-cycle ledgers`)
 - Latest v1 release/workflow ancestor-boundary hardening: `246702d` (`fix(acceptance): reject symlinked release ancestors`)
 - Latest v1 paper decision-clock boundary: `ee29219` (`feat(paper): support explicit after-close decision clocks`)
+- Latest v1 daily-cycle report-clock boundary: `713e8a0` (`feat(operations): expose daily-cycle decision clocks`)
 - Latest v1 release evidence path guard: `22e4d50` (`fix(acceptance): fail closed on release evidence paths`)
 - Latest v1 genuine release acceptance target: `3051376` (`test(acceptance): add genuine v1 release target`)
 - Latest v1 forward-record contract boundary: `e272e3d` (`feat(acceptance): bind genuine forward paper evidence`)

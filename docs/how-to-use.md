@@ -1500,7 +1500,8 @@ and prior exit codes still match; changed inputs require a new cycle ID/specific
 The top-level `decision_at` is required, is normalized as a canonical UTC timestamp,
 is included in the cycle specification hash, and is passed to every paper run. Set
 it to the actual after-close cutoff used for the cycle and never advance it while
-resuming the same cycle.
+resuming the same cycle. The durable cycle report records the same cutoff alongside
+the session date, making the information boundary inspectable before recovery.
 
 ## 10. Notebook and Grafana
 
