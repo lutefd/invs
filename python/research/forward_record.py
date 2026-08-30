@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from .paper import LedgerStore, PaperError, reconcile_paper_account
+from .paper import LedgerStore, PaperError, reconcile_paper_account, validate_paper_account
 
 FORWARD_SCHEMA_VERSION = "1.0.0"
 FORWARD_SCHEMA = "../schemas/paper-forward-record.schema.json"
@@ -22,6 +22,7 @@ MAX_SESSION_AGE_DAYS = 7
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 _DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+_NON_NEGATIVE_DECIMAL = re.compile(r"^(0|[1-9][0-9]*)(\.[0-9]+)?$")
 _UTC_TIMESTAMP = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$"
 )
@@ -176,6 +177,171 @@ def _account_fitness(account: Mapping[str, Any], *, field: str) -> str:
     return "current_research_only" if "current_research_only" in fitnesses else "backtest_safe"
 
 
+def _non_negative_decimal(value: Any, *, field: str) -> str:
+    if not isinstance(value, str) or not _NON_NEGATIVE_DECIMAL.fullmatch(value):
+        raise ForwardRecordError(f"{field} must be a canonical non-negative decimal")
+    return value
+
+
+def _string_array(value: Any, *, field: str) -> None:
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise ForwardRecordError(f"{field} must be an array of non-empty strings")
+
+
+def _validate_paper_order(
+    raw: Mapping[str, Any], *, account_id: str, decision_id: str, field: str
+) -> None:
+    order = _exact(
+        raw,
+        {
+            "schema_version",
+            "order_id",
+            "client_order_id",
+            "account_id",
+            "target_id",
+            "decision_id",
+            "target_revision",
+            "decision_session",
+            "execution_session",
+            "security_id",
+            "side",
+            "quantity",
+            "reference_price",
+            "currency",
+            "expected_notional_base",
+            "expected_cost_base",
+            "reason",
+            "status",
+        },
+        field=field,
+    )
+    if order["schema_version"] != FORWARD_SCHEMA_VERSION:
+        raise ForwardRecordError(f"{field}.schema_version is unsupported")
+    for key in ("order_id", "client_order_id", "target_id", "security_id"):
+        _uuid(order[key], field=f"{field}.{key}")
+    if order["account_id"] != account_id or order["decision_id"] != decision_id:
+        raise ForwardRecordError(f"{field} identity does not match its report")
+    if (
+        not isinstance(order["target_revision"], int)
+        or isinstance(order["target_revision"], bool)
+        or order["target_revision"] < 1
+    ):
+        raise ForwardRecordError(f"{field}.target_revision must be a positive integer")
+    _date_value(order["decision_session"], field=f"{field}.decision_session")
+    _date_value(order["execution_session"], field=f"{field}.execution_session")
+    if order["side"] not in {"buy", "sell"}:
+        raise ForwardRecordError(f"{field}.side is unsupported")
+    for key in ("quantity", "reference_price", "expected_notional_base", "expected_cost_base"):
+        _non_negative_decimal(order[key], field=f"{field}.{key}")
+    if not isinstance(order["currency"], str) or not re.fullmatch(r"^[A-Z]{3}$", order["currency"]):
+        raise ForwardRecordError(f"{field}.currency is invalid")
+    _string(order["reason"], field=f"{field}.reason")
+    if order["status"] not in {"proposed", "approved", "rejected", "cancelled", "filled"}:
+        raise ForwardRecordError(f"{field}.status is unsupported")
+
+
+def _validate_paper_report(
+    raw: Mapping[str, Any], *, account_id: str, session: date, start: int, end: int
+) -> str:
+    report = _exact(
+        raw,
+        {
+            "schema_version",
+            "report_id",
+            "account_id",
+            "session_date",
+            "decision_id",
+            "input_fingerprint",
+            "decision_status",
+            "risk",
+            "approval",
+            "orders",
+            "nav_base",
+            "cash_base",
+            "positions_value_base",
+            "gross_exposure",
+            "drawdown",
+            "ledger_sequence_start",
+            "ledger_sequence_end",
+            "reconciled",
+            "warnings",
+        }
+        if "warnings" in raw
+        else {
+            "schema_version",
+            "report_id",
+            "account_id",
+            "session_date",
+            "decision_id",
+            "input_fingerprint",
+            "decision_status",
+            "risk",
+            "approval",
+            "orders",
+            "nav_base",
+            "cash_base",
+            "positions_value_base",
+            "gross_exposure",
+            "drawdown",
+            "ledger_sequence_start",
+            "ledger_sequence_end",
+            "reconciled",
+        },
+        field="observation report",
+    )
+    if report["schema_version"] != FORWARD_SCHEMA_VERSION:
+        raise ForwardRecordError("observation report schema_version is unsupported")
+    report_id = _uuid(report["report_id"], field="observation report_id")
+    if report["account_id"] != account_id or report["session_date"] != session.isoformat():
+        raise ForwardRecordError("observation report identity does not match the observation")
+    decision_id = _uuid(report["decision_id"], field="observation report.decision_id")
+    _sha(report["input_fingerprint"], field="observation report.input_fingerprint")
+    if report["decision_status"] not in {"proposed", "approved", "rejected", "halted", "no_op", "settled"}:
+        raise ForwardRecordError("observation report.decision_status is unsupported")
+    risk = _exact(
+        report["risk"],
+        {"status", "policy_version", "codes", "reasons", "checked_at"},
+        field="observation report.risk",
+    )
+    if risk["status"] not in {"approved", "rejected", "halted"}:
+        raise ForwardRecordError("observation report.risk.status is unsupported")
+    _string(risk["policy_version"], field="observation report.risk.policy_version")
+    _string_array(risk["codes"], field="observation report.risk.codes")
+    _string_array(risk["reasons"], field="observation report.risk.reasons")
+    _timestamp_value(risk["checked_at"], field="observation report.risk.checked_at")
+    if report["approval"] not in {"pending", "approved", "rejected", "auto_approved", "not_required"}:
+        raise ForwardRecordError("observation report.approval is unsupported")
+    orders = report["orders"]
+    if not isinstance(orders, list):
+        raise ForwardRecordError("observation report.orders must be an array")
+    for index, order in enumerate(orders):
+        _validate_paper_order(
+            order,
+            account_id=account_id,
+            decision_id=decision_id,
+            field=f"observation report.orders[{index}]",
+        )
+    for key in ("nav_base", "cash_base", "positions_value_base", "gross_exposure", "drawdown"):
+        _non_negative_decimal(report[key], field=f"observation report.{key}")
+    if (
+        not isinstance(report["ledger_sequence_start"], int)
+        or isinstance(report["ledger_sequence_start"], bool)
+        or not isinstance(report["ledger_sequence_end"], int)
+        or isinstance(report["ledger_sequence_end"], bool)
+        or report["ledger_sequence_start"] < 1
+        or report["ledger_sequence_start"] > report["ledger_sequence_end"]
+        or report["ledger_sequence_end"] < 1
+    ):
+        raise ForwardRecordError("observation report ledger sequence bounds are invalid")
+    if report["ledger_sequence_start"] != start or report["ledger_sequence_end"] != end:
+        raise ForwardRecordError("observation ledger sequence does not match the report")
+    if report["reconciled"] is not True:
+        raise ForwardRecordError("observation report is not reconciled")
+    if "warnings" in report:
+        _string_array(report["warnings"], field="observation report.warnings")
+    return report_id
+
+
 def _validate_observation(
     raw: Mapping[str, Any],
     *,
@@ -232,36 +398,55 @@ def _validate_observation(
     if sha256_file(manifest_path) != manifest_sha:
         raise ForwardRecordError(f"observation.ledger_manifest_sha256 does not match {manifest_relative}")
 
-    account = _strict_json(account_path)
-    if not isinstance(account, Mapping) or account.get("schema_version") != FORWARD_SCHEMA_VERSION:
-        raise ForwardRecordError(f"observation.account_path is not a v1 paper account: {account_relative}")
-    if account.get("account_id") != account_id:
-        raise ForwardRecordError("observation account file identity does not match account_id")
-    fitness = _account_fitness(account, field="observation account")
-    if top_fitness is not None and fitness != top_fitness:
-        raise ForwardRecordError("all observations must use one aggregate fitness classification")
-
     account_dir = account_path.parent
+    if (
+        account_path.name != "account.json"
+        or account_dir.name != account_id
+        or account_dir.parent.name != "accounts"
+    ):
+        raise ForwardRecordError("observation account path is not in the canonical ledger layout")
     if manifest_path != account_dir / "ledger-manifest.json":
         raise ForwardRecordError("observation ledger manifest is not adjacent to its account")
     expected_report = account_dir / "reports" / f"report-{session.isoformat()}.json"
     if report_path != expected_report:
         raise ForwardRecordError("observation report path does not match its account and session")
 
+    account = _strict_json(account_path)
+    if not isinstance(account, Mapping):
+        raise ForwardRecordError(f"observation account is not an object: {account_relative}")
+    try:
+        normalized_account = validate_paper_account(account)
+    except PaperError as error:
+        raise ForwardRecordError(f"observation account is not a valid paper account: {error}") from error
+    if normalized_account != account or account_path.read_bytes() != canonical_json(normalized_account) + b"\n":
+        raise ForwardRecordError("observation account is not canonically serialized")
+    if normalized_account["account_id"] != account_id:
+        raise ForwardRecordError("observation account file identity does not match account_id")
+    fitness = _account_fitness(normalized_account, field="observation account")
+    if top_fitness is not None and fitness != top_fitness:
+        raise ForwardRecordError("all observations must use one aggregate fitness classification")
+
+    ledger_root = account_dir.parent.parent
+    store = LedgerStore(ledger_root, account_id)
+    try:
+        actual_account = store.load_account()
+        events = store.events()
+        reconciliation = reconcile_paper_account(store)
+    except (PaperError, OSError, TypeError, ValueError) as error:
+        raise ForwardRecordError(f"observation ledger is invalid: {error}") from error
+    if actual_account != normalized_account or store.account_path != account_path:
+        raise ForwardRecordError("observation ledger account identity does not match its path")
+    if reconciliation["status"] != "passed":
+        raise ForwardRecordError("observation ledger is not reconciled")
+    if end > len(events):
+        raise ForwardRecordError("observation ledger does not cover the report sequence")
+
     report = _strict_json(report_path)
     if not isinstance(report, Mapping):
         raise ForwardRecordError(f"observation report is not an object: {report_relative}")
-    report_id = _uuid(report.get("report_id"), field="observation report_id")
+    report_id = _validate_paper_report(report, account_id=account_id, session=session, start=start, end=end)
     if report_id != observation["report_id"]:
         raise ForwardRecordError("observation report_id does not match the report file")
-    if report.get("schema_version") != FORWARD_SCHEMA_VERSION:
-        raise ForwardRecordError("observation report schema_version is unsupported")
-    if report.get("account_id") != account_id or report.get("session_date") != session.isoformat():
-        raise ForwardRecordError("observation report identity does not match the observation")
-    if report.get("reconciled") is not True:
-        raise ForwardRecordError("observation report is not reconciled")
-    if report.get("ledger_sequence_start") != start or report.get("ledger_sequence_end") != end:
-        raise ForwardRecordError("observation ledger sequence does not match the report")
 
     manifest = _strict_json(manifest_path)
     if not isinstance(manifest, Mapping):
@@ -411,7 +596,16 @@ def validate_forward_record(value: Mapping[str, Any], *, repo_root: str | Path) 
 
 
 def load_forward_record(path: str | Path, *, repo_root: str | Path) -> dict[str, Any]:
-    value = _strict_json(Path(path).expanduser().resolve())
+    root = Path(repo_root).expanduser().resolve()
+    declared_path = Path(path).expanduser()
+    if declared_path.is_symlink() or not declared_path.is_file():
+        raise ForwardRecordError(f"forward record must identify a regular file: {path}")
+    record_path = declared_path.resolve()
+    try:
+        record_path.relative_to(root)
+    except ValueError as error:
+        raise ForwardRecordError("forward record must be inside the repository root") from error
+    value = _strict_json(record_path)
     if not isinstance(value, Mapping):
         raise ForwardRecordError(f"forward record {path} must be an object")
     return validate_forward_record(value, repo_root=repo_root)
@@ -487,25 +681,29 @@ def capture_forward_record(
             report = store.read_report(session_date)
         except (PaperError, OSError, TypeError, ValueError) as error:
             raise ForwardRecordError(f"cannot read account {account_id} latest report: {error}") from error
-        if (
-            not isinstance(report, Mapping)
-            or report.get("schema_version") != FORWARD_SCHEMA_VERSION
-            or report.get("account_id") != account_id
-            or report.get("session_date") != session_date.isoformat()
-            or report.get("reconciled") is not True
-        ):
+        if not isinstance(report, Mapping):
             raise ForwardRecordError(f"account {account_id} latest report is not reconciled")
-        try:
-            report_id = _uuid(report.get("report_id"), field=f"account {account_id} report_id")
-        except ForwardRecordError as error:
-            raise ForwardRecordError(f"account {account_id} latest report is invalid: {error}") from error
         sequence_start = report.get("ledger_sequence_start")
         sequence_end = report.get("ledger_sequence_end")
-        if any(
-            not isinstance(value, int) or isinstance(value, bool) or value < 1
-            for value in (sequence_start, sequence_end)
-        ) or sequence_start > sequence_end:
+        if (
+            not isinstance(sequence_start, int)
+            or isinstance(sequence_start, bool)
+            or not isinstance(sequence_end, int)
+            or isinstance(sequence_end, bool)
+            or sequence_start < 1
+            or sequence_end < sequence_start
+        ):
             raise ForwardRecordError(f"account {account_id} latest report has invalid ledger sequence")
+        try:
+            report_id = _validate_paper_report(
+                report,
+                account_id=account_id,
+                session=session_date,
+                start=sequence_start,
+                end=sequence_end,
+            )
+        except ForwardRecordError as error:
+            raise ForwardRecordError(f"account {account_id} latest report is invalid: {error}") from error
         fitness = _account_fitness(account, field=f"account {account_id}")
         fitnesses.add(fitness)
         account_path = store.account_path
@@ -542,13 +740,14 @@ def capture_forward_record(
         "observations": sorted(observations, key=lambda item: (item["account_id"], item["session_date"])),
     }
     normalized = validate_forward_record(record, repo_root=root)
-    output_path = Path(output).expanduser().resolve()
+    declared_output = Path(output).expanduser()
+    if declared_output.is_symlink():
+        raise ForwardRecordError("output must not be a symlink")
+    output_path = declared_output.resolve()
     try:
         output_path.relative_to(root)
     except ValueError as error:
         raise ForwardRecordError("output must be inside the repository root") from error
-    if output_path.is_symlink():
-        raise ForwardRecordError("output must not be a symlink")
     _write_immutable(output_path, normalized)
     return output_path
 

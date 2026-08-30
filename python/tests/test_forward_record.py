@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -98,6 +99,23 @@ def _write_report(ledger_root: Path, session_date: str) -> None:
         "report_id": "50000000-0000-4000-8000-000000000201",
         "account_id": ACCOUNT_ID,
         "session_date": session_date,
+        "decision_id": "50000000-0000-4000-8000-000000000202",
+        "input_fingerprint": "c" * 64,
+        "decision_status": "no_op",
+        "risk": {
+            "status": "approved",
+            "policy_version": "1.0.0",
+            "codes": [],
+            "reasons": [],
+            "checked_at": f"{session_date}T21:00:00Z",
+        },
+        "approval": "not_required",
+        "orders": [],
+        "nav_base": "10000",
+        "cash_base": "10000",
+        "positions_value_base": "0",
+        "gross_exposure": "0",
+        "drawdown": "0",
         "ledger_sequence_start": 1,
         "ledger_sequence_end": 1,
         "reconciled": True,
@@ -155,4 +173,40 @@ def test_forward_evidence_rejects_old_session_even_with_valid_file_hashes(tmp_pa
     output.write_text(json.dumps(evidence, sort_keys=True) + "\n", encoding="utf-8")
 
     with pytest.raises(ForwardRecordError, match="older than"):
+        load_forward_record(output, repo_root=tmp_path)
+
+
+def test_forward_evidence_rejects_minimal_account_fixture(tmp_path: Path) -> None:
+    from research.forward_record import (
+        ForwardRecordError,
+        capture_forward_record,
+        load_forward_record,
+    )
+    from research.paper import create_paper_account
+
+    ledger_root = tmp_path / "ledger"
+    create_paper_account(_account(), ledger_root=ledger_root)
+    session_date = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+    _write_report(ledger_root, session_date)
+    output = capture_forward_record(
+        repo_root=tmp_path,
+        ledger_root=ledger_root,
+        account_ids=[ACCOUNT_ID],
+        output=tmp_path / "forward-record.json",
+    )
+
+    account_path = ledger_root / "accounts" / ACCOUNT_ID / "account.json"
+    account_path.write_text(
+        json.dumps(
+            {"schema_version": "1.0.0", "account_id": ACCOUNT_ID, "inputs": [{"fitness": "current_research_only"}]},
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    evidence = json.loads(output.read_text(encoding="utf-8"))
+    evidence["observations"][0]["account_sha256"] = hashlib.sha256(account_path.read_bytes()).hexdigest()
+    output.write_text(json.dumps(evidence, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ForwardRecordError, match="valid paper account"):
         load_forward_record(output, repo_root=tmp_path)

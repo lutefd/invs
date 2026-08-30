@@ -529,7 +529,7 @@
         "name": "forward-record",
         "path": "python/research/forward_record.py",
         "version": "python-forward-record-1.0.0",
-        "sha256": "a91fbb872711d6226f4a9e8a85d9348d4471056d9a95a6b0da9e5f401fcfa2e8"
+        "sha256": "07b07cc6cdbca276b6fe58a3b51250b3df2705d9eb8fae40c048fff47511dc20"
       },
       {
         "name": "market-basic",
