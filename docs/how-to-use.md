@@ -1327,8 +1327,19 @@ docker compose run --rm --no-deps jupyter invs-paper run \
   --spec /data/research/acceptance/v0.6/operator/spec.json \
   --data-root /data/research/acceptance/v0.6/operator \
   --ledger-root /data/research/acceptance/v0.6/operator/ledger \
-  --session-date 2025-01-02
+  --session-date 2025-01-02 \
+  --decision-at 2025-01-02T22:00:00Z
 ```
+
+`--decision-at` is the operator's explicit information cutoff. Use a canonical
+UTC timestamp at or after the session close and no later than the current time
+when receipt-delayed prices or other inputs arrive after the close. The cutoff
+is part of decision identity and risk evidence, so an interrupted run must be
+resumed with the same value; it does not change the account's close-to-next-open
+economic execution policy. Omitting it keeps direct paper runs backward-compatible
+by using the session close, while a complete v1 daily-cycle specification must
+declare it explicitly. The equivalent Make target override is
+`PAPER_DECISION_AT=2025-01-02T22:00:00Z make paper-run`.
 
 For a manual account, approve or reject the returned decision before the proposed
 orders can settle. Auto-approval is allowed only when it is recorded in the immutable
@@ -1486,6 +1497,10 @@ steps, an immutable backup (or backup validation on resume), final reconciliatio
 and the operational status check. It writes a machine-readable report and one log
 per stage. A cycle report is resumable only when its specification hash, commands,
 and prior exit codes still match; changed inputs require a new cycle ID/specification.
+The top-level `decision_at` is required, is normalized as a canonical UTC timestamp,
+is included in the cycle specification hash, and is passed to every paper run. Set
+it to the actual after-close cutoff used for the cycle and never advance it while
+resuming the same cycle.
 
 ## 10. Notebook and Grafana
 

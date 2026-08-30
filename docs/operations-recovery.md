@@ -245,17 +245,20 @@ For the complete v1.0 path, provide a strict cycle specification and run:
 make daily-cycle CYCLE_SPEC=/absolute/path/to/daily-cycle.json
 ```
 
-The specification must declare one UTC session date, one collection source and run
-key, the feature-batch universe/schedule/calendar/registry inputs, at least one
-paper account specification, a ledger location, and a new backup destination
-outside the checkout. The runner takes the shared `.runtime/daily.lock`, runs the
-fixed order preflight → collection → reconcile → feature batch → paper account
-cycles → backup → final reconcile → observation, and writes its report under the
-declared `report_path`. A failed dependency skips only its downstream stages;
-`make ops-status` still runs for diagnosis. The backup stage is gated only by release
-preflight, so it still preserves partial raw/derived evidence after a collection,
-feature, or paper-stage failure. Rerunning the same specification resumes successful
-stages and uses `backup-or-validate` so an already-created backup is never overwritten.
+The specification must declare one UTC session date, one canonical UTC `decision_at`,
+one collection source and run key, the feature-batch universe/schedule/calendar/
+registry inputs, at least one paper account specification, a ledger location, and a
+new backup destination outside the checkout. `decision_at` is the information cutoff
+for the paper runs; for receipt-delayed daily data it should be the actual after-close
+cutoff, at or after the venue close and not in the future. The runner takes the shared
+`.runtime/daily.lock`, runs the fixed order preflight → collection → reconcile →
+feature batch → paper account cycles → backup → final reconcile → observation, and
+writes its report under the declared `report_path`. A failed dependency skips only
+its downstream stages; `make ops-status` still runs for diagnosis. The backup stage
+is gated only by release preflight, so it still preserves partial raw/derived evidence
+after a collection, feature, or paper-stage failure. Rerunning the same specification
+resumes successful stages and uses `backup-or-validate` so an already-created backup
+is never overwritten; keep the same `decision_at` on resume.
 
 The v0.x-compatible `make daily` wrapper remains available for collection,
 reconcile, and status-only maintenance runs. It serializes the batch with the
@@ -321,7 +324,9 @@ Use the daily-cycle report to identify the last passed stage and rerun the same
 specification. Successful stages are resumed, failed downstream stages are retried,
 and the runner keeps the shared lock. Paper ledger event identities and database
 sequence/idempotency guards prevent duplicate cash, order, fill, or approval effects;
-reconcile the account before continuing. Do not edit an immutable report or ledger
+reconcile the account before continuing. Keep the cycle's `decision_at` unchanged:
+it is part of the resumability identity and risk evidence, even when a delayed
+receipt becomes available during recovery. Do not edit an immutable report or ledger
 event in place.
 
 ### Partial or suspicious manifest
