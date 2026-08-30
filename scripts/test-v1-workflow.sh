@@ -6,6 +6,7 @@ cd "$repo_root"
 
 forward_record_path="${V1_FORWARD_RECORD:-}"
 paper_report_path="${V1_PAPER_REPORT:-data/research/acceptance/v0.6/reproduction/paper-reproduction.json}"
+workflow_output_root="${V1_WORKFLOW_OUTPUT_ROOT:-}"
 validate_reference_path() {
 	local referenced_path=$1
 	case "$referenced_path" in
@@ -30,12 +31,30 @@ if [[ -n "${V1_PAPER_REPORT:-}" ]]; then
 	validate_reference_path "$paper_report_path"
 fi
 
+if [[ -z "$workflow_output_root" && -n "$forward_record_path" ]]; then
+	forward_record_id=$(jq -r '.record_id // empty' "$forward_record_path")
+	if [[ ! "$forward_record_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
+		echo 'V1_FORWARD_RECORD must contain a canonical record_id' >&2
+		exit 2
+	fi
+	workflow_output_root="data/research/acceptance/v1/genuine/$forward_record_id"
+fi
+if [[ -z "$workflow_output_root" ]]; then
+	workflow_output_root="data/research/acceptance/v1"
+fi
+case "$workflow_output_root" in
+/*|*..*)
+	echo 'V1_WORKFLOW_OUTPUT_ROOT must be a safe repository-relative path' >&2
+	exit 2
+;;
+esac
+
 make research-acceptance
 make backtest-reproduction
 make paper-reproduction
 
 temporary_root=$(mktemp -d)
-acceptance_root="$repo_root/data/research/acceptance/v1"
+acceptance_root="$repo_root/$workflow_output_root"
 mkdir -p "$acceptance_root"
 trap 'rm -rf "$temporary_root"' EXIT
 
