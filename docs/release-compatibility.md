@@ -3,7 +3,7 @@
 `release/compatibility.json` is the fail-closed contract for the v1.0 line. It pins
 the supported Go, Python, PostgreSQL, DuckDB/Parquet, Grafana, Docker Compose, and
 container-image versions, then hashes the schema and migration catalogs, registries,
-research engines, and build configuration.
+research engines, the data-fitness matrix, and build configuration.
 
 Validate the checkout before using it with an existing data volume:
 
@@ -12,8 +12,11 @@ make release-validate
 ```
 
 The command runs inside the pinned Jupyter runtime and checks installed Python
-versions as well as repository fingerprints. A changed schema, migration ordering,
-dependency, image digest, registry, engine, or protected binding fails validation.
+versions as well as repository fingerprints. It also verifies that the
+release-pinned data-fitness matrix covers every declared catalog dataset, backtest
+input kind, feature family, and workflow evidence surface. A changed schema,
+migration ordering, dependency, image digest, registry, engine, fitness entry, or
+protected binding fails validation.
 Do not hand-edit the manifest to accept a mixed release; update it only as part of a
 reviewed release commit with new evidence.
 
@@ -87,6 +90,8 @@ record exists. `v1-forward-record-acceptance` is the negative proof that retaine
 replay evidence cannot satisfy that gate. `v1-resilience-acceptance` is the local
 recovery and bias proof; its current result is recorded in
 [`2026-08-30-v1-resilience.md`](acceptance/2026-08-30-v1-resilience.md).
+The data-fitness matrix and its fail-closed mutation checks are recorded in
+[`2026-08-30-v1-data-fitness.md`](acceptance/2026-08-30-v1-data-fitness.md).
 The combined command results and remaining release gates are summarized in the
 [v1.0 pre-release evidence index](acceptance/2026-08-30-v1-pre-release-index.md).
 

@@ -31,7 +31,7 @@ acceptance, operations, compatibility, security, and usability phase.
 
 - [ ] Clean install, upgrade, backup, restore, and interrupted recovery pass.
 - [x] Version compatibility manifest rejects unsupported component mixes.
-- [ ] All data reachable by research/backtest code has a fitness classification.
+- [x] All data reachable by research/backtest code has a fitness classification.
 - [ ] Thematic question reaches a frozen thesis, reproducible backtest, and paper
   decision.
 - [x] Cross-market/Brazil scenario exposes missing/current-only data honestly.
@@ -44,3 +44,10 @@ acceptance, operations, compatibility, security, and usability phase.
 
 v1.0 does not require autonomous execution, complete worldwide coverage, ML, a
 multi-tenant product, intraday data, or a custom frontend.
+
+The data-fitness gate is accepted by the release-pinned matrix in
+[`release/data-fitness.json`](../../../release/data-fitness.json), which covers the
+five catalog datasets, eight backtest input kinds, four feature families, and the
+workflow commodity evidence path. Its validator rejects unlisted sources and keeps
+backtests restricted to `backtest_safe` inputs. This is a classification boundary,
+not a claim that every listed provider has broad historical coverage.

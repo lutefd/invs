@@ -25,6 +25,11 @@ families.
 `feature-momentum-manifest.schema.json` and `feature-momentum-observation.schema.json`
 define the strict manifest and row contracts for the registered `market-momentum`
 feature set, including its six decimal-or-null outputs.
+`data-fitness-matrix.schema.json` defines the release-pinned source and dataset
+fitness registry. The registry records authority, access, coverage, time semantics,
+revision policy, identity, quality checks, evidence, and consumers; its validator
+requires complete coverage of every declared catalog dataset and backtest input
+kind and rejects unlisted sources.
 
 ## Normalized publication boundary
 

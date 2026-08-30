@@ -18,7 +18,7 @@ criterion.
 | Command | Result | Evidence |
 | --- | --- | --- |
 | `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 196 Python tests, 62 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
-| `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 60 schemas, 16 migrations | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 61 schemas, 3 registries, 16 migrations, and complete data-fitness surfaces | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make notebook` | Passed: empty-safe vertical-slice notebook executed | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make dashboard-smoke` | Passed: dashboard JSON and PostgreSQL `EXPLAIN` checks | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make migrate` | Passed: existing PostgreSQL volume remained migration-ready | Runtime output from 2026-08-30 |
@@ -62,6 +62,7 @@ The version compatibility and forward-upgrade procedure is in the
 | Thematic/cross-market workflow | Both reports validate and link all layers | `attention` until forward evidence exists |
 | Brazil/commodity coverage | Explicit bounded fitness labels and missing coverage | Not a broad coverage claim |
 | Forward-record capture path | Contract, hash binding, stale/reconciliation checks, and CLI acceptance tests pass | Ready to capture only after a real recent paper session |
+| Data-fitness matrix | 29 entries cover 5 catalog datasets, 8 backtest kinds, 4 feature families, and workflow evidence; unlisted sources reject | Accepted repository classification boundary; source breadth remains bounded |
 | Wall-clock forward paper record | Not present; retained v0.6 evidence remains replay-only | Required for v1.0 release acceptance |
 
 Generated JSON reports under `data/research/acceptance/` are ignored runtime

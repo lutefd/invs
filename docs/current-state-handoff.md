@@ -250,6 +250,14 @@ record and final end-to-end workflow acceptance. The pre-release evidence index 
 recorded, while the bounded Brazil and commodity fitness limitations remain in
 force; no broker or real-money execution claim is made.
 
+The data-fitness classification gate is now accepted at `4a72ed0`. The release-pinned
+[`data-fitness matrix`](../release/data-fitness.json) covers five catalog datasets,
+eight backtest input kinds, four feature families, and the workflow commodity
+evidence path. Its fail-closed validator rejects unlisted sources and keeps
+historical backtests restricted to `backtest_safe` inputs. This closes the
+classification gate without upgrading the explicitly current/replay-only Yahoo,
+B3, FRED, BCB, CVM, corporate-action, or commodity limitations.
+
 ## Yahoo `.SA` source-admission verification
 
 The bounded live verification is recorded in the
