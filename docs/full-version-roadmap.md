@@ -1595,6 +1595,10 @@ capture only a recent reconciled paper session and cannot promote retained repla
 evidence. The report-time hardening in `b5200fa` adds an invocation-time UTC
 `recorded_at` to new paper reports and rejects missing, pre-decision, late, or
 post-capture timestamps during genuine capture.
+Retained pre-timestamp reports remain aggregate/replay-compatible, while the
+operator timing rules are documented and the pre-risk/post-capture rejection
+branches are covered by `59c435f`, `7058d10`, and `c12074a`; the current full test
+gate passes 213 Python tests.
 
 This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
 `attention` because the retained paper evidence is recorded/replayed rather than a

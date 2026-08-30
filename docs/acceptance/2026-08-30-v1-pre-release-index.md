@@ -8,8 +8,10 @@ current operational snapshot below was captured from checkout commit
 `b5200fa8cc6e0a82e0933797098b59f3fc81f30b`. The full validation and latest v1
 acceptance reruns were executed from commit
 `02e19c503a488523de3cc6d64c6174fb4b16aee4`; the operational snapshot remains the
-earlier host evidence cited below. `INVS_BIND_ADDRESS=127.0.0.1` was used where
-validation needed to override the operator's local non-loopback `.env` setting.
+earlier host evidence cited below. The follow-up full `make test` rerun from
+`c12074a` passed the expanded timestamp-bound test suite. `INVS_BIND_ADDRESS=127.0.0.1`
+was used where validation needed to override the operator's local non-loopback
+`.env` setting.
 
 The remaining release gate is a genuine wall-clock forward paper record. Historical
 simulation and recorded/replayed paper evidence are not substituted for that
@@ -19,7 +21,7 @@ criterion.
 
 | Command | Result | Evidence |
 | --- | --- | --- |
-| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 211 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 213 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 61 schemas, 3 registries, 16 migrations, and complete data-fitness surfaces | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ingest SOURCE=all` | Passed: all five enabled source runs completed without rejected resources | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ops-status` | Passed: current enabled sources and projections within threshold; disk usage 17% | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
@@ -66,7 +68,8 @@ criterion.
   forward capture;
 - `59c435f` — preserve aggregate acceptance compatibility for pre-timestamp replay
   reports; and
-- `7058d10` — document the report-time eligibility rules in the operator guides.
+- `7058d10` — document the report-time eligibility rules in the operator guides; and
+- `c12074a` — cover pre-risk and post-capture report timestamps in acceptance tests.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the
