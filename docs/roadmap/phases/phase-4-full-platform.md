@@ -34,11 +34,11 @@ acceptance, operations, compatibility, security, and usability phase.
 - [ ] All data reachable by research/backtest code has a fitness classification.
 - [ ] Thematic question reaches a frozen thesis, reproducible backtest, and paper
   decision.
-- [ ] Cross-market/Brazil scenario exposes missing/current-only data honestly.
+- [x] Cross-market/Brazil scenario exposes missing/current-only data honestly.
 - [x] Historical-bias challenge suite passes.
-- [ ] Paper ledger reconstructs and reconciles.
+- [x] Paper ledger reconstructs and reconciles.
 - [x] Loopback defaults, secret handling, and release scans pass.
-- [ ] Known limitations identify unsupported claims and instruments precisely.
+- [x] Known limitations identify unsupported claims and instruments precisely.
 
 ## Stop conditions
 

@@ -3,21 +3,21 @@
 ## Result
 
 The v1 resilience and historical-bias harness passed at commit
-`a5ffae4abc2403bf84fc1ba7b5b9522734cfb767`:
+`3f96623f569007eb5921c6d96056c37f610cf124`:
 
 ```sh
-make v1-resilience-acceptance
+INVS_BIND_ADDRESS=127.0.0.1 make v1-resilience-acceptance
 ```
 
-The machine-readable report was generated at `2026-08-30T06:07:23Z`:
+The machine-readable report was generated at `2026-08-30T06:19:22Z`:
 
 ```text
 data/research/acceptance/v1/v1-resilience.json
-sha256=90f5f9d732623bb5538d0824d195b131ba121588989ef52ccc6afe201ca13ac7
+sha256=8c5133d86b13fa8406231e9a9c11ee3b10eab709c6a9cb1943c1bb1a50674a05
 ```
 
 All ten harness stages passed. The temporary restored PostgreSQL database was
-`restore_v1_20260830060509_4079932`; the harness removed it on exit and a follow-up
+`restore_v1_20260830061717_4137762`; the harness removed it on exit and a follow-up
 query found no remaining `restore_v1_*` databases.
 
 ## Scenarios
@@ -27,7 +27,7 @@ query found no remaining `restore_v1_*` databases.
 | Clean migration and re-apply | `make historical-truth-db-test` | Passed |
 | Historical-bias challenge | `make backtest-reproduction`, including the retained bias audit | Passed |
 | Paper interruption, idempotency, and rebuild | `make paper-reproduction` | Passed |
-| Daily-cycle resume after a failed dependency | Focused `test_daily_cycle.py` run in the Jupyter runtime | Passed |
+| Daily-cycle resume after a failed dependency | CLI-level `scripts/daily-cycle.sh` failure/resume acceptance via `make v1-daily-cycle-acceptance` | Passed |
 | Disposable backup/restore integrity | `make backup-restore-acceptance` | Passed |
 | Clean-root PostgreSQL restore and reconcile | Live `make backup`, `make backup-validate`, `make restore`, then collector `reconcile --fail-on-issues` | Passed |
 

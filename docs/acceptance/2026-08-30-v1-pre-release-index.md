@@ -3,8 +3,8 @@
 ## Release posture
 
 This is the v1.0 pre-release evidence index, not an accepted v1.0 release. The
-runtime evidence below was executed against commit
-`a5ffae4abc2403bf84fc1ba7b5b9522734cfb767` with
+refreshed resilience evidence was executed against commit
+`3f96623f569007eb5921c6d96056c37f610cf124` with
 `INVS_BIND_ADDRESS=127.0.0.1` where validation needed to override the operator's
 local non-loopback `.env` setting. The tracked documentation commits do not alter
 the runtime compatibility contract.
@@ -25,6 +25,7 @@ criterion.
 | `INVS_BIND_ADDRESS=127.0.0.1 make reconcile` | Passed: `issues=0` | Report generated at `2026-08-30T05:56:13Z` |
 | `INVS_BIND_ADDRESS=127.0.0.1 make health` | Passed: PostgreSQL accepting connections; long-lived services healthy | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make workflow-acceptance` | Passed with intentional `attention` status for thematic and cross-market reports | [Workflow integration report](2026-08-30-v1-workflow-integration.md) |
+| `INVS_BIND_ADDRESS=127.0.0.1 make v1-daily-cycle-acceptance` | Passed: actual CLI failure/resume path preserved backup and observation evidence | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-resilience-acceptance` | Passed: all ten stages and six scenarios | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
 
 ## v1 implementation checkpoints
@@ -34,7 +35,9 @@ criterion.
 - `d5b9c22` — content-addressed thematic and US/Brazil cross-market workflow reports;
 - `586d79e` — loopback/security checks, backup/restore hardening, health objectives,
   and incident/capacity runbooks; and
-- `9a0f558` — resilience and historical-bias acceptance harness.
+- `9a0f558` — resilience and historical-bias acceptance harness; and
+- `3f96623` — CLI-level daily-cycle failure/resume acceptance through the actual
+  shell entrypoint.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the

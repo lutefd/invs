@@ -1580,14 +1580,16 @@ v1.0 is in progress. The compatibility contract is enforced by `make
 release-validate`; the specification-driven local daily-cycle runner, integrated
 thematic and cross-market workflow reports, security/backup/restore runbooks, and
 the resilience/bias harness are implemented in the checkpoints `f8abe40`,
-`31e34b8`, `d5b9c22`, `586d79e`, and `9a0f558`. The [resilience acceptance
+`31e34b8`, `d5b9c22`, `586d79e`, and `9a0f558`. The CLI-level daily-cycle
+failure/resume acceptance followed in `3f96623`. The [resilience acceptance
 report](acceptance/2026-08-30-v1-resilience.md) passes its six recovery/bias
 scenarios and all ten underlying stages.
 
 This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
 `attention` because the retained paper evidence is recorded/replayed rather than a
 genuine wall-clock forward record. Brazil and commodity evidence also retain their
-bounded fitness labels, and the final release evidence index remains pending.
+bounded fitness labels. The pre-release evidence index is recorded; the final
+release gate remains pending.
 
 ## Scope
 
