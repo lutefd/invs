@@ -109,3 +109,4 @@ def test_cycle_continues_to_observe_after_a_failed_derived_stage(
     assert status_by_name["feature-batch"] == "failed"
     assert status_by_name["observe"] == "passed"
     assert status_by_name[f"paper:{ACCOUNT_ID}:run"] == "skipped"
+    assert status_by_name["backup"] == "passed"

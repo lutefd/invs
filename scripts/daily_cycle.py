@@ -348,7 +348,7 @@ def build_plan(spec: Mapping[str, Any]) -> tuple[Stage, ...]:
         Stage(
             "backup",
             ("make", "backup-or-validate", f"BACKUP_DIR={spec['backup_dir']}"),
-            tuple(paper_stage_names),
+            ("preflight",),
         )
     )
     stages.extend(

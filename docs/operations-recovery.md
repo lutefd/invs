@@ -230,9 +230,10 @@ outside the checkout. The runner takes the shared `.runtime/daily.lock`, runs th
 fixed order preflight → collection → reconcile → feature batch → paper account
 cycles → backup → final reconcile → observation, and writes its report under the
 declared `report_path`. A failed dependency skips only its downstream stages;
-`make ops-status` still runs for diagnosis. Rerunning the same specification
-resumes successful stages and uses `backup-or-validate` so an already-created
-backup is never overwritten.
+`make ops-status` still runs for diagnosis. The backup stage is gated only by release
+preflight, so it still preserves partial raw/derived evidence after a collection,
+feature, or paper-stage failure. Rerunning the same specification resumes successful
+stages and uses `backup-or-validate` so an already-created backup is never overwritten.
 
 The v0.x-compatible `make daily` wrapper remains available for collection,
 reconcile, and status-only maintenance runs. It serializes the batch with the
