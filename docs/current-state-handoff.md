@@ -231,6 +231,13 @@ with the import-isolation correction in `b471908` and full paper-account/report
 validation plus append-only ledger replay in `be16303`. The repeatable replay-only
 forward-record rejection guard landed in `cf37708`.
 
+The daily-cycle preflight was then hardened in `a4f8868` to require the complete
+v1 paper-account envelope, reject missing or unknown top-level fields and wrong
+schema versions before execution, and cover the failure path with a focused test
+and acceptance fixture. The full `make validate`, resilience, and installation
+lifecycle reruns passed from `35e70e7`; the integrated workflow still intentionally
+reports `attention` until genuine forward evidence exists.
+
 The [v1 resilience acceptance report](acceptance/2026-08-30-v1-resilience.md) passes
 the retained historical-bias and paper-ledger checks, CLI-level daily-cycle
 failure/resume behavior, disposable backup integrity, replay-only forward-record

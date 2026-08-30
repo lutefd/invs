@@ -4,8 +4,8 @@
 
 This is the v1.0 pre-release evidence index, not an accepted v1.0 release. The
 current operational snapshot below was captured from checkout commit
-`92508ffe2432ca9b5ec89e1853d2282338e60544`. The refreshed resilience evidence was
-executed against commit `cf37708cf772d1c4726a50890a3ae24e0bd2b0c3` with
+`92508ffe2432ca9b5ec89e1853d2282338e60544`. The current validation and v1
+acceptance reruns were executed from commit `35e70e748c1fc53746bb59768f2e13e443665f92` with
 `INVS_BIND_ADDRESS=127.0.0.1` where validation needed to override the operator's
 local non-loopback `.env` setting. The tracked documentation commits do not alter
 the runtime compatibility contract; the later paper price-basis compatibility

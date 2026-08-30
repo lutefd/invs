@@ -1600,6 +1600,12 @@ genuine wall-clock forward record. Brazil and commodity evidence also retain the
 bounded fitness labels. The pre-release evidence index is recorded; the final
 release gate remains pending.
 
+The daily-cycle preflight was hardened in `a4f8868` to require the complete v1
+paper-account envelope before execution, with focused regression and acceptance
+coverage. The current `make validate`, resilience, and installation-lifecycle
+reruns passed from `35e70e7`; this repository-side hardening does not substitute
+for the genuine-forward requirement.
+
 The current host readiness snapshot is recorded in the [v1 operational readiness
 note](acceptance/2026-08-30-v1-live-operations.md): all enabled sources refreshed,
 the normalized tree reconciled with zero findings, notebook and dashboard smoke
