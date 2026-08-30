@@ -181,3 +181,20 @@ Runtime adapters must additionally validate emitted instances with a complete JS
 Schema 2020-12 implementation and domain checks that JSON Schema cannot express
 cleanly, such as `low <= open/close <= high`, timestamp ordering, and half-open range
 non-overlap.
+
+## Release compatibility
+
+`release/compatibility.json` is the v1.0 release contract. It pins the supported
+Go/Python/service runtime, content-addresses the schema and migration catalog, and
+fingerprints the reviewed registries, engines, and build files. The validator rejects
+unknown schema additions, changed fingerprints, reordered migrations, unpinned images,
+dependency drift, and unsafe host bindings:
+
+```bash
+make release-validate
+```
+
+An upgrade must run that preflight against the intended checkout, take a backup with
+`make backup`, apply forward migrations only, and validate the restored installation
+before it resumes collection or paper activity. A changed contract requires a new
+manifest revision rather than silently accepting a mixed release.

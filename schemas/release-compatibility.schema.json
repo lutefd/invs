@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://invs.local/schemas/release-compatibility.schema.json",
+  "title": "INVS release compatibility manifest",
+  "description": "Fail-closed compatibility contract for one supported local platform release.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "manifest_version",
+    "release_version",
+    "runtime",
+    "images",
+    "contracts",
+    "security",
+    "upgrade"
+  ],
+  "properties": {
+    "$schema": { "const": "../schemas/release-compatibility.schema.json" },
+    "manifest_version": { "const": "1.0.0" },
+    "release_version": { "const": "1.0.0" },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "images": {
+      "type": "array",
+      "minItems": 5,
+      "items": { "$ref": "#/$defs/image" }
+    },
+    "contracts": { "$ref": "#/$defs/contracts" },
+    "security": { "$ref": "#/$defs/security" },
+    "upgrade": { "$ref": "#/$defs/upgrade" }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "relative_path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+"
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["go", "python", "postgres", "grafana", "docker"],
+      "properties": {
+        "go": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["module", "version"],
+          "properties": {
+            "module": { "type": "string", "minLength": 1 },
+            "version": { "$ref": "#/$defs/semver" }
+          }
+        },
+        "python": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "package",
+            "package_version",
+            "requires_python",
+            "dependencies",
+            "dev_dependencies"
+          ],
+          "properties": {
+            "version": { "$ref": "#/$defs/semver" },
+            "package": { "type": "string", "minLength": 1 },
+            "package_version": { "$ref": "#/$defs/semver" },
+            "requires_python": { "type": "string", "pattern": "^>=3\\.[0-9]+$" },
+            "dependencies": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+              }
+            },
+            "dev_dependencies": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+              }
+            }
+          }
+        },
+        "postgres": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["major"],
+          "properties": { "major": { "type": "string", "pattern": "^[0-9]+$" } }
+        },
+        "grafana": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version"],
+          "properties": { "version": { "$ref": "#/$defs/semver" } }
+        },
+        "docker": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["compose_version"],
+          "properties": { "compose_version": { "$ref": "#/$defs/semver" } }
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "reference", "digest", "source_path"],
+      "properties": {
+        "service": { "type": "string", "minLength": 1 },
+        "reference": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "source_path": { "$ref": "#/$defs/relative_path" }
+      }
+    },
+    "schema_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "schema_version", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "$ref": "#/$defs/relative_path" },
+        "schema_version": {
+          "anyOf": [{ "$ref": "#/$defs/semver" }, { "const": "none" }]
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "registry_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "version", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "$ref": "#/$defs/relative_path" },
+        "version": { "$ref": "#/$defs/semver" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "migration_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relative_path" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "implementation_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "version", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "$ref": "#/$defs/relative_path" },
+        "version": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "file_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "$ref": "#/$defs/relative_path" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemas", "registries", "migrations", "implementations", "configuration"],
+      "properties": {
+        "schemas": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/schema_ref" }
+        },
+        "registries": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/registry_ref" }
+        },
+        "migrations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["latest", "files"],
+          "properties": {
+            "latest": { "$ref": "#/$defs/relative_path" },
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/migration_ref" }
+            }
+          }
+        },
+        "implementations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/implementation_ref" }
+        },
+        "configuration": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/file_ref" }
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bind_address_default",
+        "grafana_anonymous",
+        "credentials_outside_git",
+        "backup_before_upgrade"
+      ],
+      "properties": {
+        "bind_address_default": { "const": "127.0.0.1" },
+        "grafana_anonymous": { "const": false },
+        "credentials_outside_git": { "const": true },
+        "backup_before_upgrade": { "const": true }
+      }
+    },
+    "upgrade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "migration_policy",
+        "unsupported_mix_policy",
+        "preflight_command",
+        "backup_command",
+        "restore_command"
+      ],
+      "properties": {
+        "migration_policy": { "const": "forward_only" },
+        "unsupported_mix_policy": { "const": "reject" },
+        "preflight_command": { "const": "make release-validate" },
+        "backup_command": { "const": "make backup" },
+        "restore_command": { "const": "make restore" }
+      }
+    }
+  }
+}

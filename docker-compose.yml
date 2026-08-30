@@ -15,7 +15,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-market_research}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market_research_local}
     ports:
-      - "0.0.0.0:${POSTGRES_PORT:-5432}:5432"
+      - "${INVS_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -68,7 +68,7 @@ services:
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     working_dir: /workspace
     ports:
-      - "0.0.0.0:${JUPYTER_PORT:-8888}:8888"
+      - "${INVS_BIND_ADDRESS:-127.0.0.1}:${JUPYTER_PORT:-8888}:8888"
     volumes:
       - ./python:/workspace
       - *data-mount
@@ -83,7 +83,7 @@ services:
     networks: [research]
 
   grafana:
-    image: grafana/grafana:12.1.0
+    image: grafana/grafana:12.1.0@sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -93,7 +93,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-market_research}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market_research_local}
     ports:
-      - "0.0.0.0:${GRAFANA_PORT:-3000}:3000"
+      - "${INVS_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro

@@ -1,0 +1,599 @@
+{
+  "$schema": "../schemas/release-compatibility.schema.json",
+  "manifest_version": "1.0.0",
+  "release_version": "1.0.0",
+  "runtime": {
+    "go": {
+      "module": "github.com/luisdourado/invs",
+      "version": "1.24.0"
+    },
+    "python": {
+      "version": "3.13.15",
+      "package": "invs-research",
+      "package_version": "0.1.0",
+      "requires_python": ">=3.12",
+      "dependencies": {
+        "duckdb": "1.5.5",
+        "jupyterlab": "4.6.3",
+        "pandas": "2.3.3",
+        "pyarrow": "21.0.0",
+        "pyyaml": "6.0.3"
+      },
+      "dev_dependencies": {
+        "pytest": "8.4.2",
+        "ruff": "0.16.5"
+      }
+    },
+    "postgres": {
+      "major": "17"
+    },
+    "grafana": {
+      "version": "12.1.0"
+    },
+    "docker": {
+      "compose_version": "5.3.1"
+    }
+  },
+  "images": [
+    {
+      "service": "collector-build",
+      "reference": "golang:1.24-alpine",
+      "digest": "sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191",
+      "source_path": "docker/collector.Dockerfile"
+    },
+    {
+      "service": "collector-runtime",
+      "reference": "alpine:3.22",
+      "digest": "sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce",
+      "source_path": "docker/collector.Dockerfile"
+    },
+    {
+      "service": "jupyter",
+      "reference": "python:3.13-slim",
+      "digest": "sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f",
+      "source_path": "docker/jupyter.Dockerfile"
+    },
+    {
+      "service": "postgres",
+      "reference": "postgres:17-alpine",
+      "digest": "sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193",
+      "source_path": "docker/postgres.Dockerfile"
+    },
+    {
+      "service": "grafana",
+      "reference": "grafana/grafana:12.1.0",
+      "digest": "sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f",
+      "source_path": "docker-compose.yml"
+    }
+  ],
+  "contracts": {
+    "schemas": [
+      {
+        "name": "backtest-checkpoint",
+        "path": "schemas/backtest-checkpoint.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "14f88156962a871bffca091d3d4d4ce4b1204defe69b08c83bb301cf61d64133"
+      },
+      {
+        "name": "backtest-experiment",
+        "path": "schemas/backtest-experiment.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "a89b14a76e57ff48545796b5f00defc24df33a9bd1a0b406b873d9aa1ac4cefd"
+      },
+      {
+        "name": "backtest-fill",
+        "path": "schemas/backtest-fill.schema.json",
+        "schema_version": "none",
+        "sha256": "8b4d58a5bfefb7bfc6b1a535f9b53a0ebe715c22cbda30119e4c6326e6876acb"
+      },
+      {
+        "name": "backtest-holding",
+        "path": "schemas/backtest-holding.schema.json",
+        "schema_version": "none",
+        "sha256": "250fe4c4d896f4f2dd947df086ab385317b2ae90b2739ab6cb5dee912636312c"
+      },
+      {
+        "name": "backtest-input",
+        "path": "schemas/backtest-input.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "2dd4c40b2f7f98d7447177ffd41efd8a93a24ca069e287ae9287766c5650d3f9"
+      },
+      {
+        "name": "backtest-ledger",
+        "path": "schemas/backtest-ledger.schema.json",
+        "schema_version": "none",
+        "sha256": "47b637b268449e6d30d49ef4c3f45908ec7fe661d0e0aa52abd61809432f4abb"
+      },
+      {
+        "name": "backtest-metrics",
+        "path": "schemas/backtest-metrics.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "4a81b5cda7458c52be2ea47c810d85c28efe923af5d839724270078351ffeca7"
+      },
+      {
+        "name": "backtest-nav",
+        "path": "schemas/backtest-nav.schema.json",
+        "schema_version": "none",
+        "sha256": "5934b1da025815251ea74f97835dc61090c1534642abae8bf7de09dab836dbc3"
+      },
+      {
+        "name": "backtest-order",
+        "path": "schemas/backtest-order.schema.json",
+        "schema_version": "none",
+        "sha256": "a6c4fb8f87b67fa14a460924c852873c77132c7ba5d5d4c7807ef0a93be7bef9"
+      },
+      {
+        "name": "backtest-result",
+        "path": "schemas/backtest-result.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "96f33788907d464143409ecee9dff99b9df3ee6e1fc6b28712a990ca17bc6f5e"
+      },
+      {
+        "name": "calendar-manifest",
+        "path": "schemas/calendar-manifest.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "f06878d8f3ae40cd90b3b44c21005bf466ffa91f865a2ae033f89310532b26ab"
+      },
+      {
+        "name": "corporate-action",
+        "path": "schemas/corporate-action.schema.json",
+        "schema_version": "2.0.0",
+        "sha256": "0f5ac06fae640f934dec2aff8385481d8485c615e133d842967d2270b48e93bc"
+      },
+      {
+        "name": "data-source",
+        "path": "schemas/data-source.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "1a87b5d1e1bc8c0db58379a02e4d9a8e88aad893a46f7957867a61e11f8bbb8d"
+      },
+      {
+        "name": "economic-observation",
+        "path": "schemas/economic-observation.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "f0bbc3e7a6209bc0b832c5f5cd7635f2ed17f6bbcc8d0ea6648add0434d09345"
+      },
+      {
+        "name": "feature-batch-manifest",
+        "path": "schemas/feature-batch-manifest.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "1349b396b8d5520103cd2f7171efa23e049ab5e759ac3fb1a518ca289c7f4fa5"
+      },
+      {
+        "name": "feature-catalog-report",
+        "path": "schemas/feature-catalog-report.schema.json",
+        "schema_version": "none",
+        "sha256": "99e34a81b7840f1b2cc5fcbe873d389387ec6fad0f9607bb24dc97bdb12ba3e4"
+      },
+      {
+        "name": "feature-fundamental-manifest",
+        "path": "schemas/feature-fundamental-manifest.schema.json",
+        "schema_version": "1.1.0",
+        "sha256": "763fea0e3af2bc3a3e6eece1d0e20c904abf9bff3f58031a7c421a58de6f3400"
+      },
+      {
+        "name": "feature-fundamental-observation",
+        "path": "schemas/feature-fundamental-observation.schema.json",
+        "schema_version": "1.1.0",
+        "sha256": "a575f01274ed3729cd250c9d097e512262327e4679559012cb922a24034e9dad"
+      },
+      {
+        "name": "feature-macro-manifest",
+        "path": "schemas/feature-macro-manifest.schema.json",
+        "schema_version": "1.1.0",
+        "sha256": "b586eb70d74d11db55415d137e45f057e12f79d2cb1a6ff62d2022d9c1deeb35"
+      },
+      {
+        "name": "feature-macro-observation",
+        "path": "schemas/feature-macro-observation.schema.json",
+        "schema_version": "1.1.0",
+        "sha256": "dc20bd24e1bd76f7115e6c3d8d3a94954f5c4fd4ec4f99951cd22201fb5909b7"
+      },
+      {
+        "name": "feature-manifest",
+        "path": "schemas/feature-manifest.schema.json",
+        "schema_version": "1.1.0",
+        "sha256": "a0312cfb224f19c06e6153c9556b061d0070e81666b6227d54cf000f453b7dcb"
+      },
+      {
+        "name": "feature-momentum-manifest",
+        "path": "schemas/feature-momentum-manifest.schema.json",
+        "schema_version": "1.1.0",
+        "sha256": "ba5f981c7f6e711c44a56400f138d33151e6cdc3280ad60d75f882b5a150222e"
+      },
+      {
+        "name": "feature-momentum-observation",
+        "path": "schemas/feature-momentum-observation.schema.json",
+        "schema_version": "1.1.0",
+        "sha256": "f266cbc5fbdbc2052f5d42435ff589ace63017fb8a802d4ec273f33c0635d1b2"
+      },
+      {
+        "name": "feature-observation",
+        "path": "schemas/feature-observation.schema.json",
+        "schema_version": "1.1.0",
+        "sha256": "be275ddd50949bd19eca3506b2de175d0e3cc5a98f4c72e634f0cf904710d68f"
+      },
+      {
+        "name": "feature-quality-report",
+        "path": "schemas/feature-quality-report.schema.json",
+        "schema_version": "none",
+        "sha256": "fe78207fa4f319fffe08ea077ec1aef8c4eff3d483973b8d8e16fd58081ae667"
+      },
+      {
+        "name": "feature-set-registry",
+        "path": "schemas/feature-set-registry.schema.json",
+        "schema_version": "none",
+        "sha256": "4c37196457af323c867a528156a933e672a22f229ce456ee7b8a7ff04ff6ab25"
+      },
+      {
+        "name": "feature-taxonomy-registry",
+        "path": "schemas/feature-taxonomy-registry.schema.json",
+        "schema_version": "none",
+        "sha256": "3ad6e2946c2c50b1d572010c9b04989eda44fc224f5132e48fdcee2a1c5dbb70"
+      },
+      {
+        "name": "filing",
+        "path": "schemas/filing.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "3c699202b5b480446836f9b65c558e59084c66a405e20862cd7f39765057ed37"
+      },
+      {
+        "name": "fundamental-observation",
+        "path": "schemas/fundamental-observation.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "52af36a55a61d58e598eda57041625b78bc73bf1a1d8a0f90d2e3bcd2592aefc"
+      },
+      {
+        "name": "fx-observation",
+        "path": "schemas/fx-observation.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "b56fca807953adbf62b10e9b2320802e81201117adfc98f7a65392b595018ad3"
+      },
+      {
+        "name": "ingestion-run",
+        "path": "schemas/ingestion-run.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "bc4cb8a28132e69f55471b29eeed55e36442edec694fe6bd45310449f6a869f0"
+      },
+      {
+        "name": "issuer",
+        "path": "schemas/issuer.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "89ebbbec0fa871747f5b68b341654702d9d21f07332905ddaab8d0aab43743df"
+      },
+      {
+        "name": "paper-account",
+        "path": "schemas/paper-account.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "16eac994f28c8680851dc0624b61423cb685f4dbf368af8409bb451dc68a1eeb"
+      },
+      {
+        "name": "paper-event",
+        "path": "schemas/paper-event.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "04f34d91089eabf050191df8f7845aa2f0b5174808ead282a6b43da8338f2035"
+      },
+      {
+        "name": "paper-order",
+        "path": "schemas/paper-order.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "821e1ce5b9d7b7ed3380cf12b10b0fb2f2b5e71c11e6b8ee77fdbc7e88b20b1f"
+      },
+      {
+        "name": "paper-report",
+        "path": "schemas/paper-report.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "083057dcb8c4980c45ad2d8c9a45dd7b72f300376ac3e0b7c3c37db3809c9146"
+      },
+      {
+        "name": "paper-target",
+        "path": "schemas/paper-target.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "3ec1a1350381e2f3babcbe20c99af9073c9c02bdf3a68be0f7f3e39c254b9ac7"
+      },
+      {
+        "name": "price-bar",
+        "path": "schemas/price-bar.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "06dcff07086c10fa9f003d450f61852fb74eae995efafd5bbd649d2b56953f1a"
+      },
+      {
+        "name": "research-document",
+        "path": "schemas/research-document.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "dbffce1af14014fe59a71b9a22066ad1f2abc337aa34f36f6e4dfd98fe88da8d"
+      },
+      {
+        "name": "research-event-proposal",
+        "path": "schemas/research-event-proposal.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "69a1fa6ca9999b0b294be60afb58828a66e128e8e23536c8769b59d5ea1a116d"
+      },
+      {
+        "name": "research-evidence-pack",
+        "path": "schemas/research-evidence-pack.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "62dfd7e8ef2de7baaf0e3cbd3461e89a8afc7542c0b1625eccb42d258587720f"
+      },
+      {
+        "name": "research-hypothesis",
+        "path": "schemas/research-hypothesis.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "c755c9c94253c94b03c4bfa3bfb74a19b788e510606191723a56748a6ccaf933"
+      },
+      {
+        "name": "research-memo",
+        "path": "schemas/research-memo.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "00e0cfeedda2dffb3adc9d398f5fcd5fedeb4147e6bdc8040a634ddec74704c1"
+      },
+      {
+        "name": "research-prediction-outcome",
+        "path": "schemas/research-prediction-outcome.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "6d96ff65bb1c4ab5623369de080803517e214e936af666a8171718c3ef3a2ed5"
+      },
+      {
+        "name": "research-prediction",
+        "path": "schemas/research-prediction.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "28529aefdd42cdbfb8b9feb049365ed2760410e32ac449d34ad64f60abf9d243"
+      },
+      {
+        "name": "research-relationship",
+        "path": "schemas/research-relationship.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "186082e572ef1316f176993e72731cf0e95e08bac1e629afdb3da3203dad8d54"
+      },
+      {
+        "name": "research-status-report",
+        "path": "schemas/research-status-report.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "f8a4d9b2de79a1f319078ba07d77b7080cdedb58e088d7510cb876d543a9aaa6"
+      },
+      {
+        "name": "research-theme-bundle",
+        "path": "schemas/research-theme-bundle.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "48ca4bb45bade31207972f759e3902d2fa2e828be434082a35c24373e22387f1"
+      },
+      {
+        "name": "research-theme",
+        "path": "schemas/research-theme.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "0058a6ff4726867520e1650f5e21d99dff45e8a42a984b5989500ce0e8854bf2"
+      },
+      {
+        "name": "security-identifier-version",
+        "path": "schemas/security-identifier-version.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "cbae0c4c87bcdc1fda0bcb3c7bb89aa8ebdd0818e8f5f120ac40866fd363e756"
+      },
+      {
+        "name": "security-identifier",
+        "path": "schemas/security-identifier.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "8546a8366b8e80f75bd508b82b96ede6168f27fd8fa8c6790445f6d1b0b8477c"
+      },
+      {
+        "name": "security-listing-version",
+        "path": "schemas/security-listing-version.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "691aed85431cf366b8b614570c38b0a20de77603f0b9bbc384ef548a1eea161f"
+      },
+      {
+        "name": "security",
+        "path": "schemas/security.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "8b17fc8011e85f69da7c5d810b6094fbacbff596584d898a509f20d3487aea98"
+      },
+      {
+        "name": "trading-session",
+        "path": "schemas/trading-session.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "cd244c974a96cdc11de46cc684b7b1107fc73dec0a646f3a87b0aea201650d6f"
+      },
+      {
+        "name": "universe-membership",
+        "path": "schemas/universe-membership.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "9b4c8bbac32e88affc0e04d79add3a5b173d5eef7bc5ae62fbb5af8b6c8f8305"
+      }
+    ],
+    "registries": [
+      {
+        "name": "feature-set",
+        "path": "schemas/feature-set-registry.json",
+        "version": "1.0.0",
+        "sha256": "ef22ff829ef76f54a662b47f2a13d0eddd1f70cf36991a48e9b6324e6d6dc1e3"
+      },
+      {
+        "name": "feature-taxonomy",
+        "path": "schemas/feature-taxonomy-registry.json",
+        "version": "1.0.0",
+        "sha256": "3846e55fbe172dc25bce58911f5577926d417982c077aaef46328a65e09b67a7"
+      }
+    ],
+    "migrations": {
+      "latest": "migrations/000016_paper_accounts.up.sql",
+      "files": [
+        {
+          "path": "migrations/000001_core_metadata.up.sql",
+          "sha256": "c43b671eda5b1a9b3cd52c8b18b10c192697cf22d2938cedef8e3218cd069b60"
+        },
+        {
+          "path": "migrations/000002_latest_observation_snapshots.up.sql",
+          "sha256": "0dd5a0092857c97e95bb98bd20dd7c564d1f2e460cf3f28fbef5009635370d32"
+        },
+        {
+          "path": "migrations/000003_observed_precision.up.sql",
+          "sha256": "e09fcde88bb7e4f9e381200c680f7650a4881fe3aa69d5d8c9a822e14570b54c"
+        },
+        {
+          "path": "migrations/000004_run_inputs.up.sql",
+          "sha256": "63e6a2b629f65c22bfb525224c56197bd583228361591e350b99ab2fd6a034e8"
+        },
+        {
+          "path": "migrations/000005_nullable_macro_snapshot_value.up.sql",
+          "sha256": "b85801ae87078a8925c755b959bab890b9e69a2232e83c246f0c1c80964f9994"
+        },
+        {
+          "path": "migrations/000006_historical_truth.up.sql",
+          "sha256": "72092bec74e3dfd00afe88d3c4b751b1e2cc26c3485de7bcffe0ab4f0cdaab90"
+        },
+        {
+          "path": "migrations/000007_corporate_actions.up.sql",
+          "sha256": "c73696f80d53e5117063269db5f1324e64b4536577b24b15ca52964c7e6d9b75"
+        },
+        {
+          "path": "migrations/000008_price_basis.up.sql",
+          "sha256": "980219fee14d5e94d84eccb6cb7c5b63b5148688061f494cdb6bc33ff874e159"
+        },
+        {
+          "path": "migrations/000009_nullable_price_publication.up.sql",
+          "sha256": "1e0b2c19ea88f0b90f1bdd960d0eecd6149117f0bab57183525eb74256ba4e3d"
+        },
+        {
+          "path": "migrations/000010_feature_artifacts.up.sql",
+          "sha256": "ce17873e5b841f47afa7964e36750c485b0c7931172f4645c3db6aef6bd56fd0"
+        },
+        {
+          "path": "migrations/000011_feature_artifact_input_fitness.up.sql",
+          "sha256": "d0cfd8007703b1ed0d4984f1e41f9e5f1cc5a414b2a788d265892eac5598c0ea"
+        },
+        {
+          "path": "migrations/000012_research_workspace.up.sql",
+          "sha256": "3d25fd7cdbb5e39ea341ce0a6405b74472d70619029fad27a810ea342281f06a"
+        },
+        {
+          "path": "migrations/000013_research_theme_context.up.sql",
+          "sha256": "df885d9be7cf48d4a25cc1b033601a16c38816dca06a1139c6b655d50df2540b"
+        },
+        {
+          "path": "migrations/000014_research_hypothesis_review_at.up.sql",
+          "sha256": "fc75bb01491378060dc8bb4ce4228b8a9d129faddaf67701a595a5510dd9d874"
+        },
+        {
+          "path": "migrations/000015_backtest_experiments.up.sql",
+          "sha256": "025a773a8f5a62d2eae39e10056dc63d37322b78ad06a20659a44495ae349966"
+        },
+        {
+          "path": "migrations/000016_paper_accounts.up.sql",
+          "sha256": "6b3dfb55d7a3717c4ef6eda43520d6cbaab8eb74436a25e006a429d937421cae"
+        }
+      ]
+    },
+    "implementations": [
+      {
+        "name": "backtest",
+        "path": "python/research/experiments.py",
+        "version": "python-backtest-1.0.0",
+        "sha256": "14d33a642831644a828e396c06caab199e6588ae9d69a936c19402586d0a60bd"
+      },
+      {
+        "name": "paper",
+        "path": "python/research/paper.py",
+        "version": "python-paper-1.0.0",
+        "sha256": "57ad8e6c568baf38c1638841a7462fe3379632135d30132f29d0de0360acc7fb"
+      },
+      {
+        "name": "market-basic",
+        "path": "python/research/features.py",
+        "version": "python-market-basic-1.1.0",
+        "sha256": "cd95feeebaf1b76324f8bfc6cdbcf8e3c251b30d347de1feee865660f92cd3d2"
+      },
+      {
+        "name": "market-momentum",
+        "path": "python/research/market_momentum.py",
+        "version": "python-market-momentum-1.0.0",
+        "sha256": "acfdfd1eff3fc1663c577332c1dc620e27e349ecbb9773273957e9e8508f9dd9"
+      },
+      {
+        "name": "fundamental-growth",
+        "path": "python/research/fundamental_growth.py",
+        "version": "python-fundamental-growth-1.0.0",
+        "sha256": "f4c662cf6e9610fcacf3baa75ecacd8694c0131feaca236e30162d5e980895c9"
+      },
+      {
+        "name": "macro-state",
+        "path": "python/research/macro_state.py",
+        "version": "python-macro-state-1.0.0",
+        "sha256": "d8512f2c0235f2c03c229c197222a5bbc3bdec8f2675b0330a141e534be870c2"
+      },
+      {
+        "name": "bias-audit",
+        "path": "python/research/bias_audit.py",
+        "version": "python-bias-audit-1.0.0",
+        "sha256": "19e085957a0d3554c70cff158bf3e0a87e4e56086534b8cc832d87fa081c19d3"
+      },
+      {
+        "name": "strategies",
+        "path": "python/research/strategies.py",
+        "version": "1.0.0",
+        "sha256": "2afd489233930e9dbc856d6e29f0d65f8ef17a62eba76d79de206ea754f663d3"
+      },
+      {
+        "name": "risk",
+        "path": "python/research/risk.py",
+        "version": "1.0.0",
+        "sha256": "ddc19918ee85ec3077df46b6a1756d54ce75c58deae3fb10ce1274ce95dd4ed1"
+      },
+      {
+        "name": "measurement",
+        "path": "python/research/measurement.py",
+        "version": "close_to_close_equal_weight_v1",
+        "sha256": "656c6784140c1110a82329024e7418c5e8ef81cdc9c6ab4a78dca7482b0d4530"
+      },
+      {
+        "name": "portfolio",
+        "path": "python/research/portfolio.py",
+        "version": "1.0.0",
+        "sha256": "d07104fd4dd3517f35b79be525c635e8452431e47bd8d07d855944f56512b333"
+      }
+    ],
+    "configuration": [
+      {
+        "name": "go-module",
+        "path": "go.mod",
+        "sha256": "81a16b2bda57d41050c7677963d253b01aacb6eef53dc893210d9ac75b07c76c"
+      },
+      {
+        "name": "python-project",
+        "path": "python/pyproject.toml",
+        "sha256": "382b1b0188a0f5964e96d513c4d891afe3ea62a6ec419bf93092451ae6e88bba"
+      },
+      {
+        "name": "compose",
+        "path": "docker-compose.yml",
+        "sha256": "a1c128ed8a251e269753bc94f56bba73fc9301e7b5906dbf4f0369f1510f055b"
+      },
+      {
+        "name": "collector-dockerfile",
+        "path": "docker/collector.Dockerfile",
+        "sha256": "fe57de118c75f79de52283a921a3f907ac8bd60f85306ff70450046c54d1c4ad"
+      },
+      {
+        "name": "jupyter-dockerfile",
+        "path": "docker/jupyter.Dockerfile",
+        "sha256": "252526754bfacd861b8291525470d165346a0335ce49f11cd26578af4e626d35"
+      },
+      {
+        "name": "postgres-dockerfile",
+        "path": "docker/postgres.Dockerfile",
+        "sha256": "3df09efe684ab500a5682912b611895fd83687efaca83de840993d818311c5c3"
+      }
+    ]
+  },
+  "security": {
+    "bind_address_default": "127.0.0.1",
+    "grafana_anonymous": false,
+    "credentials_outside_git": true,
+    "backup_before_upgrade": true
+  },
+  "upgrade": {
+    "migration_policy": "forward_only",
+    "unsupported_mix_policy": "reject",
+    "preflight_command": "make release-validate",
+    "backup_command": "make backup",
+    "restore_command": "make restore"
+  }
+}

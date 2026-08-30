@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-acceptance paper-reproduction action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily ops-status reconcile backup restore release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-acceptance paper-reproduction action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -124,6 +124,12 @@ restore: config
 	@test -n "$(BACKUP_DIR)" || (echo "BACKUP_DIR is required" >&2; exit 2)
 	@test -n "$(RESTORE_DIR)" || (echo "RESTORE_DIR is required" >&2; exit 2)
 	@scripts/restore.sh "$(BACKUP_DIR)" "$(RESTORE_DIR)" $(if $(RESTORE_DB),--database-name $(RESTORE_DB),)
+
+release-validate: config
+	@$(COMPOSE) run --rm --no-deps --build \
+		-v "$(CURDIR):/repo:ro" \
+		jupyter sh -c "pip install -q -e '.[dev]' && python -m research.release_cli validate \
+			--manifest /repo/release/compatibility.json --repo-root /repo --check-runtime"
 
 feature: config
 	@test -n "$(SECURITY_ID)" || (echo "SECURITY_ID is required" >&2; exit 2)
@@ -301,13 +307,15 @@ bias-audit-validate:
 	@PYTHONPATH=python/research python3 python/research/bias_audit_cli.py validate \
 		--manifest "$(AUDIT_MANIFEST)"
 
-test: config
+test: config release-validate
 	@go test ./...
 	@go vet ./...
 	@python3 schemas/validate_schemas.py
 	@$(COMPOSE) run --rm --no-deps \
+		-v "$(CURDIR):/repo:ro" \
 		-v "$(CURDIR)/docker:/repo/docker:ro" \
 		-v "$(CURDIR)/schemas:/repo/schemas:ro" \
+		-e INVS_REPO_ROOT=/repo \
 		-e INVS_DASHBOARD_PATH=/repo/docker/grafana/dashboards/market-overview.json \
 		-e INVS_SCHEMA_ROOT=/repo/schemas \
 		jupyter sh -c "pip install -q -e '.[dev]' && python -m pytest && python -m ruff check research tests"
