@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance v1-pre-release-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-acceptance-report paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance v1-pre-release-acceptance v1-release-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-acceptance-report paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -175,6 +175,12 @@ v1-pre-release-acceptance: config
 	@$(MAKE) v1-resilience-acceptance
 	@$(MAKE) v1-forward-record-acceptance
 	@$(MAKE) workflow-acceptance
+
+v1-release-acceptance: config
+	@test -n "$(V1_FORWARD_RECORD)" || (echo "V1_FORWARD_RECORD is required for v1 release acceptance" >&2; exit 2)
+	@test -n "$(V1_PAPER_REPORT)" || (echo "V1_PAPER_REPORT is required for v1 release acceptance" >&2; exit 2)
+	@$(MAKE) v1-pre-release-acceptance
+	@printf '%s\n' 'v1.0 release acceptance passed with genuine forward evidence'
 
 release-validate: config
 	@$(COMPOSE) run --rm --no-deps --build \
