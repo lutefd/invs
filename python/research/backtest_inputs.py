@@ -28,6 +28,7 @@ _UUID = re.compile(
 )
 _DECIMAL = re.compile(r"^(0|[1-9][0-9]*)(\.[0-9]+)?$")
 _SIGNED_DECIMAL = re.compile(r"^-?(0|[1-9][0-9]*)(\.[0-9]+)?$")
+_PRICE_BASES = frozenset({"raw", "split_adjusted", "total_return_adjusted"})
 
 _ENVELOPE_FIELDS = frozenset({"schema_version", "artifact_kind", "artifact_id", "available_at", "rows"})
 _PRICE_FIELDS = frozenset(
@@ -204,9 +205,12 @@ def _fields(row: Any, *, expected: frozenset[str], kind: str, index: int) -> dic
     return dict(row)
 
 
-def _price_rows(rows: list[Any]) -> tuple[dict[str, Any], ...]:
+def _price_rows(
+    rows: list[Any], *, allowed_price_bases: frozenset[str]
+) -> tuple[dict[str, Any], ...]:
     result: list[dict[str, Any]] = []
     identities: set[tuple[str, date]] = set()
+    price_bases: set[str] = set()
     for index, raw in enumerate(rows):
         row = _fields(raw, expected=_PRICE_FIELDS, kind="prices", index=index)
         required = _PRICE_FIELDS - {"source_record_id"}
@@ -219,8 +223,16 @@ def _price_rows(rows: list[Any]) -> tuple[dict[str, Any], ...]:
         if available_at < observed_at:
             raise _row_error("prices", index, "available_at must not precede observed_at")
         currency = _currency(row["currency"], field=f"prices row {index}.currency")
-        if row["price_basis"] != "raw":
-            raise _row_error("prices", index, "price_basis must be raw")
+        price_basis = row["price_basis"]
+        if not isinstance(price_basis, str) or price_basis not in allowed_price_bases:
+            if allowed_price_bases == {"raw"}:
+                raise _row_error("prices", index, "price_basis must be raw")
+            raise _row_error(
+                "prices",
+                index,
+                "price_basis must be one of " + ", ".join(sorted(allowed_price_bases)),
+            )
+        price_bases.add(price_basis)
         prices = {
             key: decimal(row[key], field=f"prices row {index}.{key}", non_negative=True, positive=True)
             for key in ("open", "high", "low", "close")
@@ -242,7 +254,7 @@ def _price_rows(rows: list[Any]) -> tuple[dict[str, Any], ...]:
             "observed_at": observed_at,
             "available_at": available_at,
             "currency": currency,
-            "price_basis": "raw",
+            "price_basis": price_basis,
             **prices,
             "volume": volume,
             "has_volume": row["has_volume"],
@@ -252,6 +264,8 @@ def _price_rows(rows: list[Any]) -> tuple[dict[str, Any], ...]:
                 raise _row_error("prices", index, "source_record_id must be non-empty")
             normalized["source_record_id"] = row["source_record_id"]
         result.append(normalized)
+    if len(price_bases) > 1:
+        raise BacktestInputError("prices artifact must not mix price bases")
     return tuple(sorted(result, key=lambda item: (item["session_date"], item["security_id"])))
 
 
@@ -483,7 +497,12 @@ def _observation_rows(rows: list[Any], *, kind: str) -> tuple[dict[str, Any], ..
     return tuple(sorted(result, key=lambda item: (item["observed_at"], item["observation_id"], item["revision"])))
 
 
-def _load_artifact(path: Path, *, expected: Mapping[str, Any]) -> LoadedInputArtifact:
+def _load_artifact(
+    path: Path,
+    *,
+    expected: Mapping[str, Any],
+    allowed_price_bases: frozenset[str],
+) -> LoadedInputArtifact:
     if not path.is_file():
         raise BacktestInputError(f"pinned input artifact does not exist: {path}")
     actual_sha256 = sha256_file(path)
@@ -507,7 +526,7 @@ def _load_artifact(path: Path, *, expected: Mapping[str, Any]) -> LoadedInputArt
         raise BacktestInputError(f"input artifact {path}.rows must be an array")
     kind = expected["kind"]
     if kind == "prices":
-        rows = _price_rows(document["rows"])
+        rows = _price_rows(document["rows"], allowed_price_bases=allowed_price_bases)
     elif kind == "calendar":
         rows = _calendar_rows(document["rows"])
     elif kind == "membership":
@@ -541,6 +560,7 @@ def load_input_artifacts(
     data_root: str | Path,
     allowed_fitness: Iterable[str] = ("backtest_safe",),
     required_kinds: Iterable[str] = (),
+    allowed_price_bases: Iterable[str] = ("raw",),
 ) -> BacktestInputs:
     """Load hash-pinned artifacts for a backtest or forward paper decision.
 
@@ -552,6 +572,9 @@ def load_input_artifacts(
 
     root = Path(data_root).expanduser().resolve()
     fitnesses = frozenset(allowed_fitness)
+    price_bases = frozenset(allowed_price_bases)
+    if not price_bases or not price_bases.issubset(_PRICE_BASES):
+        raise BacktestInputError("allowed_price_bases contains an unsupported price basis")
     artifacts: dict[str, LoadedInputArtifact] = {}
     for index, reference in enumerate(references):
         if not isinstance(reference, Mapping):
@@ -570,7 +593,11 @@ def load_input_artifacts(
             if field not in reference:
                 raise BacktestInputError(f"input reference {index} is missing {field}")
         path = _resolve_under_root(root, reference["path"])
-        artifacts[kind] = _load_artifact(path, expected=reference)
+        artifacts[kind] = _load_artifact(
+            path,
+            expected=reference,
+            allowed_price_bases=price_bases,
+        )
 
     missing = sorted(set(required_kinds) - set(artifacts))
     if missing:

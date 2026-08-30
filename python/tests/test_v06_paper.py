@@ -46,7 +46,14 @@ def _write_artifact(
     }
 
 
-def _price(security_id: str, session_date: str, open_price: str, close: str) -> dict[str, object]:
+def _price(
+    security_id: str,
+    session_date: str,
+    open_price: str,
+    close: str,
+    *,
+    price_basis: str = "raw",
+) -> dict[str, object]:
     high = max(open_price, close, key=lambda value: float(value))
     low = min(open_price, close, key=lambda value: float(value))
     return {
@@ -55,7 +62,7 @@ def _price(security_id: str, session_date: str, open_price: str, close: str) -> 
         "observed_at": "2025-01-01T00:00:00Z",
         "available_at": AVAILABLE_AT,
         "currency": "USD",
-        "price_basis": "raw",
+        "price_basis": price_basis,
         "open": open_price,
         "high": high,
         "low": low,
@@ -71,13 +78,26 @@ def _account_fixture(
     dates: tuple[str, ...] = ("2025-01-02", "2025-01-03", "2025-01-06", "2025-01-07"),
     strategy_name: str = "equal_weight",
     risk_overrides: dict[str, object] | None = None,
+    price_basis: str = "raw",
 ) -> tuple[dict[str, object], Path]:
     prices: list[dict[str, object]] = []
     for index, session_date in enumerate(dates):
         prices.extend(
             [
-                _price(SECURITY_A, session_date, str(10 + max(index - 1, 0)), str(10 + index)),
-                _price(SECURITY_B, session_date, str(20 + max(index - 1, 0)), str(20 + index)),
+                _price(
+                    SECURITY_A,
+                    session_date,
+                    str(10 + max(index - 1, 0)),
+                    str(10 + index),
+                    price_basis=price_basis,
+                ),
+                _price(
+                    SECURITY_B,
+                    session_date,
+                    str(20 + max(index - 1, 0)),
+                    str(20 + index),
+                    price_basis=price_basis,
+                ),
             ]
         )
     calendar = [
@@ -191,6 +211,50 @@ def test_paper_account_requires_explicit_forward_fitness(tmp_path: Path) -> None
     invalid["inputs"][0]["fitness"] = "installation_replay_only"
     with pytest.raises(PaperSpecError, match="not admitted"):
         validate_paper_account(invalid)
+
+
+def test_paper_accepts_split_adjusted_prices_without_actions(tmp_path: Path) -> None:
+    from research.paper import create_paper_account, run_paper_session
+
+    account, root = _account_fixture(tmp_path, price_basis="split_adjusted")
+    ledger_root = root / "ledger"
+    create_paper_account(account, ledger_root=ledger_root)
+
+    report = run_paper_session(
+        account,
+        data_root=root,
+        ledger_root=ledger_root,
+        session_date="2025-01-02",
+    )
+
+    assert report["decision_status"] == "proposed"
+    assert report["reconciled"] is True
+
+
+def test_paper_rejects_split_adjusted_prices_with_actions(tmp_path: Path) -> None:
+    from research.backtest_inputs import BacktestInputError
+    from research.portfolio import load_paper_inputs
+
+    account, root = _account_fixture(tmp_path, price_basis="split_adjusted")
+    action = {
+        "id": "50000000-0000-4000-8000-000000000001",
+        "security_id": SECURITY_A,
+        "action_type": "split",
+        "effective_date": "2025-01-03",
+        "payment_date": None,
+        "available_at": AVAILABLE_AT,
+        "currency": "USD",
+        "ratio_numerator": "2",
+        "ratio_denominator": "1",
+        "cash_amount": "0",
+        "settlement_price": None,
+        "target_security_id": None,
+    }
+    action_ref = _write_artifact(root, "corporate_actions", 4, [action])
+    account["inputs"].append(action_ref)
+
+    with pytest.raises(BacktestInputError, match="split_adjusted paper prices"):
+        load_paper_inputs(account["inputs"], data_root=root)
 
 
 def test_paper_proposal_approval_fill_and_rebuild_are_idempotent(tmp_path: Path) -> None:

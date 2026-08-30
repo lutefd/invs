@@ -134,12 +134,20 @@ def load_paper_inputs(
 ) -> BacktestInputs:
     """Load paper inputs while admitting only explicitly allowed fitness labels."""
 
-    return load_input_artifacts(
+    inputs = load_input_artifacts(
         references,
         data_root=data_root,
         allowed_fitness=("current_research_only", "backtest_safe"),
         required_kinds=("prices", "calendar", "membership"),
+        allowed_price_bases=("raw", "split_adjusted"),
     )
+    has_split_adjusted_prices = any(row["price_basis"] == "split_adjusted" for row in inputs.prices)
+    if has_split_adjusted_prices and inputs.corporate_actions:
+        raise BacktestInputError(
+            "split_adjusted paper prices cannot be paired with corporate_actions; "
+            "use raw prices with actions or omit action inputs"
+        )
+    return inputs
 
 
 def sessions_for_account(account: Mapping[str, Any], inputs: BacktestInputs) -> tuple[dict[str, Any], ...]:
