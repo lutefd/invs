@@ -1,0 +1,12 @@
+{
+  "run_id": "20000000-0000-4000-8000-000000000001",
+  "experiment_id": "10000000-0000-4000-8000-000000000001",
+  "attempt": 1,
+  "engine_version": "python-backtest-1.0.0",
+  "environment": {
+    "python": "3.12",
+    "platform": "linux"
+  },
+  "holdout_attempted": true,
+  "started_at": "2026-01-02T21:00:00Z"
+}

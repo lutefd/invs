@@ -1,0 +1,8 @@
+{
+  "run_id": "20000000-0000-4000-8000-000000000002",
+  "sequence": 1,
+  "status": "failed",
+  "event_at": "2026-01-03T21:01:00Z",
+  "failure_code": "acceptance_failure",
+  "failure_message": "fixture interruption before result publication"
+}

@@ -1,0 +1,54 @@
+{
+  "experiment": {
+    "experiment_id": "10000000-0000-4000-8000-000000000001",
+    "experiment_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "schema_version": "1.0.0",
+    "strategy_name": "equal_weight",
+    "strategy_version": "1.0.0",
+    "strategy_git_commit": "unknown",
+    "strategy_parameters": {
+      "rebalance_frequency": "monthly"
+    },
+    "universe_id": "10000000-0000-4000-8000-000000000002",
+    "universe_version": "1.0.0",
+    "membership_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+    "base_currency": "USD",
+    "reporting_currency": "BRL",
+    "start_date": "2026-01-01",
+    "end_date": "2026-12-31",
+    "validation_partition": "validation",
+    "benchmark_security_id": "10000000-0000-4000-8000-000000000003",
+    "benchmark_currency": "USD",
+    "decision_policy": "after_close_next_session_open",
+    "cost_policy_version": "1.0.0",
+    "rebalance_frequency": "monthly",
+    "spec_path": "experiments/equal-weight/spec.json",
+    "engine_version": "python-backtest-1.0.0"
+  },
+  "inputs": [
+    {
+      "kind": "prices",
+      "artifact_id": "10000000-0000-4000-8000-000000000101",
+      "path": "prices/manifest.json",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "available_at": "2026-01-01T12:00:00Z",
+      "historical_fitness": "backtest_safe"
+    },
+    {
+      "kind": "calendar",
+      "artifact_id": "10000000-0000-4000-8000-000000000102",
+      "path": "calendar/manifest.json",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "available_at": "2026-01-01T12:00:00Z",
+      "historical_fitness": "backtest_safe"
+    },
+    {
+      "kind": "membership",
+      "artifact_id": "10000000-0000-4000-8000-000000000103",
+      "path": "membership/manifest.json",
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "available_at": "2026-01-01T12:00:00Z",
+      "historical_fitness": "backtest_safe"
+    }
+  ]
+}
