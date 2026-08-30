@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+resolved_repo_root=$(realpath -e -- .)
 
 forward_record_path="${V1_FORWARD_RECORD:-}"
 paper_report_path="${V1_PAPER_REPORT:-data/research/acceptance/v0.6/reproduction/paper-reproduction.json}"
@@ -19,6 +20,18 @@ validate_reference_path() {
 		echo "workflow reference must be a regular file: $referenced_path" >&2
 		exit 2
 	fi
+	local resolved_reference
+	resolved_reference=$(realpath -e -- "$referenced_path") || {
+		echo "workflow reference could not be resolved: $referenced_path" >&2
+		exit 2
+	}
+	case "$resolved_reference" in
+		"$resolved_repo_root"/*) ;;
+		*)
+			echo "workflow reference must resolve inside the repository: $referenced_path" >&2
+			exit 2
+			;;
+	esac
 }
 if [[ -n "$forward_record_path" && -z "${V1_PAPER_REPORT:-}" ]]; then
 	echo 'V1_PAPER_REPORT is required when V1_FORWARD_RECORD is supplied' >&2
@@ -47,6 +60,14 @@ case "$workflow_output_root" in
 	echo 'V1_WORKFLOW_OUTPUT_ROOT must be a safe repository-relative path' >&2
 	exit 2
 ;;
+esac
+resolved_workflow_output_root=$(realpath -m -- "$repo_root/$workflow_output_root")
+case "$resolved_workflow_output_root" in
+	"$resolved_repo_root"/*) ;;
+	*)
+		echo 'V1_WORKFLOW_OUTPUT_ROOT must resolve inside the repository' >&2
+		exit 2
+		;;
 esac
 
 make research-acceptance

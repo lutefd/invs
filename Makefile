@@ -179,10 +179,14 @@ v1-pre-release-acceptance: config
 v1-release-acceptance: config
 	@test -n "$(V1_FORWARD_RECORD)" || (echo "V1_FORWARD_RECORD is required for v1 release acceptance" >&2; exit 2)
 	@test -n "$(V1_PAPER_REPORT)" || (echo "V1_PAPER_REPORT is required for v1 release acceptance" >&2; exit 2)
-	@case "$(V1_FORWARD_RECORD)" in /*|*..*) echo "V1_FORWARD_RECORD must be a safe repository-relative path" >&2; exit 2;; esac
-	@case "$(V1_PAPER_REPORT)" in /*|*..*) echo "V1_PAPER_REPORT must be a safe repository-relative path" >&2; exit 2;; esac
-	@test -f "$(V1_FORWARD_RECORD)" && test ! -L "$(V1_FORWARD_RECORD)" || (echo "V1_FORWARD_RECORD must identify a regular file: $(V1_FORWARD_RECORD)" >&2; exit 2)
-	@test -f "$(V1_PAPER_REPORT)" && test ! -L "$(V1_PAPER_REPORT)" || (echo "V1_PAPER_REPORT must identify a regular file: $(V1_PAPER_REPORT)" >&2; exit 2)
+	@resolved_repo_root="$$(realpath -e -- .)" && \
+	for evidence_spec in "V1_FORWARD_RECORD=$(V1_FORWARD_RECORD)" "V1_PAPER_REPORT=$(V1_PAPER_REPORT)"; do \
+		field_name="$${evidence_spec%%=*}"; declared_path="$${evidence_spec#*=}"; \
+		case "$$declared_path" in /*|*..*) echo "$$field_name must be a safe repository-relative path" >&2; exit 2;; esac; \
+		test -f "$$declared_path" && test ! -L "$$declared_path" || (echo "$$field_name must identify a regular file: $$declared_path" >&2; exit 2); \
+		resolved_path="$$(realpath -e -- "$$declared_path")" || (echo "$$field_name could not be resolved: $$declared_path" >&2; exit 2); \
+		case "$$resolved_path" in "$$resolved_repo_root"/*) ;; *) echo "$$field_name must resolve inside the repository: $$declared_path" >&2; exit 2;; esac; \
+	done
 	@$(MAKE) v1-pre-release-acceptance
 	@printf '%s\n' 'v1.0 release acceptance passed with genuine forward evidence'
 
