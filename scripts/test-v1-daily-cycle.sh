@@ -44,7 +44,7 @@ jq -n \
 	--arg account_id '40000000-0000-4000-8000-000000000001' \
 	'{
 		"$schema": $schema,
-		"schema_version": "1.0.0",
+		"schema_version": "1.1.0",
 		"cycle_id": $cycle_id,
 		"session_date": $session_date,
 		"decision_at": $decision_at,

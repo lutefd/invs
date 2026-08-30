@@ -105,7 +105,7 @@ def _spec(tmp_path: Path) -> dict:
     _write(paper_path, _paper_account())
     return {
         "$schema": "../schemas/daily-cycle.schema.json",
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "cycle_id": "daily-cycle-test",
         "session_date": "2026-08-29",
         "decision_at": "2026-08-29T21:05:00Z",

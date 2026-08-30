@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _CYCLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{2,127}$")
 _SOURCE = re.compile(r"^[a-z0-9_-]+$")

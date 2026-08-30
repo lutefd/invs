@@ -24,7 +24,7 @@
   ],
   "properties": {
     "$schema": { "const": "../schemas/daily-cycle.schema.json" },
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "cycle_id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
