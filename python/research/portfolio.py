@@ -97,6 +97,15 @@ def timestamp(value: datetime) -> str:
     return parsed.strftime("%Y-%m-%dT%H:%M:%S") + fraction + "Z"
 
 
+def session_decision_at(session: Mapping[str, Any]) -> datetime:
+    """Return the recorded information cutoff, defaulting to the session close."""
+
+    value = session.get("decision_at", session["close_at"])
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise PortfolioError("session decision_at must be an aware timestamp")
+    return value
+
+
 def _uuid(value: Any, *, field: str) -> str:
     if not isinstance(value, str) or not _UUID.fullmatch(value):
         raise PortfolioError(f"{field} must be a canonical UUID")
@@ -261,12 +270,13 @@ def positions_value(
     require_prices: bool = True,
 ) -> tuple[Decimal, dict[str, str]]:
     base_currency = account["accounting_policy"]["base_currency"]
+    decision_at = session_decision_at(session)
     total = _ZERO
     currencies = dict(state.security_currency)
     for security_id, quantity in sorted(state.quantities.items()):
         if quantity <= 0:
             continue
-        row = price_row(inputs, security_id, session["session_date"], session["close_at"])
+        row = price_row(inputs, security_id, session["session_date"], decision_at)
         if row is None:
             if require_prices:
                 raise PaperMissingDataError(
@@ -279,7 +289,7 @@ def positions_value(
             quantity * row["close"],
             row["currency"],
             base_currency,
-            session["close_at"],
+            decision_at,
         )
     return total, currencies
 
@@ -308,10 +318,11 @@ def rebalance_due(
 def active_security_ids(
     account: Mapping[str, Any], inputs: BacktestInputs, session: Mapping[str, Any]
 ) -> tuple[str, ...]:
+    decision_at = session_decision_at(session)
     active: list[str] = []
     for security_id in account["universe"]["security_ids"]:
         state = membership_state(
-            inputs, security_id, session["session_date"], session["close_at"]
+            inputs, security_id, session["session_date"], decision_at
         )
         if state is None:
             raise PaperMissingDataError(
@@ -333,7 +344,7 @@ def _signal_targets(
     if name == "equal_weight":
         return baseline_targets("equal_weight", security_ids=active)
     if name == "momentum_12_1":
-        decision_at = sessions[session_index]["close_at"]
+        decision_at = session_decision_at(sessions[session_index])
         history = {
             security_id: tuple(
                 (
@@ -393,6 +404,7 @@ def target_orders(
     if session_index + 1 >= len(sessions):
         return ()
     session = sessions[session_index]
+    decision_at = session_decision_at(session)
     execution_session = sessions[session_index + 1]["session_date"].isoformat()
     base_currency = account["accounting_policy"]["base_currency"]
     target_quantities = {
@@ -413,7 +425,7 @@ def target_orders(
         delta = target_quantity - current
         if delta == 0:
             continue
-        row = price_row(inputs, security_id, session["session_date"], session["close_at"])
+        row = price_row(inputs, security_id, session["session_date"], decision_at)
         if row is None:
             raise PaperMissingDataError(
                 f"no point-in-time close supports an order for {security_id} on {session['session_date']}"
@@ -423,7 +435,7 @@ def target_orders(
             abs(delta) * row["close"],
             row["currency"],
             base_currency,
-            session["close_at"],
+            decision_at,
         )
         order_id = str(
             uuid5(
@@ -476,9 +488,10 @@ def build_target(
     if state.nav_base <= 0:
         raise PortfolioStateError("paper account NAV must be positive before target construction")
     session = sessions[session_index]
+    decision_at = session_decision_at(session)
     active = active_security_ids(account, inputs, session)
     for security_id in active:
-        if price_row(inputs, security_id, session["session_date"], session["close_at"]) is None:
+        if price_row(inputs, security_id, session["session_date"], decision_at) is None:
             raise PaperMissingDataError(
                 f"missing current close for active security {security_id} on {session['session_date']}"
             )
@@ -492,14 +505,14 @@ def build_target(
         selected_weights = {}
         for security_id, quantity in state.quantities.items():
             if quantity > 0 and security_id in active_set:
-                row = price_row(inputs, security_id, session["session_date"], session["close_at"])
+                row = price_row(inputs, security_id, session["session_date"], decision_at)
                 assert row is not None
                 value = convert(
                     inputs,
                     quantity * row["close"],
                     row["currency"],
                     account["accounting_policy"]["base_currency"],
-                    session["close_at"],
+                    decision_at,
                 )
                 selected_weights[security_id] = value / state.nav_base
                 selected_quantities[security_id] = quantity
@@ -525,7 +538,7 @@ def build_target(
     rows: list[dict[str, Any]] = []
     target_quantities = dict(selected_quantities)
     for security_id, target_weight in sorted(selected_weights.items()):
-        row = price_row(inputs, security_id, session["session_date"], session["close_at"])
+        row = price_row(inputs, security_id, session["session_date"], decision_at)
         if row is None:
             raise PaperMissingDataError(
                 f"missing target price for {security_id} on {session['session_date']}"
@@ -536,7 +549,7 @@ def build_target(
             target_value_base,
             account["accounting_policy"]["base_currency"],
             row["currency"],
-            session["close_at"],
+            decision_at,
         )
         quantity = target_value_local / row["close"]
         if not account["accounting_policy"]["fractional_shares"]:
@@ -554,7 +567,7 @@ def build_target(
             raise PortfolioError(f"negative target quantity for {security_id}")
         if quantity == 0 and state.quantities.get(security_id, _ZERO) <= 0:
             continue
-        row = price_row(inputs, security_id, session["session_date"], session["close_at"])
+        row = price_row(inputs, security_id, session["session_date"], decision_at)
         if row is None:
             if quantity > 0:
                 raise PaperMissingDataError(
@@ -567,7 +580,7 @@ def build_target(
             quantity * row["close"],
             row["currency"],
             base_currency,
-            session["close_at"],
+            decision_at,
         )
         rows.append(
             {
@@ -604,7 +617,7 @@ def build_target(
         "decision_id": decision_id,
         "target_revision": target_revision,
         "decision_session": session["session_date"].isoformat(),
-        "decision_at": timestamp(session["close_at"]),
+        "decision_at": timestamp(decision_at),
         "strategy": account["strategy"],
         "input_fingerprint": fingerprint,
         "inputs": pins,
@@ -629,7 +642,7 @@ def build_target(
             "policy_version": risk_policy["version"],
             "codes": [],
             "reasons": [],
-            "checked_at": timestamp(session["close_at"]),
+            "checked_at": timestamp(decision_at),
         },
     }
 
@@ -653,6 +666,7 @@ __all__ = [
     "positions_value",
     "price_row",
     "rebalance_due",
+    "session_decision_at",
     "sessions_for_account",
     "target_orders",
     "timestamp",

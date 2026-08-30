@@ -108,6 +108,7 @@ def _spec(tmp_path: Path) -> dict:
         "schema_version": "1.0.0",
         "cycle_id": "daily-cycle-test",
         "session_date": "2026-08-29",
+        "decision_at": "2026-08-29T21:05:00Z",
         "source": "all",
         "run_key": "daily-cycle-test",
         "data_root": "data",
@@ -144,6 +145,20 @@ def test_cycle_spec_requires_all_operator_inputs(tmp_path: Path) -> None:
     assert "paper:40000000-0000-4000-8000-000000000001:run" in {
         stage.name for stage in plan
     }
+    paper_run = next(
+        stage
+        for stage in plan
+        if stage.name == "paper:40000000-0000-4000-8000-000000000001:run"
+    )
+    assert "PAPER_DECISION_AT=2026-08-29T21:05:00Z" in paper_run.command
+
+
+def test_cycle_spec_rejects_noncanonical_decision_timestamp(tmp_path: Path) -> None:
+    spec = _spec(tmp_path)
+    spec["decision_at"] = "2026-08-29T21:05:00+00:00"
+
+    with pytest.raises(DailyCycleError, match="decision_at must be a canonical UTC timestamp"):
+        validate_cycle_spec(spec, repo_root=tmp_path)
 
 
 def test_cycle_spec_rejects_unknown_fields(tmp_path: Path) -> None:

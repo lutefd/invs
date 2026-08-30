@@ -13,6 +13,7 @@ from .portfolio import (
     PortfolioState,
     decimal,
     price_row,
+    session_decision_at,
     timestamp,
 )
 
@@ -53,6 +54,7 @@ def assess_target(
     """
 
     session = sessions[session_index]
+    decision_at = session_decision_at(session)
     policy = account["risk_policy"]
     codes: list[str] = []
     reasons: list[str] = []
@@ -161,7 +163,7 @@ def assess_target(
             inputs,
             order["security_id"],
             session["session_date"],
-            session["close_at"],
+            decision_at,
         )
         if row is None:
             _append_reason(
@@ -199,13 +201,13 @@ def assess_target(
                 inputs,
                 row["security_id"],
                 session["session_date"],
-                session["close_at"],
+                decision_at,
             )
             previous_price = price_row(
                 inputs,
                 row["security_id"],
                 previous_session["session_date"],
-                previous_session["close_at"],
+                decision_at,
             )
             if current_price is None or previous_price is None:
                 continue
@@ -222,7 +224,7 @@ def assess_target(
         policy["max_stale_sessions"], account["decision_policy"]["stale_after_sessions"]
     )
     for security_id in {row["security_id"] for row in target["targets"] if _d(row["target_quantity"], "target.target_quantity") > 0}:
-        row = price_row(inputs, security_id, session["session_date"], session["close_at"])
+        row = price_row(inputs, security_id, session["session_date"], decision_at)
         if row is None:
             continue
         age = _session_age(sessions, row["observed_at"], session["session_date"])
@@ -251,7 +253,7 @@ def assess_target(
         "policy_version": policy["version"],
         "codes": codes,
         "reasons": reasons,
-        "checked_at": timestamp(session["close_at"]),
+        "checked_at": timestamp(decision_at),
     }
 
 

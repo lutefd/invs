@@ -217,7 +217,8 @@ paper-run: config
 			--spec /tmp/paper-spec.json \
 			--data-root /data \
 			--ledger-root "$(PAPER_LEDGER_ROOT)" \
-			--session-date "$(PAPER_SESSION_DATE)"
+			--session-date "$(PAPER_SESSION_DATE)" \
+			$(if $(PAPER_DECISION_AT),--decision-at "$(PAPER_DECISION_AT)",)
 
 paper-reconcile: config
 	@test -n "$(PAPER_ACCOUNT_ID)" || (echo "PAPER_ACCOUNT_ID is required" >&2; exit 2)

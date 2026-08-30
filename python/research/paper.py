@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid5
 
-from .backtest_inputs import BacktestInputError
+from .backtest_inputs import BacktestInputError, parse_utc
 from .experiments import canonical_json
 from .portfolio import (
     PAPER_SCHEMA_VERSION,
@@ -33,6 +33,7 @@ from .portfolio import (
     load_paper_inputs,
     positions_value,
     price_row,
+    session_decision_at,
     sessions_for_account,
     target_orders,
     timestamp,
@@ -936,7 +937,7 @@ def _state_after_mark(
     session: Mapping[str, Any],
 ) -> PortfolioState:
     position_value, currencies = positions_value(account, inputs, state, session)
-    available_cash = cash_base(account, inputs, state, session["close_at"])
+    available_cash = cash_base(account, inputs, state, session_decision_at(session))
     nav = available_cash + position_value
     if nav <= 0:
         raise PaperReconciliationError(f"paper NAV is not positive on {session['session_date']}")
@@ -960,11 +961,12 @@ def _append_valuation(
     decision_id: str,
 ) -> PortfolioState:
     marked = _state_after_mark(account, inputs, state, session)
+    decision_at = session_decision_at(session)
     holdings = []
     for security_id, quantity in sorted(marked.quantities.items()):
         if quantity <= 0:
             continue
-        row = price_row(inputs, security_id, session["session_date"], session["close_at"])
+        row = price_row(inputs, security_id, session["session_date"], decision_at)
         if row is None:
             raise PaperMissingDataError(f"missing close for held security {security_id}")
         value = convert(
@@ -972,7 +974,7 @@ def _append_valuation(
             quantity * row["close"],
             row["currency"],
             account["accounting_policy"]["base_currency"],
-            session["close_at"],
+            decision_at,
         )
         holdings.append(
             {
@@ -1223,8 +1225,40 @@ def _settle_orders(
         )
 
 
-def _decision_id(account_id: str, session_date: date, fingerprint: str) -> str:
-    return str(uuid5(_DECISION_NAMESPACE, f"{account_id}:{session_date.isoformat()}:{fingerprint}"))
+def _resolve_decision_at(value: str | datetime | None, session: Mapping[str, Any]) -> datetime:
+    """Resolve and validate the immutable information cutoff for one session."""
+
+    close_at = session["close_at"]
+    if value is None:
+        return close_at
+    if isinstance(value, str):
+        try:
+            resolved = parse_utc(value, field="decision_at")
+        except BacktestInputError as error:
+            raise PaperSpecError(str(error)) from error
+    elif isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise PaperSpecError("decision_at must be an aware UTC timestamp")
+        resolved = value.astimezone(UTC)
+    else:
+        raise PaperSpecError("decision_at must be a canonical UTC timestamp")
+    if resolved < close_at:
+        raise PaperSpecError("decision_at must not precede the session close")
+    if resolved > datetime.now(UTC):
+        raise PaperSpecError("decision_at must not be in the future")
+    return resolved
+
+
+def _decision_id(
+    account_id: str,
+    session_date: date,
+    fingerprint: str,
+    decision_at: datetime | None = None,
+) -> str:
+    material = f"{account_id}:{session_date.isoformat()}:{fingerprint}"
+    if decision_at is not None:
+        material += f":{timestamp(decision_at)}"
+    return str(uuid5(_DECISION_NAMESPACE, material))
 
 
 def _decision_events(events: Sequence[Mapping[str, Any]], decision_id: str) -> tuple[Mapping[str, Any], ...]:
@@ -1239,11 +1273,12 @@ def _append_halt(
     fingerprint: str,
     reason: str,
 ) -> None:
+    decision_at = session_decision_at(session)
     if store.event_for_idempotency(f"decision:{decision_id}") is None:
         store.append_event(
             idempotency_key=f"decision:{decision_id}",
             session_date=session["session_date"],
-            event_at=session["close_at"],
+            event_at=decision_at,
             event_type="decision",
             currency=account["accounting_policy"]["base_currency"],
             details={"status": "halted", "input_fingerprint": fingerprint, "reason": reason},
@@ -1252,7 +1287,7 @@ def _append_halt(
     store.append_event(
         idempotency_key=f"halt:{decision_id}",
         session_date=session["session_date"],
-        event_at=session["close_at"],
+        event_at=decision_at,
         event_type="halt",
         currency=account["accounting_policy"]["base_currency"],
         details={"status": "halted", "reason": reason},
@@ -1310,7 +1345,7 @@ def _report_from_events(
             "policy_version": account["risk_policy"]["version"],
             "codes": [],
             "reasons": [],
-            "checked_at": timestamp(session["close_at"]),
+            "checked_at": timestamp(session_decision_at(session)),
         }
     else:
         report_risk = {
@@ -1318,7 +1353,7 @@ def _report_from_events(
             "policy_version": account["risk_policy"]["version"],
             "codes": ["halted"],
             "reasons": list(warnings) or ["decision halted"],
-            "checked_at": timestamp(session["close_at"]),
+            "checked_at": timestamp(session_decision_at(session)),
         }
     if rendered_orders and status == "approved" and any(order["status"] == "proposed" for order in rendered_orders):
         status = "proposed"
@@ -1335,7 +1370,11 @@ def _report_from_events(
     session_sequences = [event["sequence"] for event in events if event["session_date"] == session["session_date"].isoformat()]
     if not session_sequences:
         session_sequences = [events[-1]["sequence"]]
-    report_id = str(uuid5(_REPORT_NAMESPACE, f"{account['account_id']}:{session['session_date']}:{fingerprint}"))
+    report_identity = f"{account['account_id']}:{session['session_date']}:{fingerprint}"
+    decision_at = session_decision_at(session)
+    if decision_at != session["close_at"]:
+        report_identity += f":{timestamp(decision_at)}"
+    report_id = str(uuid5(_REPORT_NAMESPACE, report_identity))
     gross = state.positions_value_base / state.nav_base if state.nav_base else _ZERO
     drawdown = (
         max(_ZERO, (state.peak_nav_base - state.nav_base) / state.peak_nav_base)
@@ -1372,8 +1411,9 @@ def run_paper_session(
     data_root: str | Path,
     ledger_root: str | Path,
     session_date: str | date,
+    decision_at: str | datetime | None = None,
 ) -> dict[str, Any]:
-    """Run one close decision and next-open settlement cycle idempotently."""
+    """Run one recorded decision and next-open settlement cycle idempotently."""
 
     normalized = validate_paper_account(account)
     store = LedgerStore(ledger_root, normalized["account_id"])
@@ -1387,12 +1427,30 @@ def run_paper_session(
         session_index = next(index for index, row in enumerate(sessions) if row["session_date"] == current_date)
     except StopIteration as error:
         raise PaperSpecError(f"session {current_date} is outside the paper account calendar") from error
+    base_session = sessions[session_index]
+    resolved_decision_at = _resolve_decision_at(decision_at, base_session)
+    session = dict(base_session)
+    session["decision_at"] = resolved_decision_at
+    effective_sessions = list(sessions)
+    effective_sessions[session_index] = session
+    sessions = tuple(effective_sessions)
     existing_report = store.read_report(current_date)
+    expected_checked_at = timestamp(resolved_decision_at)
     if existing_report is not None:
+        existing_risk = existing_report.get("risk")
+        if not isinstance(existing_risk, Mapping) or existing_risk.get("checked_at") != expected_checked_at:
+            raise PaperConflictError(
+                f"paper report already exists with a different decision clock: {current_date}"
+            )
         return existing_report
     fingerprint = input_fingerprint(normalized["inputs"])
-    decision_id = _decision_id(normalized["account_id"], current_date, fingerprint)
-    session = sessions[session_index]
+    decision_id = _decision_id(
+        normalized["account_id"],
+        current_date,
+        fingerprint,
+        None if resolved_decision_at == session["close_at"] else resolved_decision_at,
+    )
+    decision_at = resolved_decision_at
     warnings: list[str] = []
     try:
         _apply_actions(store, normalized, inputs, session)
@@ -1411,7 +1469,7 @@ def run_paper_session(
                 store.append_event(
                     idempotency_key=f"decision:{decision_id}",
                     session_date=current_date,
-                    event_at=session["close_at"],
+                    event_at=decision_at,
                     event_type="decision",
                     currency=normalized["accounting_policy"]["base_currency"],
                     details={"status": "no_op", "input_fingerprint": fingerprint, "rebalance_due": False},
@@ -1420,7 +1478,7 @@ def run_paper_session(
                 store.append_event(
                     idempotency_key=f"no-op:{decision_id}",
                     session_date=current_date,
-                    event_at=session["close_at"],
+                    event_at=decision_at,
                     event_type="no_op",
                     currency=normalized["accounting_policy"]["base_currency"],
                     details={"reason": "rebalance_not_due"},
@@ -1443,7 +1501,7 @@ def run_paper_session(
                 store.append_event(
                     idempotency_key=f"decision:{decision_id}",
                     session_date=current_date,
-                    event_at=session["close_at"],
+                    event_at=decision_at,
                     event_type="decision",
                     currency=normalized["accounting_policy"]["base_currency"],
                     details={"status": "approved" if risk["status"] == "approved" else "rejected", "input_fingerprint": fingerprint, "target_id": target["target_id"], "target_sha256": target_hash},
@@ -1453,7 +1511,7 @@ def run_paper_session(
                 store.append_event(
                     idempotency_key=f"target:{target['target_id']}",
                     session_date=current_date,
-                    event_at=session["close_at"],
+                    event_at=decision_at,
                     event_type="target_published",
                     currency=normalized["accounting_policy"]["base_currency"],
                     details={"path": str(target_path.relative_to(store.root)), "sha256": target_hash, "risk": risk},
@@ -1464,7 +1522,7 @@ def run_paper_session(
                     store.append_event(
                         idempotency_key=f"risk:{decision_id}",
                         session_date=current_date,
-                        event_at=session["close_at"],
+                        event_at=decision_at,
                         event_type="risk_approved",
                         currency=normalized["accounting_policy"]["base_currency"],
                         details=risk,
@@ -1476,7 +1534,7 @@ def run_paper_session(
                         store.append_event(
                             idempotency_key=f"order:{order['order_id']}",
                             session_date=current_date,
-                            event_at=session["close_at"],
+                            event_at=decision_at,
                             event_type="order",
                             currency=order["currency"],
                             details={"order": order, "path": str(order_path.relative_to(store.root)), "sha256": order_hash},
@@ -1489,7 +1547,7 @@ def run_paper_session(
                         store.append_event(
                             idempotency_key=f"no-op:{decision_id}",
                             session_date=current_date,
-                            event_at=session["close_at"],
+                            event_at=decision_at,
                             event_type="no_op",
                             currency=normalized["accounting_policy"]["base_currency"],
                             details={"reason": "target_matches_projection"},
@@ -1502,13 +1560,13 @@ def run_paper_session(
                             ledger_root=ledger_root,
                             decision_id=decision_id,
                             approved=True,
-                            event_at=session["close_at"],
+                            event_at=decision_at,
                         )
                 else:
                     store.append_event(
                         idempotency_key=f"risk:{decision_id}",
                         session_date=current_date,
-                        event_at=session["close_at"],
+                        event_at=decision_at,
                         event_type="risk_rejected",
                         currency=normalized["accounting_policy"]["base_currency"],
                         details=risk,
@@ -1724,18 +1782,21 @@ def build_paper_acceptance_report(
     reports = _acceptance_reports(store, normalized, events)
     latest_report = reports[-1]
     source_fingerprint = _ledger_tree_fingerprint(store.account_dir)
+    replay_decision_at = latest_report["risk"]["checked_at"]
 
     first_replay = run_paper_session(
         normalized,
         data_root=data_root,
         ledger_root=ledger_root,
         session_date=latest_report["session_date"],
+        decision_at=replay_decision_at,
     )
     second_replay = run_paper_session(
         normalized,
         data_root=data_root,
         ledger_root=ledger_root,
         session_date=latest_report["session_date"],
+        decision_at=replay_decision_at,
     )
     duplicate_auto_cycle = (
         source_fingerprint == _ledger_tree_fingerprint(store.account_dir)

@@ -458,6 +458,60 @@ def test_unavailable_close_halts_decision_without_looking_ahead(tmp_path: Path) 
     assert any(event["event_type"] == "halt" for event in LedgerStore(ledger_root, account["account_id"]).events())
 
 
+def test_after_close_decision_uses_data_available_after_the_close(tmp_path: Path) -> None:
+    from research.paper import create_paper_account, run_paper_session
+
+    account, root = _account_fixture(tmp_path)
+    prices_path = root / "inputs" / "prices.json"
+    prices = json.loads(prices_path.read_text(encoding="utf-8"))
+    prices["available_at"] = "2025-01-02T21:05:00Z"
+    for row in prices["rows"]:
+        row["available_at"] = prices["available_at"]
+    content = canonical_json(prices) + b"\n"
+    prices_path.write_bytes(content)
+    price_ref = next(reference for reference in account["inputs"] if reference["kind"] == "prices")
+    price_ref["available_at"] = prices["available_at"]
+    price_ref["sha256"] = hashlib.sha256(content).hexdigest()
+
+    ledger_root = root / "ledger"
+    create_paper_account(account, ledger_root=ledger_root)
+    report = run_paper_session(
+        account,
+        data_root=root,
+        ledger_root=ledger_root,
+        session_date="2025-01-02",
+        decision_at="2025-01-02T21:05:00Z",
+    )
+
+    assert report["decision_status"] == "proposed"
+    assert report["risk"]["checked_at"] == "2025-01-02T21:05:00Z"
+    assert report["reconciled"] is True
+
+
+def test_paper_rejects_replay_with_a_different_decision_clock(tmp_path: Path) -> None:
+    from research.paper import PaperConflictError, create_paper_account, run_paper_session
+
+    account, root = _account_fixture(tmp_path)
+    ledger_root = root / "ledger"
+    create_paper_account(account, ledger_root=ledger_root)
+    run_paper_session(
+        account,
+        data_root=root,
+        ledger_root=ledger_root,
+        session_date="2025-01-02",
+        decision_at="2025-01-02T21:05:00Z",
+    )
+
+    with pytest.raises(PaperConflictError, match="different decision clock"):
+        run_paper_session(
+            account,
+            data_root=root,
+            ledger_root=ledger_root,
+            session_date="2025-01-02",
+            decision_at="2025-01-02T21:06:00Z",
+        )
+
+
 def test_ledger_backup_restore_rebuilds_the_same_projection(tmp_path: Path) -> None:
     from research.paper import (
         approve_paper_decision,
@@ -501,10 +555,13 @@ def test_paper_cli_dispatches_operator_lifecycle(tmp_path: Path, capsys: pytest.
             str(ledger_root),
             "--session-date",
             "2025-01-02",
+            "--decision-at",
+            "2025-01-02T21:05:00Z",
         ]
     ) == 0
     first = json.loads(capsys.readouterr().out)
     assert first["decision_status"] == "proposed"
+    assert first["risk"]["checked_at"] == "2025-01-02T21:05:00Z"
 
     assert main(
         [

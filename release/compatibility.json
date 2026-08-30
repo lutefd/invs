@@ -144,7 +144,7 @@
         "name": "daily-cycle",
         "path": "schemas/daily-cycle.schema.json",
         "schema_version": "1.0.0",
-        "sha256": "a5dfddbff326471e3006938d12d554914bf2bf3fe97a58b0ad3e30bf361775ce"
+        "sha256": "9760a39307c810f5ad5aa4d6ea655311818dfe33c8e763e5294591abc044c880"
       },
       {
         "name": "daily-cycle-report",
@@ -535,7 +535,7 @@
         "name": "paper",
         "path": "python/research/paper.py",
         "version": "python-paper-1.0.0",
-        "sha256": "4550ae7516200bb33f5d0da5badc5716d0b255bf4dfc3b18faecaa6c4d01b1fe"
+        "sha256": "9828b306b3b30edf73d0ddf534ddff4bf129c4db42715bd8f95f9f05bc21c83f"
       },
       {
         "name": "forward-record",
@@ -583,7 +583,7 @@
         "name": "risk",
         "path": "python/research/risk.py",
         "version": "1.0.0",
-        "sha256": "ddc19918ee85ec3077df46b6a1756d54ce75c58deae3fb10ce1274ce95dd4ed1"
+        "sha256": "832b4b3d1f8ea7be7f738b53401ce7e296ca84b53cb3b99161b9f67b27d9aa9d"
       },
       {
         "name": "measurement",
@@ -595,7 +595,7 @@
         "name": "portfolio",
         "path": "python/research/portfolio.py",
         "version": "1.0.0",
-        "sha256": "8000ba381d75ab46715fb7307555069cc9eba6f202009933e0093331f53e26ec"
+        "sha256": "1f79e1c3c4cc1943c3438b713230ed0f40419acf4dc6d37b3f6e13ee3e6df454"
       },
       {
         "name": "workflow",

@@ -56,6 +56,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--data-root", required=True)
     run.add_argument("--ledger-root", required=True)
     run.add_argument("--session-date", required=True)
+    run.add_argument("--decision-at")
     approve = commands.add_parser("approve", help="append a manual approval or rejection")
     approve.add_argument("--account-id", required=True)
     approve.add_argument("--decision-id", required=True)
@@ -95,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
                 data_root=args.data_root,
                 ledger_root=args.ledger_root,
                 session_date=args.session_date,
+                decision_at=args.decision_at,
             )
         elif args.command == "approve":
             output = approve_paper_decision(

@@ -29,6 +29,7 @@ jq -n \
 	--arg schema '../schemas/daily-cycle.schema.json' \
 	--arg cycle_id 'v1-daily-cycle-acceptance' \
 	--arg session_date '2026-08-30' \
+	--arg decision_at '2026-08-30T21:05:00Z' \
 	--arg source 'acceptance' \
 	--arg run_key 'v1-daily-cycle-acceptance' \
 	--arg backup_dir "$backup_root" \
@@ -46,6 +47,7 @@ jq -n \
 		"schema_version": "1.0.0",
 		"cycle_id": $cycle_id,
 		"session_date": $session_date,
+		"decision_at": $decision_at,
 		"source": $source,
 		"run_key": $run_key,
 		"data_root": "data",

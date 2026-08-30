@@ -25,6 +25,7 @@ _SOURCE = re.compile(r"^[a-z0-9_-]+$")
 _RUN_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _SEMVER = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_UTC_TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$")
 _PAPER_SCHEMA_VERSION = "1.0.0"
 _PAPER_ACCOUNT_REQUIRED_FIELDS = frozenset(
     {
@@ -157,6 +158,23 @@ def _timestamp() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _utc_timestamp(value: Any, *, field: str) -> str:
+    value = _string(value, field=field)
+    if not _UTC_TIMESTAMP.fullmatch(value):
+        raise DailyCycleError(f"{field} must be a canonical UTC timestamp")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise DailyCycleError(f"{field} must be a canonical UTC timestamp") from error
+    if parsed.tzinfo is None or parsed.utcoffset() is None or parsed.astimezone(UTC) != parsed:
+        raise DailyCycleError(f"{field} must be a canonical UTC timestamp")
+    fraction = f".{parsed.microsecond:06d}".rstrip("0") if parsed.microsecond else ""
+    canonical = parsed.strftime("%Y-%m-%dT%H:%M:%S") + fraction + "Z"
+    if value != canonical:
+        raise DailyCycleError(f"{field} must be a canonical UTC timestamp")
+    return value
+
+
 def _validate_backup_path(value: Any, repo_root: Path) -> str:
     raw = _string(value, field="backup_dir")
     path = Path(raw).expanduser()
@@ -202,6 +220,7 @@ def validate_cycle_spec(value: Mapping[str, Any], *, repo_root: str | Path) -> d
             "schema_version",
             "cycle_id",
             "session_date",
+            "decision_at",
             "source",
             "run_key",
             "data_root",
@@ -227,6 +246,7 @@ def validate_cycle_spec(value: Mapping[str, Any], *, repo_root: str | Path) -> d
         date.fromisoformat(session_date)
     except ValueError as error:
         raise DailyCycleError("session_date must be an ISO date") from error
+    decision_at = _utc_timestamp(value["decision_at"], field="decision_at")
     source = _string(value["source"], field="source")
     if not _SOURCE.fullmatch(source):
         raise DailyCycleError("source contains unsupported characters")
@@ -302,6 +322,7 @@ def validate_cycle_spec(value: Mapping[str, Any], *, repo_root: str | Path) -> d
         "$schema": value["$schema"],
         "cycle_id": cycle_id,
         "session_date": session_date,
+        "decision_at": decision_at,
         "source": source,
         "run_key": run_key,
         "data_root": "data",
@@ -391,6 +412,7 @@ def build_plan(spec: Mapping[str, Any]) -> tuple[Stage, ...]:
                         f"PAPER_SPEC={entry['spec']}",
                         f"PAPER_LEDGER_ROOT={ledger}",
                         f"PAPER_SESSION_DATE={spec['session_date']}",
+                        f"PAPER_DECISION_AT={spec['decision_at']}",
                     ),
                     (create_name,),
                 ),
@@ -668,6 +690,7 @@ def main(argv: list[str] | None = None) -> int:
                     {
                         "cycle_id": spec["cycle_id"],
                         "session_date": spec["session_date"],
+                        "decision_at": spec["decision_at"],
                         "status": "dry-run",
                         "stages": [
                             {"name": stage.name, "dependencies": list(stage.dependencies), "command": list(stage.command)}
