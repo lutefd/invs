@@ -95,4 +95,16 @@ relative ledger root, account ID, and output path. It is the only supported way 
 produce the `forward_record.status: genuine` evidence reference: the command
 requires a recent reconciled report and records account, report, and ledger
 manifest hashes. Retained historical or installation-replay fixtures remain
-ineligible.
+ineligible. Once a genuine record and aggregate paper report exist, run the
+maintained genuine workflow path with repository-relative references:
+
+```sh
+V1_FORWARD_RECORD=data/research/forward/v1/forward-record.json \
+V1_PAPER_REPORT=data/research/forward/v1/paper-report.json \
+V1_PAPER_ACCOUNT_IDS="<account-id>" \
+make workflow-acceptance
+```
+
+The aggregate paper report must contain the supplied account IDs and accepted
+paper checks. The cross-market report may retain `attention` for explicitly
+non-backtest-safe commodity evidence.

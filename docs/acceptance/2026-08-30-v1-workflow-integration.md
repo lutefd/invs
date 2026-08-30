@@ -45,3 +45,17 @@ and `make paper-reproduction`. It then writes:
 The generated reports are ignored runtime evidence and are reproducible from the
 committed fixtures and prior acceptance commands. They must not be described as a
 v1 release acceptance until the forward-record check changes to `passed`.
+
+When genuine evidence is available, run the same harness with the captured record
+and an aggregate paper report that contains its account IDs:
+
+```sh
+V1_FORWARD_RECORD=data/research/forward/v1/forward-record.json \
+V1_PAPER_REPORT=data/research/forward/v1/paper-report.json \
+V1_PAPER_ACCOUNT_IDS="<account-id>" \
+make workflow-acceptance
+```
+
+The harness validates the forward record through the normal workflow path. It
+expects the thematic report to pass; the cross-market report remains allowed to
+be `attention` when its bounded commodity evidence is not backtest-safe.

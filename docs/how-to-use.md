@@ -1384,7 +1384,21 @@ old), validates the account and ledger, and records hashes for the account,
 report, and adjacent ledger manifest. It refuses missing, stale, unreconciled, or
 conflicting evidence. Point a custom workflow's `forward_record.status` at
 `genuine` and reference this output with its SHA-256; retained v0.6 replay data is
-not eligible for this path.
+not eligible for this path. The maintained workflow acceptance harness can consume
+the captured record once an aggregate paper report for the same account is ready:
+
+```sh
+V1_FORWARD_RECORD=data/research/forward/v1/forward-record.json \
+V1_PAPER_REPORT=data/research/forward/v1/paper-report.json \
+V1_PAPER_ACCOUNT_IDS="<account-id>" \
+make workflow-acceptance
+```
+
+`V1_PAPER_ACCOUNT_IDS` is optional and defaults to every account in the forward
+record. Genuine mode requires `V1_PAPER_REPORT`; the report must contain those
+accounts and the accepted paper checks. The thematic workflow can then pass its
+forward-record check; the cross-market report may remain `attention` when its
+commodity input is still explicitly `installation_replay_only`.
 
 Run the v1 recovery and historical-bias challenge suite separately:
 
