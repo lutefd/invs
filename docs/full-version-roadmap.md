@@ -1613,11 +1613,13 @@ cutoff identities on resume, bringing the full gate to 223 Python tests.
 The release and workflow entry points also reject evidence or output paths that
 escape through symlinked ancestors, covered by `246702d`.
 `2658490` versions the daily-cycle and durable report schemas as `1.1.0` and
-refreshes the compatibility manifest hashes.
+refreshes the compatibility manifest hashes. `58e1615` integrates the paper-input
+preflight into each resumable daily-cycle account path before account creation and
+versions those contracts as `1.2.0`; the current full gate is 224 Python tests.
 
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 passing report set was pinned in `67c59ad`, and the latest runtime reports were
-rerun from `2658490`. The aggregate paper report output was made safe and
+rerun from `58e1615`. The aggregate paper report output was made safe and
 no-overwrite in `27d3fdd`, with conflict termination corrected in `28319fc` and
 dangling output/temporary symlinks rejected in `40e110e`. The genuine-only
 `v1-release-acceptance` target landed in `3051376`; `22e4d50` makes it reject

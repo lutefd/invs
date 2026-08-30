@@ -3,17 +3,17 @@
 ## Result
 
 The latest disposable installation lifecycle harness rerun passed at commit
-`3b1ad115058089fe379f2e5c9cd54eb1413aa92d`:
+`58e16159842eb3dbd5bc34e84732feb22f06191d`:
 
 ```sh
 INVS_BIND_ADDRESS=127.0.0.1 make v1-install-upgrade-acceptance
 ```
 
-The machine-readable report was generated at `2026-08-30T14:52:33Z`:
+The machine-readable report was generated at `2026-08-30T15:08:37Z`:
 
 ```text
 data/research/acceptance/v1/v1-install-upgrade.json
-sha256=6d8db933fe8345fb51798e1ef7ec6499170797e51a30f9d97abf38cf3a47a9ef
+sha256=b9ce96992c60131eb969594d266fc431ae4d924b0bf09a3c80d1095e44a3f4a0
 ```
 
 ## Scenarios
@@ -28,9 +28,9 @@ sha256=6d8db933fe8345fb51798e1ef7ec6499170797e51a30f9d97abf38cf3a47a9ef
 | Interrupted-run recovery | Actual daily-cycle CLI failure followed by resume and completion | Passed |
 
 The harness records separate stage logs under
-`data/research/acceptance/v1/install-upgrade-20260830T145208Z-1993972/` and removes
-the disposable Compose project `invs-v1-install-1993971-1993972`, volume, and restore
-database `restore_v1_install_20260830145208_1993972` on exit. The live `invs`
+`data/research/acceptance/v1/install-upgrade-20260830T150812Z-2091652/` and removes
+the disposable Compose project `invs-v1-install-2091651-2091652`, volume, and restore
+database `restore_v1_install_20260830150812_2091652` on exit. The live `invs`
 PostgreSQL volume and long-lived services were not used by this acceptance.
 
 ## Boundary
@@ -42,9 +42,10 @@ it does not claim a migration from every historical checkout. The daily-cycle
 interruption is a deterministic dependency failure/resume drill, not a host
 power-loss simulation.
 
-The daily-cycle and durable daily-cycle-report schema revision is `1.1.0`; the
+The daily-cycle and durable daily-cycle-report schema revision is `1.2.0`; the
 release manifest was refreshed and the lifecycle harness verified the revised
-checkout.
+checkout. Each configured paper account now runs the hash-pinned input preflight
+before account creation.
 
 The v1.0 release remains pending a genuine wall-clock forward paper record. The
 retained v0.6 paper evidence remains recorded/replayed and is not promoted by this

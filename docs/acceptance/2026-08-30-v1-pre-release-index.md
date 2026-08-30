@@ -7,12 +7,12 @@ current operational snapshot below was captured from checkout commit
 `92508ffe2432ca9b5ec89e1853d2282338e60544`. The runtime hardening was committed in
 `b5200fa8cc6e0a82e0933797098b59f3fc81f30b`. The full validation and latest v1
 acceptance reruns were executed from commit
-`3b1ad115058089fe379f2e5c9cd54eb1413aa92d`; the operational snapshot remains the
-earlier host evidence cited below. The current full `make test` gate passed 223
+`58e16159842eb3dbd5bc34e84732feb22f06191d`; the operational snapshot remains the
+earlier host evidence cited below. The current full `make test` gate passed 224
 Python tests after explicit paper decision-clock/report binding, daily-cycle input,
-stage-log, ledger-root, destination path, and read-only session-input preflight
-hardening. The daily-cycle and durable daily-cycle-report contracts are now revision
-`1.1.0`, with the report exposing its bound decision clock. Release and workflow entry
+stage-log, ledger-root, destination path, and integrated per-account session-input
+preflight hardening. The daily-cycle and durable daily-cycle-report contracts are now
+revision `1.2.0`, with the report exposing its bound decision clock. Release and workflow entry
 points also reject
 symlinked parent paths that resolve outside the repository.
 `INVS_BIND_ADDRESS=127.0.0.1`
@@ -22,8 +22,9 @@ was used where validation needed to override the operator's local non-loopback
 The read-only `invs-paper validate-inputs` / `make paper-validate-inputs` path now
 checks the immutable paper-account envelope, every hash-pinned input artifact, the
 selected calendar session and decision clock, active membership, and current close
-prices before account creation or ledger writes. It is an operator preflight for the
-next genuine session, not forward evidence by itself.
+prices before account creation or ledger writes. The resumable daily-cycle now runs
+that same preflight as a per-account stage before account creation. It is an operator
+preflight for the next genuine session, not forward evidence by itself.
 
 The genuine-only `v1-release-acceptance` target was added at
 `3051376`. It has not been run because no genuine forward record exists; its
@@ -38,7 +39,7 @@ criterion.
 
 | Command | Result | Evidence |
 | --- | --- | --- |
-| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 223 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 at `3b1ad11` |
+| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 224 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 at `58e1615` |
 | `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 61 schemas, 3 registries, 16 migrations, and complete data-fitness surfaces | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ingest SOURCE=all` | Passed: all five enabled source runs completed without rejected resources | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 INVS_CONFIG_FILE=./config/config.local.yaml make ingest SOURCE=nasdaq-calendar RUN_KEY=nasdaq-calendar-2026-08-30` | Passed: real XNAS current/reference publication, 365 sessions, zero rejected records | [XNAS calendar publication report](2026-08-30-nasdaq-calendar-publication.md) |
@@ -56,7 +57,7 @@ criterion.
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-resilience-acceptance` | Passed: all eleven stages and seven scenarios | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-install-upgrade-acceptance` | Passed: fresh install, pre-v1 upgrade, idempotent reapply, backup/restore, tamper rejection, and interrupted recovery | [Install/upgrade acceptance report](2026-08-30-v1-install-upgrade.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make paper-acceptance-report PAPER_ACCOUNT_ID=... PAPER_DATA_ROOT=/data/research/acceptance/v0.6/reproduction PAPER_LEDGER_ROOT=/data/research/acceptance/v0.6/reproduction/ledger` | Passed: derived all five v1 paper checks from the retained deterministic ledger without source mutation | Runtime output from 2026-08-30 |
-| `INVS_BIND_ADDRESS=127.0.0.1 make v1-pre-release-acceptance` | Passed: 223 Python tests, operational checks, migration replay, 11 resilience steps across 7 scenarios, 6 installation-lifecycle stages, replay guard, and workflow reports with intentional `attention` | Runtime output from 2026-08-30 at `3b1ad11`; resilience report `65b07ab202261570288cdd79e2d0efbd98c5c06e9f706c2cf7f50431e733c1d8`, install report `6d8db933fe8345fb51798e1ef7ec6499170797e51a30f9d97abf38cf3a47a9ef` |
+| `INVS_BIND_ADDRESS=127.0.0.1 make v1-pre-release-acceptance` | Passed: 224 Python tests, operational checks, migration replay, 11 resilience steps across 7 scenarios, 6 installation-lifecycle stages, replay guard, and workflow reports with intentional `attention` | Runtime output from 2026-08-30 at `58e1615`; resilience report `42023629e3366a61760aacef35d5d866c86c68e5374dfd6385118dc2d9dc8118`, install report `b9ce96992c60131eb969594d266fc431ae4d924b0bf09a3c80d1095e44a3f4a0` |
 | `V1_FORWARD_RECORD=... V1_PAPER_REPORT=... INVS_BIND_ADDRESS=127.0.0.1 make v1-release-acceptance` | Guarded: requires genuine forward evidence and aggregate paper report as safe repository-relative regular files before running the complete ladder; rejects external symlink ancestors; not run because the genuine record is absent | `22e4d50`, `246702d` precondition checks |
 
 ## v1 implementation checkpoints
@@ -113,6 +114,9 @@ criterion.
 - `3b1ad11` — add a read-only paper-session input preflight and operator target for
   validating the immutable account, exact input bytes, calendar session, decision
   clock, membership, and current close prices before ledger creation.
+- `58e1615` — integrate that paper-session input preflight into each resumable
+  daily-cycle account path before account creation, and version the cycle contracts
+  as `1.2.0`.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the
@@ -129,7 +133,7 @@ The version compatibility and forward-upgrade procedure is in the
 | Historical bias | 13-probe retained bias suite passes | Accepted challenge boundary |
 | Thematic/cross-market workflow | Both reports validate and link all layers | `attention` until forward evidence exists |
 | Brazil/commodity coverage | Explicit bounded fitness labels and missing coverage | Not a broad coverage claim |
-| Forward-record capture path | Contract, hash binding, report-time binding, stale/reconciliation checks, CLI acceptance tests, and read-only session-input preflight pass | Ready to capture only after a real recent paper session |
+| Forward-record capture path | Contract, hash binding, report-time binding, stale/reconciliation checks, CLI acceptance tests, and integrated read-only session-input preflight pass | Ready to capture only after a real recent paper session |
 | Paper price-basis boundary | Split-adjusted paper inputs are admitted without actions; backtests remain raw-only; mixed bases reject | Accepted implementation boundary; requires a genuine session for release |
 | Data-fitness matrix | 29 entries cover 5 catalog datasets, 8 backtest kinds, 4 feature families, and workflow evidence; unlisted sources reject | Accepted repository classification boundary; source breadth remains bounded |
 | Normalized Yahoo refresh | Legacy `raw` partition and stale derived artifact archived; preserved raw evidence reingested as `split_adjusted`; reconciliation clean | Installation-replay preparation only; not forward evidence |

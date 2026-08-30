@@ -1500,7 +1500,7 @@ The complete local operator path is specification-driven so every derived artifa
 has an explicit input and recovery boundary. Start from the strict contract in
 `schemas/daily-cycle.schema.json`, then run:
 
-The current daily-cycle and durable daily-cycle-report contract revision is `1.1.0`.
+The current daily-cycle and durable daily-cycle-report contract revision is `1.2.0`.
 The report records the specification's bound `decision_at` so a resume can be
 checked against the same information cutoff.
 
@@ -1509,11 +1509,12 @@ make daily-cycle CYCLE_SPEC=/absolute/path/to/daily-cycle.json
 ```
 
 The runner performs release preflight, collection, filesystem reconciliation,
-feature-batch publication, each configured paper account's create/run/reconcile
-steps, an immutable backup (or backup validation on resume), final reconciliation,
-and the operational status check. It writes a machine-readable report and one log
-per stage. A cycle report is resumable only when its specification hash, commands,
-and prior exit codes still match; changed inputs require a new cycle ID/specification.
+feature-batch publication, each configured paper account's input preflight and
+create/run/reconcile steps, an immutable backup (or backup validation on resume),
+final reconciliation, and the operational status check. It writes a machine-readable
+report and one log per stage. A cycle report is resumable only when its specification
+hash, commands, and prior exit codes still match; changed inputs require a new cycle
+ID/specification.
 The top-level `decision_at` is required, is normalized as a canonical UTC timestamp,
 is included in the cycle specification hash, and is passed to every paper run. Set
 it to the actual after-close cutoff used for the cycle and never advance it while
