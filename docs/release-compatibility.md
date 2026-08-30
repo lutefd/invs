@@ -92,7 +92,9 @@ V1_PAPER_REPORT=data/research/forward/v1/paper-report.json \
 make v1-release-acceptance
 ```
 
-It requires both evidence references before invoking the full pre-release ladder.
+It requires both evidence references as safe repository-relative regular files before
+invoking the full pre-release ladder. Missing, absolute, traversing, or symlinked
+references fail before any validation or container work begins.
 The nested workflow run therefore consumes genuine evidence and must pass the
 thematic scenario; the cross-market scenario may retain its documented
 non-backtest-safe commodity `attention` status. Without the references, the target

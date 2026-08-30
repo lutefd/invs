@@ -1608,9 +1608,9 @@ passing report set was pinned in `67c59ad`, and the latest runtime reports were
 rerun from `1d5d2ad`. The aggregate paper report output was made safe and
 no-overwrite in `27d3fdd`, with conflict termination corrected in `28319fc` and
 dangling output/temporary symlinks rejected in `40e110e`. The genuine-only
-`v1-release-acceptance` target landed in `3051376`; it requires both forward
-evidence references before running the complete ladder and cannot silently accept
-the replay workflow.
+`v1-release-acceptance` target landed in `3051376`; `22e4d50` makes it reject
+missing, traversing, absolute, or symlinked forward-evidence references before
+running the complete ladder, and it cannot silently accept the replay workflow.
 
 This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
 `attention` because the retained paper evidence is recorded/replayed rather than a

@@ -242,7 +242,9 @@ symlink traversal and report-temp races.
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 report evidence was pinned in `67c59ad` and the latest runtime reports were rerun
 from `1d5d2ad`. The genuine-only `v1-release-acceptance` wrapper landed in
-`3051376` and refuses to enter the ladder without both forward evidence references.
+`3051376` and refuses to enter the ladder without both forward evidence references;
+`22e4d50` also rejects missing, traversing, absolute, or symlinked references before
+any validation or container work begins.
 
 The [v1 resilience acceptance report](acceptance/2026-08-30-v1-resilience.md) passes
 the retained historical-bias and paper-ledger checks, CLI-level daily-cycle
