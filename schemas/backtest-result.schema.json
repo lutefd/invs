@@ -67,12 +67,13 @@
     "context": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["strategy", "period", "universe", "cost_policy", "base_currency", "reporting_currency"],
+      "required": ["strategy", "period", "universe", "cost_policy", "metrics_policy", "base_currency", "reporting_currency"],
       "properties": {
         "strategy": { "$ref": "backtest-experiment.schema.json#/$defs/strategy" },
         "period": { "$ref": "backtest-experiment.schema.json#/$defs/dateRange" },
         "universe": { "$ref": "backtest-experiment.schema.json#/$defs/universe" },
         "cost_policy": { "$ref": "backtest-experiment.schema.json#/$defs/costPolicy" },
+        "metrics_policy": { "$ref": "backtest-experiment.schema.json#/$defs/metricsPolicy" },
         "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
         "reporting_currency": {
           "anyOf": [
@@ -85,12 +86,23 @@
     "metrics": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "values", "attribution"],
+      "required": ["schema_version", "metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "metrics_policy", "risk_free_series", "values", "attribution"],
       "properties": {
+        "schema_version": { "const": "1.0.0" },
         "metrics_version": { "const": "1.0.0" },
         "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
         "annualization_factor": { "type": "integer", "minimum": 1 },
-        "risk_free_annual": { "$ref": "common.schema.json#/$defs/decimal" },
+        "risk_free_annual": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/decimal" },
+            { "type": "null" }
+          ]
+        },
+        "metrics_policy": { "$ref": "backtest-experiment.schema.json#/$defs/metricsPolicy" },
+        "risk_free_series": {
+          "type": "array",
+          "items": { "$ref": "backtest-metrics.schema.json#/$defs/riskFreeSeriesRow" }
+        },
         "values": { "type": "object", "minProperties": 1 },
         "attribution": {
           "type": "object",

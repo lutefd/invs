@@ -4,13 +4,23 @@
   "title": "Backtest metrics artifact",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "values", "attribution"],
+  "required": ["schema_version", "metrics_version", "base_currency", "annualization_factor", "risk_free_annual", "metrics_policy", "risk_free_series", "values", "attribution"],
   "properties": {
     "schema_version": { "const": "1.0.0" },
     "metrics_version": { "const": "1.0.0" },
     "base_currency": { "$ref": "common.schema.json#/$defs/currency" },
     "annualization_factor": { "type": "integer", "minimum": 1 },
-    "risk_free_annual": { "$ref": "common.schema.json#/$defs/decimal" },
+    "risk_free_annual": {
+      "anyOf": [
+        { "$ref": "common.schema.json#/$defs/decimal" },
+        { "type": "null" }
+      ]
+    },
+    "metrics_policy": { "$ref": "backtest-experiment.schema.json#/$defs/metricsPolicy" },
+    "risk_free_series": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/riskFreeSeriesRow" }
+    },
     "values": {
       "type": "object",
       "additionalProperties": {
@@ -48,6 +58,17 @@
         "return": { "$ref": "common.schema.json#/$defs/decimal" },
         "trade_count": { "type": "integer", "minimum": 0 },
         "cost": { "$ref": "common.schema.json#/$defs/nonNegativeDecimal" }
+      }
+    },
+    "riskFreeSeriesRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["period_start", "period_end", "annual_rate", "daily_rate"],
+      "properties": {
+        "period_start": { "$ref": "common.schema.json#/$defs/date" },
+        "period_end": { "$ref": "common.schema.json#/$defs/date" },
+        "annual_rate": { "$ref": "common.schema.json#/$defs/decimal" },
+        "daily_rate": { "$ref": "common.schema.json#/$defs/decimal" }
       }
     }
   }

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "experiment_id", "strategy", "period", "universe", "inputs",
-    "benchmark", "decision_policy", "accounting_policy", "cost_policy", "risk_policy",
+    "benchmark", "decision_policy", "accounting_policy", "cost_policy", "risk_policy", "metrics_policy",
     "partitions", "missing_data_policy"
   ],
   "properties": {
@@ -26,6 +26,7 @@
     "accounting_policy": { "$ref": "#/$defs/accountingPolicy" },
     "cost_policy": { "$ref": "#/$defs/costPolicy" },
     "risk_policy": { "$ref": "#/$defs/riskPolicy" },
+    "metrics_policy": { "$ref": "#/$defs/metricsPolicy" },
     "partitions": {
       "type": "array",
       "minItems": 3,
@@ -102,7 +103,7 @@
       "additionalProperties": false,
       "required": ["kind", "artifact_id", "path", "sha256", "available_at"],
       "properties": {
-        "kind": { "enum": ["prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro"] },
+      "kind": { "enum": ["prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro", "risk_free"] },
         "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
         "path": { "$ref": "#/$defs/relativePath" },
         "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
@@ -169,6 +170,27 @@
         "max_gross_exposure": { "$ref": "#/$defs/nonNegativeDecimal" },
         "max_position_weight": { "$ref": "#/$defs/nonNegativeDecimal" },
         "max_participation": { "$ref": "#/$defs/nonNegativeDecimal" }
+      }
+    },
+    "metricsPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version", "return_basis", "annualization_factor", "risk_free_source",
+        "risk_free_annual", "missing_period_policy"
+      ],
+      "properties": {
+        "version": { "$ref": "#/$defs/semver" },
+        "return_basis": { "const": "close_to_close" },
+        "annualization_factor": { "type": "integer", "minimum": 1 },
+        "risk_free_source": { "enum": ["constant_annual", "artifact"] },
+        "risk_free_annual": {
+          "anyOf": [
+            { "$ref": "#/$defs/decimal" },
+            { "type": "null" }
+          ]
+        },
+        "missing_period_policy": { "const": "reject" }
       }
     },
     "partition": {

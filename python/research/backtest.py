@@ -1341,17 +1341,76 @@ def _attribution(
     return result
 
 
-def _metrics(spec: Mapping[str, Any], state: _State, nav_rows: tuple[dict[str, Any], ...]) -> dict[str, Any]:
+def _risk_free_series(
+    spec: Mapping[str, Any], inputs: BacktestInputs, nav_rows: tuple[dict[str, Any], ...]
+) -> list[dict[str, str]]:
+    policy = spec["metrics_policy"]
+    annualization_factor = Decimal(policy["annualization_factor"])
+    result: list[dict[str, str]] = []
+    for previous, current in pairwise(nav_rows):
+        end_at = datetime.fromisoformat(current["decision_at"])
+        if policy["risk_free_source"] == "constant_annual":
+            annual_rate = _d(policy["risk_free_annual"])
+        else:
+            candidates = [
+                row
+                for row in inputs.risk_free
+                if row["observed_at"] <= end_at and row["available_at"] <= end_at
+            ]
+            if not candidates:
+                raise BacktestMissingDataError(
+                    f"no point-in-time risk-free observation supports {current['session_date']}"
+                )
+            candidates.sort(key=lambda row: (row["observed_at"], row["available_at"], row["revision"]))
+            latest_rank = (
+                candidates[-1]["observed_at"],
+                candidates[-1]["available_at"],
+                candidates[-1]["revision"],
+            )
+            latest = [
+                row
+                for row in candidates
+                if (row["observed_at"], row["available_at"], row["revision"]) == latest_rank
+            ]
+            if len({row["value"] for row in latest}) != 1:
+                raise BacktestInputError(
+                    f"risk-free observations conflict at {current['session_date']}"
+                )
+            annual_rate = latest[-1]["value"]
+        with localcontext() as context:
+            context.prec = _PRECISION
+            daily_rate = annual_rate / annualization_factor
+        result.append(
+            {
+                "period_start": previous["session_date"],
+                "period_end": current["session_date"],
+                "annual_rate": _dstr(annual_rate),
+                "daily_rate": _dstr(daily_rate),
+            }
+        )
+    return result
+
+
+def _metrics(
+    spec: Mapping[str, Any],
+    inputs: BacktestInputs,
+    state: _State,
+    nav_rows: tuple[dict[str, Any], ...],
+) -> dict[str, Any]:
+    metrics_policy = spec["metrics_policy"]
+    annualization_factor = metrics_policy["annualization_factor"]
     nav_values = [_d(row["nav"]) for row in nav_rows]
     benchmark_values = [_d(row["benchmark_nav"]) for row in nav_rows]
     returns = _returns(nav_values)
     benchmark_returns = _returns(benchmark_values)
+    risk_free_series = _risk_free_series(spec, inputs, nav_rows)
+    risk_free_daily = [_d(row["daily_rate"]) for row in risk_free_series]
     total_return = nav_values[-1] / nav_values[0] - _ONE
     benchmark_return = benchmark_values[-1] / benchmark_values[0] - _ONE
     with localcontext() as context:
         context.prec = _PRECISION
         cagr = (
-            ((nav_values[-1] / nav_values[0]).ln() * (Decimal(ANNUALIZATION_FACTOR) / Decimal(max(len(nav_values) - 1, 1)))).exp()
+            ((nav_values[-1] / nav_values[0]).ln() * (Decimal(annualization_factor) / Decimal(max(len(nav_values) - 1, 1)))).exp()
             - _ONE
         )
     mean = sum(returns, _ZERO) / Decimal(len(returns)) if returns else None
@@ -1360,18 +1419,17 @@ def _metrics(spec: Mapping[str, Any], state: _State, nav_rows: tuple[dict[str, A
         if mean is not None and len(returns) > 1
         else None
     )
-    volatility = variance.sqrt() * Decimal(ANNUALIZATION_FACTOR).sqrt() if variance is not None else None
-    risk_free_daily = _d(spec.get("metrics_policy", {}).get("risk_free_annual", "0")) / Decimal(ANNUALIZATION_FACTOR)
-    excess = [value - risk_free_daily for value in returns]
+    volatility = variance.sqrt() * Decimal(annualization_factor).sqrt() if variance is not None else None
+    excess = [value - rate for value, rate in zip(returns, risk_free_daily)]
     excess_mean = sum(excess, _ZERO) / Decimal(len(excess)) if excess else None
-    sharpe = excess_mean * Decimal(ANNUALIZATION_FACTOR).sqrt() / volatility if volatility else None
-    downside = [min(value - risk_free_daily, _ZERO) ** 2 for value in returns]
+    sharpe = excess_mean * Decimal(annualization_factor).sqrt() / volatility if volatility else None
+    downside = [min(value - rate, _ZERO) ** 2 for value, rate in zip(returns, risk_free_daily)]
     downside_deviation = (
-        (sum(downside, _ZERO) / Decimal(len(downside))).sqrt() * Decimal(ANNUALIZATION_FACTOR).sqrt()
+        (sum(downside, _ZERO) / Decimal(len(downside))).sqrt() * Decimal(annualization_factor).sqrt()
         if downside
         else None
     )
-    sortino = excess_mean * Decimal(ANNUALIZATION_FACTOR).sqrt() / downside_deviation if downside_deviation else None
+    sortino = excess_mean * Decimal(annualization_factor).sqrt() / downside_deviation if downside_deviation else None
     peak = nav_values[0]
     max_drawdown = _ZERO
     for value in nav_values:
@@ -1419,8 +1477,10 @@ def _metrics(spec: Mapping[str, Any], state: _State, nav_rows: tuple[dict[str, A
         "schema_version": BACKTEST_SCHEMA_VERSION,
         "metrics_version": METRICS_VERSION,
         "base_currency": spec["accounting_policy"]["base_currency"],
-        "annualization_factor": ANNUALIZATION_FACTOR,
-        "risk_free_annual": "0",
+        "annualization_factor": annualization_factor,
+        "risk_free_annual": metrics_policy["risk_free_annual"],
+        "metrics_policy": metrics_policy,
+        "risk_free_series": risk_free_series,
         "values": values,
         "attribution": {
             "by_partition": _attribution(
@@ -1603,7 +1663,7 @@ def simulate_backtest(
     if state.pending:
         raise BacktestError("pending orders remain after the final executable session")
     nav_tuple = tuple(nav_rows)
-    metrics = _metrics(normalized, state, nav_tuple)
+    metrics = _metrics(normalized, inputs, state, nav_tuple)
     result_id = _uuid(_RESULT_NAMESPACE, f"{normalized['experiment_id']}:{spec_hash}:{input_hash}:{ENGINE_VERSION}")
     summary = {
         "session_count": len(nav_rows),
@@ -1625,6 +1685,7 @@ def simulate_backtest(
             "period": normalized["period"],
             "universe": normalized["universe"],
             "cost_policy": normalized["cost_policy"],
+            "metrics_policy": normalized["metrics_policy"],
             "base_currency": normalized["accounting_policy"]["base_currency"],
             "reporting_currency": normalized["accounting_policy"]["reporting_currency"],
         },

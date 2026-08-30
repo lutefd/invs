@@ -354,6 +354,8 @@ def _validate_metrics(metrics: Any) -> None:
         "base_currency",
         "annualization_factor",
         "risk_free_annual",
+        "metrics_policy",
+        "risk_free_series",
         "values",
         "attribution",
     }
@@ -361,6 +363,55 @@ def _validate_metrics(metrics: Any) -> None:
         raise BacktestResultValidationError("metrics artifact has missing or unknown fields")
     if metrics["schema_version"] != BACKTEST_SCHEMA_VERSION or metrics["metrics_version"] != "1.0.0":
         raise BacktestResultValidationError("metrics artifact version is unsupported")
+    policy = metrics["metrics_policy"]
+    if not isinstance(policy, dict) or set(policy) != {
+        "version",
+        "return_basis",
+        "annualization_factor",
+        "risk_free_source",
+        "risk_free_annual",
+        "missing_period_policy",
+    }:
+        raise BacktestResultValidationError("metrics policy is invalid")
+    if (
+        not isinstance(policy["version"], str)
+        or not re.fullmatch(r"^[0-9]+\.[0-9]+\.[0-9]+$", policy["version"])
+        or policy["return_basis"] != "close_to_close"
+        or policy["risk_free_source"] not in {"constant_annual", "artifact"}
+        or policy["missing_period_policy"] != "reject"
+        or policy["annualization_factor"] != metrics["annualization_factor"]
+        or policy["risk_free_annual"] != metrics["risk_free_annual"]
+    ):
+        raise BacktestResultValidationError("metrics policy disagrees with its summary fields")
+    if (
+        not isinstance(metrics["annualization_factor"], int)
+        or isinstance(metrics["annualization_factor"], bool)
+        or metrics["annualization_factor"] < 1
+    ):
+        raise BacktestResultValidationError("annualization_factor is invalid")
+    if metrics["risk_free_annual"] is not None and (
+        not isinstance(metrics["risk_free_annual"], str)
+        or not _DECIMAL.fullmatch(metrics["risk_free_annual"])
+    ):
+        raise BacktestResultValidationError("risk_free_annual is invalid")
+    series = metrics["risk_free_series"]
+    if not isinstance(series, list):
+        raise BacktestResultValidationError("risk_free_series must be an array")
+    previous_end: str | None = None
+    for index, row in enumerate(series):
+        if not isinstance(row, dict) or set(row) != {"period_start", "period_end", "annual_rate", "daily_rate"}:
+            raise BacktestResultValidationError(f"risk_free_series row {index} is invalid")
+        for field in ("period_start", "period_end"):
+            if not isinstance(row[field], str) or not re.fullmatch(r"^\d{4}-\d{2}-\d{2}$", row[field]):
+                raise BacktestResultValidationError(f"risk_free_series row {index}.{field} is invalid")
+        if previous_end is not None and row["period_start"] != previous_end:
+            raise BacktestResultValidationError("risk_free_series periods are not contiguous")
+        if row["period_start"] >= row["period_end"]:
+            raise BacktestResultValidationError(f"risk_free_series row {index} has an invalid period")
+        for field in ("annual_rate", "daily_rate"):
+            if not isinstance(row[field], str) or not _DECIMAL.fullmatch(row[field]):
+                raise BacktestResultValidationError(f"risk_free_series row {index}.{field} is invalid")
+        previous_end = row["period_end"]
     if not isinstance(metrics["values"], dict) or not metrics["values"]:
         raise BacktestResultValidationError("metrics values must be a non-empty object")
     for key, value in metrics["values"].items():
@@ -386,6 +437,8 @@ def _validate_metrics(metrics: Any) -> None:
             for field in ("start_nav", "end_nav", "return", "cost"):
                 if not isinstance(row[field], str) or not _DECIMAL.fullmatch(row[field]):
                     raise BacktestResultValidationError("metrics attribution decimal is invalid")
+            if not isinstance(row["trade_count"], int) or isinstance(row["trade_count"], bool) or row["trade_count"] < 0:
+                raise BacktestResultValidationError("metrics attribution trade_count is invalid")
 
 
 def read_backtest_result(manifest_path: str | Path) -> ValidatedBacktestResult:

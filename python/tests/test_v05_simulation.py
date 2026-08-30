@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from copy import deepcopy
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from pathlib import Path
 
 import pytest
@@ -142,6 +142,14 @@ def _base_fixture(tmp_path: Path, *, strategy_name: str = "equal_weight") -> tup
                 "max_gross_exposure": "1",
                 "max_position_weight": "1",
                 "max_participation": "1",
+            },
+            "metrics_policy": {
+                "version": "1.0.0",
+                "return_basis": "close_to_close",
+                "annualization_factor": 252,
+                "risk_free_source": "constant_annual",
+                "risk_free_annual": "0",
+                "missing_period_policy": "reject",
             },
             "partitions": [
                 {"name": "development", "kind": "development", "start_date": dates[0], "end_date": dates[0]},
@@ -325,6 +333,48 @@ def test_clean_replay_is_byte_deterministic(tmp_path: Path) -> None:
     second = simulate_backtest(replay_spec, data_root=replay_root)
 
     assert first == second
+
+
+def test_artifact_risk_free_series_is_point_in_time_and_published(tmp_path: Path) -> None:
+    from research.backtest import simulate_backtest
+
+    spec, root = _base_fixture(tmp_path)
+    risk_free_ref = _write_artifact(
+        root,
+        "risk_free",
+        4,
+        [
+            {
+                "observation_id": "risk-free-2025-01",
+                "observed_at": "2025-01-01T00:00:00Z",
+                "available_at": AVAILABLE_AT,
+                "value": "0.025",
+                "revision": 0,
+            }
+        ],
+    )
+    changed = deepcopy(spec)
+    changed.pop("experiment_id")
+    changed["metrics_policy"] = {
+        "version": "1.0.0",
+        "return_basis": "close_to_close",
+        "annualization_factor": 252,
+        "risk_free_source": "artifact",
+        "risk_free_annual": None,
+        "missing_period_policy": "reject",
+    }
+    changed["inputs"].append(risk_free_ref)
+    artifact_spec = build_experiment_spec(changed)
+
+    run = simulate_backtest(artifact_spec, data_root=root)
+
+    assert run.metrics["risk_free_annual"] is None
+    assert len(run.metrics["risk_free_series"]) == len(run.nav) - 1
+    assert all(row["annual_rate"] == "0.025" for row in run.metrics["risk_free_series"])
+    with localcontext() as context:
+        context.prec = 80
+        expected_daily = Decimal("0.025") / Decimal(252)
+    assert all(Decimal(row["daily_rate"]) == expected_daily for row in run.metrics["risk_free_series"])
 
 
 def test_checkpointed_interruption_resumes_to_the_clean_result(tmp_path: Path) -> None:

@@ -41,6 +41,7 @@ _SPEC_FIELDS = frozenset(
         "accounting_policy",
         "cost_policy",
         "risk_policy",
+        "metrics_policy",
         "partitions",
         "walk_forward_windows",
         "missing_data_policy",
@@ -51,7 +52,7 @@ _ARTIFACT_REF_FIELDS = frozenset(
     {"kind", "artifact_id", "path", "sha256", "available_at", "historical_fitness"}
 )
 _SUPPORTED_INPUT_KINDS = frozenset(
-    {"prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro"}
+    {"prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro", "risk_free"}
 )
 _PARTITION_KINDS = ("development", "validation", "holdout")
 
@@ -372,6 +373,49 @@ def _risk_policy(value: Any) -> dict[str, Any]:
     return result
 
 
+def _metrics_policy(value: Any, *, input_kinds: set[str]) -> dict[str, Any]:
+    result = _policy(
+        value,
+        name="metrics_policy",
+        required={
+            "version",
+            "return_basis",
+            "annualization_factor",
+            "risk_free_source",
+            "risk_free_annual",
+            "missing_period_policy",
+        },
+    )
+    result["version"] = _semver(result["version"], field="metrics_policy.version")
+    if result["return_basis"] != "close_to_close":
+        raise BacktestSpecError("metrics_policy.return_basis is unsupported")
+    annualization_factor = result["annualization_factor"]
+    if (
+        not isinstance(annualization_factor, int)
+        or isinstance(annualization_factor, bool)
+        or annualization_factor < 1
+    ):
+        raise BacktestSpecError("metrics_policy.annualization_factor must be a positive integer")
+    if result["risk_free_source"] not in {"constant_annual", "artifact"}:
+        raise BacktestSpecError("metrics_policy.risk_free_source is unsupported")
+    if result["missing_period_policy"] != "reject":
+        raise BacktestSpecError("metrics_policy.missing_period_policy is unsupported")
+    if result["risk_free_source"] == "constant_annual":
+        if "risk_free" in input_kinds:
+            raise BacktestSpecError("constant_annual metrics cannot include a risk_free input")
+        if result["risk_free_annual"] is None:
+            raise BacktestSpecError("constant_annual metrics require risk_free_annual")
+        result["risk_free_annual"] = _decimal(
+            result["risk_free_annual"], field="metrics_policy.risk_free_annual"
+        )
+    else:
+        if "risk_free" not in input_kinds:
+            raise BacktestSpecError("artifact metrics require a risk_free input")
+        if result["risk_free_annual"] is not None:
+            raise BacktestSpecError("artifact metrics must set risk_free_annual to null")
+    return result
+
+
 def _partitions(value: Any, *, period: Mapping[str, str]) -> list[dict[str, str]]:
     if not isinstance(value, list) or len(value) < 3:
         raise BacktestSpecError("partitions must contain development, validation, and holdout")
@@ -472,6 +516,7 @@ def normalize_experiment_spec(value: Mapping[str, Any], *, require_id: bool = Fa
         "accounting_policy": _accounting_policy(value["accounting_policy"]),
         "cost_policy": _cost_policy(value["cost_policy"]),
         "risk_policy": _risk_policy(value["risk_policy"]),
+        "metrics_policy": _metrics_policy(value["metrics_policy"], input_kinds=set(input_kinds)),
         "partitions": _partitions(value["partitions"], period=period),
         "walk_forward_windows": _walk_forward_windows(value.get("walk_forward_windows"), period=period),
         "missing_data_policy": value["missing_data_policy"],

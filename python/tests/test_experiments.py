@@ -78,6 +78,14 @@ def _spec() -> dict:
             "max_position_weight": "1",
             "max_participation": "1",
         },
+        "metrics_policy": {
+            "version": "1.0.0",
+            "return_basis": "close_to_close",
+            "annualization_factor": 252,
+            "risk_free_source": "constant_annual",
+            "risk_free_annual": "0",
+            "missing_period_policy": "reject",
+        },
         "partitions": [
             {"name": "development", "kind": "development", "start_date": "2025-01-01", "end_date": "2025-01-10"},
             {"name": "validation", "kind": "validation", "start_date": "2025-01-11", "end_date": "2025-01-20"},
@@ -131,6 +139,18 @@ def test_write_and_read_experiment_is_immutable(tmp_path: Path) -> None:
     [
         ("inputs", [_ref("prices", 1), _ref("calendar", 2), _ref("prices", 4)], "one artifact per kind"),
         ("missing_data_policy", "forward_fill", "missing_data_policy is unsupported"),
+        (
+            "metrics_policy",
+            {
+                "version": "1.0.0",
+                "return_basis": "close_to_close",
+                "annualization_factor": 252,
+                "risk_free_source": "artifact",
+                "risk_free_annual": None,
+                "missing_period_policy": "reject",
+            },
+            "artifact metrics require a risk_free input",
+        ),
         ("strategy", {"name": "equal_weight", "version": "1.0.0", "git_commit": "unknown", "parameters": {}}, "equal_weight requires"),
     ],
 )

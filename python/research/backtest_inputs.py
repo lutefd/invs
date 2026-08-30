@@ -71,7 +71,9 @@ _FX_FIELDS = frozenset(
     {"fixing_at", "base_currency", "quote_currency", "rate", "available_at"}
 )
 _OBSERVATION_FIELDS = frozenset({"observation_id", "observed_at", "available_at", "value", "revision"})
-_KINDS = frozenset({"prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro"})
+_KINDS = frozenset(
+    {"prices", "calendar", "membership", "corporate_actions", "fx", "feature", "macro", "risk_free"}
+)
 
 
 class BacktestInputError(BacktestSpecError):
@@ -99,6 +101,7 @@ class BacktestInputs:
     membership: tuple[dict[str, Any], ...]
     corporate_actions: tuple[dict[str, Any], ...]
     fx: tuple[dict[str, Any], ...]
+    risk_free: tuple[dict[str, Any], ...]
     observations: dict[str, tuple[dict[str, Any], ...]]
 
     def artifact(self, kind: str) -> LoadedInputArtifact | None:
@@ -543,6 +546,7 @@ def load_backtest_inputs(spec: Mapping[str, Any], *, data_root: str | Path) -> B
         artifacts[reference["kind"]] = _load_artifact(path, expected=reference)
     corporate_actions = artifacts.get("corporate_actions")
     fx = artifacts.get("fx")
+    risk_free = artifacts.get("risk_free")
     return BacktestInputs(
         root=root,
         artifacts=artifacts,
@@ -551,6 +555,7 @@ def load_backtest_inputs(spec: Mapping[str, Any], *, data_root: str | Path) -> B
         membership=artifacts["membership"].rows,
         corporate_actions=corporate_actions.rows if corporate_actions is not None else (),
         fx=fx.rows if fx is not None else (),
+        risk_free=risk_free.rows if risk_free is not None else (),
         observations={
             kind: artifact.rows
             for kind, artifact in artifacts.items()
