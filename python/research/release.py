@@ -417,6 +417,7 @@ def _validate_implementations(entries: Any, repo_root: Path) -> None:
     expected_names = {
         "backtest",
         "paper",
+        "forward-record",
         "market-basic",
         "market-momentum",
         "fundamental-growth",

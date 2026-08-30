@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/paper-forward-record.schema.json",
+  "title": "Wall-clock forward paper record",
+  "description": "Hash-pinned evidence captured from recent immutable paper-account reports.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema", "schema_version", "capture_method", "record_id", "account_ids",
+    "session_dates", "sessions", "wall_clock", "started_at", "captured_at", "fitness",
+    "observations"
+  ],
+  "properties": {
+    "$schema": { "const": "../schemas/paper-forward-record.schema.json" },
+    "schema_version": { "const": "1.0.0" },
+    "capture_method": { "const": "invs-paper-forward-capture" },
+    "record_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "account_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/uuid" }
+    },
+    "session_dates": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/date" }
+    },
+    "sessions": { "type": "integer", "minimum": 1 },
+    "wall_clock": { "const": true },
+    "started_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "captured_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
+    "fitness": { "enum": ["backtest_safe", "current_research_only"] },
+    "observations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/observation" }
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+"
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "account_id", "session_date", "account_path", "account_sha256", "report_path",
+        "report_sha256", "report_id", "ledger_manifest_path", "ledger_manifest_sha256",
+        "ledger_sequence_start", "ledger_sequence_end", "reconciled"
+      ],
+      "properties": {
+        "account_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "session_date": { "$ref": "common.schema.json#/$defs/date" },
+        "account_path": { "$ref": "#/$defs/relativePath" },
+        "account_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "report_path": { "$ref": "#/$defs/relativePath" },
+        "report_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "report_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "ledger_manifest_path": { "$ref": "#/$defs/relativePath" },
+        "ledger_manifest_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "ledger_sequence_start": { "type": "integer", "minimum": 1 },
+        "ledger_sequence_end": { "type": "integer", "minimum": 1 },
+        "reconciled": { "const": true }
+      }
+    }
+  }
+}

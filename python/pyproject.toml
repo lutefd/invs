@@ -25,6 +25,7 @@ invs-adjust = "research.adjustment_cli:main"
 invs-bias-audit = "research.bias_audit_cli:main"
 invs-backtest = "research.backtest_cli:main"
 invs-paper = "research.paper_cli:main"
+invs-forward-record = "research.forward_record_cli:main"
 invs-release = "research.release_cli:main"
 invs-workflow = "research.workflow_cli:main"
 

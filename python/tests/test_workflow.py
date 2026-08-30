@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -103,6 +104,81 @@ def _spec(tmp_path: Path, *, scenario: str = "thematic", forward: dict | None = 
     }
 
 
+def _forward_evidence(tmp_path: Path) -> dict[str, str]:
+    session_date = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+    captured_at = datetime.now(UTC).replace(microsecond=0)
+    account_dir = tmp_path / "ledger" / "accounts" / ACCOUNT_A
+    reports_dir = account_dir / "reports"
+    account_path = account_dir / "account.json"
+    report_path = reports_dir / f"report-{session_date}.json"
+    manifest_path = account_dir / "ledger-manifest.json"
+    reports_dir.mkdir(parents=True)
+    _write_json(
+        account_path,
+        {
+            "schema_version": "1.0.0",
+            "account_id": ACCOUNT_A,
+            "inputs": [{"fitness": "current_research_only"}],
+        },
+    )
+    _write_json(
+        report_path,
+        {
+            "schema_version": "1.0.0",
+            "report_id": "50000000-0000-4000-8000-000000000001",
+            "account_id": ACCOUNT_A,
+            "session_date": session_date,
+            "ledger_sequence_start": 1,
+            "ledger_sequence_end": 1,
+            "reconciled": True,
+        },
+    )
+    _write_json(
+        manifest_path,
+        {
+            "schema_version": "1.0.0",
+            "account_id": ACCOUNT_A,
+            "event_count": 1,
+            "last_sequence": 1,
+            "events": [{}],
+        },
+    )
+
+    def relative(path: Path) -> str:
+        return path.relative_to(tmp_path).as_posix()
+
+    evidence = {
+        "$schema": "../schemas/paper-forward-record.schema.json",
+        "schema_version": "1.0.0",
+        "capture_method": "invs-paper-forward-capture",
+        "record_id": "50000000-0000-4000-8000-000000000002",
+        "account_ids": [ACCOUNT_A],
+        "session_dates": [session_date],
+        "sessions": 1,
+        "wall_clock": True,
+        "started_at": (captured_at - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+        "captured_at": captured_at.isoformat().replace("+00:00", "Z"),
+        "fitness": "current_research_only",
+        "observations": [
+            {
+                "account_id": ACCOUNT_A,
+                "session_date": session_date,
+                "account_path": relative(account_path),
+                "account_sha256": hashlib.sha256(account_path.read_bytes()).hexdigest(),
+                "report_path": relative(report_path),
+                "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+                "report_id": "50000000-0000-4000-8000-000000000001",
+                "ledger_manifest_path": relative(manifest_path),
+                "ledger_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                "ledger_sequence_start": 1,
+                "ledger_sequence_end": 1,
+                "reconciled": True,
+            }
+        ],
+    }
+    return _ref(tmp_path / "forward.json", evidence)
+
+
 def test_workflow_report_links_existing_layers_and_preserves_replay_limit(tmp_path: Path) -> None:
     spec = _spec(tmp_path)
     report = build_workflow_report(spec, repo_root=tmp_path)
@@ -151,15 +227,7 @@ def test_cross_market_report_fails_without_commodity_evidence(tmp_path: Path) ->
 
 
 def test_genuine_forward_evidence_can_satisfy_the_workflow_gate(tmp_path: Path) -> None:
-    forward = _ref(
-        tmp_path / "forward.json",
-        {
-            "account_ids": [ACCOUNT_A],
-            "fitness": "current_research_only",
-            "sessions": 3,
-            "wall_clock": True,
-        },
-    )
+    forward = _forward_evidence(tmp_path)
     spec = _spec(tmp_path, forward={"status": "genuine", "evidence": forward})
 
     report = build_workflow_report(spec, repo_root=tmp_path)
@@ -167,6 +235,19 @@ def test_genuine_forward_evidence_can_satisfy_the_workflow_gate(tmp_path: Path) 
     assert report["status"] == "passed"
     assert report["checks"][-1]["check_id"] == "forward-record"
     assert report["checks"][-1]["status"] == "passed"
+
+
+def test_genuine_forward_evidence_rejects_stale_session(tmp_path: Path) -> None:
+    forward = _forward_evidence(tmp_path)
+    evidence = json.loads((tmp_path / "forward.json").read_text(encoding="utf-8"))
+    evidence["session_dates"] = ["2025-01-01"]
+    evidence["observations"][0]["session_date"] = "2025-01-01"
+    _write_json(tmp_path / "forward.json", evidence)
+    forward["sha256"] = hashlib.sha256((tmp_path / "forward.json").read_bytes()).hexdigest()
+    spec = _spec(tmp_path, forward={"status": "genuine", "evidence": forward})
+
+    with pytest.raises(WorkflowValidationError, match="older than"):
+        validate_workflow_spec(spec, repo_root=tmp_path)
 
 
 def test_workflow_rejects_changed_source_hash(tmp_path: Path) -> None:

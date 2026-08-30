@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-resilience-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-reproduction workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-resilience-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-create-account paper-run paper-reconcile paper-acceptance paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -194,6 +194,20 @@ paper-reconcile: config
 	@$(COMPOSE) run --rm --no-deps jupyter python -m research.paper_cli reconcile \
 		--account-id "$(PAPER_ACCOUNT_ID)" \
 		--ledger-root "$(PAPER_LEDGER_ROOT)"
+
+forward-record-capture: config
+	@test -n "$(FORWARD_ACCOUNT_ID)" || (echo "FORWARD_ACCOUNT_ID is required" >&2; exit 2)
+	@test -n "$(FORWARD_LEDGER_ROOT)" || (echo "FORWARD_LEDGER_ROOT is required" >&2; exit 2)
+	@test -n "$(FORWARD_OUTPUT)" || (echo "FORWARD_OUTPUT is required" >&2; exit 2)
+	@case "$(FORWARD_LEDGER_ROOT)" in /*|*..*) echo "FORWARD_LEDGER_ROOT must be a safe repository-relative path" >&2; exit 2;; esac
+	@case "$(FORWARD_OUTPUT)" in /*|*..*) echo "FORWARD_OUTPUT must be a safe repository-relative path" >&2; exit 2;; esac
+	@$(COMPOSE) run --rm --no-deps \
+		-v "$(CURDIR):/repo" \
+		jupyter python -m research.forward_record_cli capture \
+			--repo-root /repo \
+			--ledger-root "/repo/$(FORWARD_LEDGER_ROOT)" \
+			--account-id "$(FORWARD_ACCOUNT_ID)" \
+			--output "/repo/$(FORWARD_OUTPUT)"
 
 feature: config
 	@test -n "$(SECURITY_ID)" || (echo "SECURITY_ID is required" >&2; exit 2)

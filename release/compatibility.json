@@ -285,6 +285,12 @@
         "sha256": "04f34d91089eabf050191df8f7845aa2f0b5174808ead282a6b43da8338f2035"
       },
       {
+        "name": "paper-forward-record",
+        "path": "schemas/paper-forward-record.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "237f19ac7f37b491af19bd9bc09b78c84f080d1bc4c379f067d62fda9bd8750b"
+      },
+      {
         "name": "paper-order",
         "path": "schemas/paper-order.schema.json",
         "schema_version": "1.0.0",
@@ -520,6 +526,12 @@
         "sha256": "57ad8e6c568baf38c1638841a7462fe3379632135d30132f29d0de0360acc7fb"
       },
       {
+        "name": "forward-record",
+        "path": "python/research/forward_record.py",
+        "version": "python-forward-record-1.0.0",
+        "sha256": "a91fbb872711d6226f4a9e8a85d9348d4471056d9a95a6b0da9e5f401fcfa2e8"
+      },
+      {
         "name": "market-basic",
         "path": "python/research/features.py",
         "version": "python-market-basic-1.1.0",
@@ -577,7 +589,7 @@
         "name": "workflow",
         "path": "python/research/workflow.py",
         "version": "python-workflow-1.0.0",
-        "sha256": "40eb563d197dd89fc5285257002cde2741c0278053e47bec9ade762dd89a67b3"
+        "sha256": "3d318b950a26f80882bb6b45aa510b480e1adc2ed099b61d40afe8c37b38f449"
       }
     ],
     "configuration": [
@@ -589,7 +601,7 @@
       {
         "name": "python-project",
         "path": "python/pyproject.toml",
-        "sha256": "d28482b1e4e5f20de597b49d49859db931326ca226cb9955630d45e4f1b8e265"
+        "sha256": "aa9783886144b2a7920c87c7a877e6c2b6c0e07c576bbcad9c658dbd69cba969"
       },
       {
         "name": "compose",

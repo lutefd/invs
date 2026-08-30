@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from .forward_record import ForwardRecordError, validate_forward_record
+
 SCHEMA_VERSION = "1.0.0"
 WORKFLOW_VERSION = "python-workflow-1.0.0"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -228,7 +230,15 @@ def validate_workflow_spec(value: Mapping[str, Any], *, repo_root: str | Path) -
         raise WorkflowValidationError("forward_record.status is unsupported")
     forward_evidence = None if forward["evidence"] is None else _file_ref(forward["evidence"], field="forward_record.evidence")
     if forward_evidence is not None:
-        _resolve_ref(root, forward_evidence, field="forward_record.evidence")
+        evidence_path = _resolve_ref(root, forward_evidence, field="forward_record.evidence")
+        if forward_status == "genuine":
+            try:
+                evidence = _strict_json(evidence_path)
+                if not isinstance(evidence, Mapping):
+                    raise ForwardRecordError("forward record must be an object")
+                validate_forward_record(evidence, repo_root=root)
+            except ForwardRecordError as error:
+                raise WorkflowValidationError(f"forward_record.evidence is invalid: {error}") from error
     if forward_status == "genuine" and forward_evidence is None:
         raise WorkflowValidationError("genuine forward_record requires evidence")
     commodity = None if raw["commodity_evidence"] is None else _file_ref(raw["commodity_evidence"], field="commodity_evidence")
