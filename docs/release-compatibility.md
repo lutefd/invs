@@ -78,12 +78,14 @@ make historical-truth-db-test
 make reconcile
 make health
 make workflow-acceptance
+make v1-forward-record-acceptance
 make v1-resilience-acceptance
 ```
 
 `workflow-acceptance` intentionally reports `attention` until the genuine forward
-record exists. `v1-resilience-acceptance` is the local recovery and bias proof; its
-current result is recorded in
+record exists. `v1-forward-record-acceptance` is the negative proof that retained
+replay evidence cannot satisfy that gate. `v1-resilience-acceptance` is the local
+recovery and bias proof; its current result is recorded in
 [`2026-08-30-v1-resilience.md`](acceptance/2026-08-30-v1-resilience.md).
 The combined command results and remaining release gates are summarized in the
 [v1.0 pre-release evidence index](acceptance/2026-08-30-v1-pre-release-index.md).

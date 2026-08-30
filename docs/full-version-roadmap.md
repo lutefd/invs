@@ -1582,14 +1582,17 @@ thematic and cross-market workflow reports, security/backup/restore runbooks, an
 the resilience/bias harness are implemented in the checkpoints `f8abe40`,
 `31e34b8`, `d5b9c22`, `586d79e`, and `9a0f558`. The CLI-level daily-cycle
 failure/resume acceptance followed in `3f96623`. The [resilience acceptance
-report](acceptance/2026-08-30-v1-resilience.md) passes its six recovery/bias
-scenarios and all ten underlying stages.
+report](acceptance/2026-08-30-v1-resilience.md) passes its seven recovery/bias
+scenarios and all eleven underlying stages. The additional forward-record guard
+in `cf37708` proves that the retained v0.6 replay ledger cannot be promoted into
+genuine wall-clock evidence.
 
 The genuine-forward gate is now fail-closed through the `paper-forward-record`
 contract and `make forward-record-capture`, landed in `e272e3d` with the import
-isolation correction in `b471908` and full ledger replay in `be16303`. The command
-can capture only a recent reconciled paper session and cannot promote retained
-replay evidence.
+isolation correction in `b471908` and full ledger replay in `be16303`. The
+repeatable replay rejection acceptance landed in `cf37708`. The command can
+capture only a recent reconciled paper session and cannot promote retained replay
+evidence.
 
 This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
 `attention` because the retained paper evidence is recorded/replayed rather than a

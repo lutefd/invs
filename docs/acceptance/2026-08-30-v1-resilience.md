@@ -3,21 +3,21 @@
 ## Result
 
 The v1 resilience and historical-bias harness passed at commit
-`be163034387b603396e4fe98253872d369fb52e4`:
+`cf37708cf772d1c4726a50890a3ae24e0bd2b0c3`:
 
 ```sh
 INVS_BIND_ADDRESS=127.0.0.1 make v1-resilience-acceptance
 ```
 
-The machine-readable report was generated at `2026-08-30T07:06:35Z`:
+The machine-readable report was generated at `2026-08-30T07:16:18Z`:
 
 ```text
 data/research/acceptance/v1/v1-resilience.json
-sha256=926bfb2de506ceea9c27558344eb3d7703dbe6b04a28af9b816e8648d8512146
+sha256=0041633f157f4d7ad6a09690119be7950a0bb563cd16b921cb099591bfc3b091
 ```
 
-All ten harness stages passed. The temporary restored PostgreSQL database was
-`restore_v1_20260830070427_124258`; the harness removed it on exit and a follow-up
+All eleven harness stages passed. The temporary restored PostgreSQL database was
+`restore_v1_20260830071410_176335`; the harness removed it on exit and a follow-up
 query found no remaining `restore_v1_*` databases.
 
 ## Scenarios
@@ -28,6 +28,7 @@ query found no remaining `restore_v1_*` databases.
 | Historical-bias challenge | `make backtest-reproduction`, including the retained bias audit | Passed |
 | Paper interruption, idempotency, and rebuild | `make paper-reproduction` | Passed |
 | Daily-cycle resume after a failed dependency | CLI-level `scripts/daily-cycle.sh` failure/resume acceptance via `make v1-daily-cycle-acceptance` | Passed |
+| Replay-only forward record is rejected | `make v1-forward-record-acceptance` against the retained v0.6 paper ledger | Passed |
 | Disposable backup/restore integrity | `make backup-restore-acceptance` | Passed |
 | Clean-root PostgreSQL restore and reconcile | Live `make backup`, `make backup-validate`, `make restore`, then collector `reconcile --fail-on-issues` | Passed |
 
