@@ -60,10 +60,7 @@ run_step backup-fixture make backup-restore-acceptance
 run_step historical-truth make historical-truth-db-test
 run_step bias-and-backtest make backtest-reproduction
 run_step paper-ledger make paper-reproduction
-run_step daily-resume docker compose --progress quiet run --rm --no-deps \
-	-v "$repo_root:/repo:ro" \
-	-e PYTHONPATH=/workspace:/repo \
-	jupyter sh -c "pip install -q -e '.[dev]' && python -m pytest /repo/python/tests/test_daily_cycle.py"
+run_step daily-resume make v1-daily-cycle-acceptance
 
 backup_dir="$temporary_root/backup"
 restore_dir="$temporary_root/restored"
