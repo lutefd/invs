@@ -84,5 +84,7 @@ reconciliation report generated_at=2026-08-30T08:19:45Z issues=0 data_root=/data
 The live PostgreSQL, Jupyter, and Grafana services remained healthy. The active
 feature root now contains only its `.gitkeep`; a new feature artifact will be
 published only with an exact resolver-backed XNAS calendar pin and an explicit
-decision schedule. The v1.0 release still requires a genuinely recent
+decision schedule. The paper loader now admits this source's explicit
+`split_adjusted` basis without corporate-action inputs, while historical backtests
+remain raw-only. The v1.0 release still requires a genuinely recent
 wall-clock paper session and final workflow acceptance.

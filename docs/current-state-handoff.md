@@ -256,6 +256,13 @@ Yahoo evidence was reingested. The new receipt-time partition has 1,673 rows
 through the 2026-08-28 session, and `make reconcile` returned `issues=0`. This is
 installation-replay data preparation only; it is not a wall-clock forward record.
 
+The forward paper input boundary now admits explicitly labeled `split_adjusted`
+price artifacts while keeping historical backtests raw-only. A paper artifact must
+use one price basis, and the loader rejects split-adjusted prices paired with
+corporate actions to prevent double adjustment. This contract and its regressions
+landed in `a1ba6c7`, `22e71cf`, and `7153626`; the full `make test` gate then passed
+204 Python tests with the release manifest and schema catalog aligned.
+
 The supported forward-evidence path is `make forward-record-capture` after a real
 recent paper session. It validates the append-only ledger and reconciled report,
 records account/report/manifest hashes, and refuses stale or replay-only evidence;
@@ -342,6 +349,7 @@ to close the v0.2 calendar gate. See the
 - Latest v1 forward-record validation hardening: `be16303` (`fix(acceptance): replay ledger for forward evidence`)
 - Latest v1 forward-record acceptance guard: `cf37708` (`test(acceptance): reject replay-only forward records`)
 - Latest v1 installation lifecycle acceptance boundary: `c011ab6` (`test(acceptance): add isolated v1 install upgrade drill`)
+- Latest v1 paper price-basis boundary: `7153626` (`test(paper): reject mixed price bases`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`
