@@ -7,7 +7,7 @@ current operational snapshot below was captured from checkout commit
 `92508ffe2432ca9b5ec89e1853d2282338e60544`. The runtime hardening was committed in
 `b5200fa8cc6e0a82e0933797098b59f3fc81f30b`. The full validation and latest v1
 acceptance reruns were executed from commit
-`6d5edab0858c5d46a156606197ee90f4b98a9b87`; the operational snapshot remains the
+`d92b1726868aa1e4f5603b87bf53253190dcebbb`; the operational snapshot remains the
 earlier host evidence cited below. The current full `make test` gate passed 224
 Python tests after explicit paper decision-clock/report binding, daily-cycle input,
 stage-log, ledger-root, destination path, and integrated per-account session-input
@@ -39,7 +39,7 @@ criterion.
 
 | Command | Result | Evidence |
 | --- | --- | --- |
-| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 224 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 at `6d5edab` |
+| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 224 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 at `d92b172` |
 | `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 61 schemas, 3 registries, 16 migrations, and complete data-fitness surfaces | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ingest SOURCE=all` | Passed: all five enabled source runs completed without rejected resources | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 INVS_CONFIG_FILE=./config/config.local.yaml make ingest SOURCE=nasdaq-calendar RUN_KEY=nasdaq-calendar-2026-08-30` | Passed: real XNAS current/reference publication, 365 sessions, zero rejected records | [XNAS calendar publication report](2026-08-30-nasdaq-calendar-publication.md) |
@@ -57,7 +57,7 @@ criterion.
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-resilience-acceptance` | Passed: all eleven stages and seven scenarios | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-install-upgrade-acceptance` | Passed: fresh install, pre-v1 upgrade, idempotent reapply, backup/restore, tamper rejection, and interrupted recovery | [Install/upgrade acceptance report](2026-08-30-v1-install-upgrade.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make paper-acceptance-report PAPER_ACCOUNT_ID=... PAPER_DATA_ROOT=/data/research/acceptance/v0.6/reproduction PAPER_LEDGER_ROOT=/data/research/acceptance/v0.6/reproduction/ledger` | Passed: derived all five v1 paper checks from the retained deterministic ledger without source mutation | Runtime output from 2026-08-30 |
-| `INVS_BIND_ADDRESS=127.0.0.1 make v1-pre-release-acceptance` | Passed: 224 Python tests, operational checks, migration replay, 11 resilience steps across 7 scenarios, 6 installation-lifecycle stages, replay guard, and workflow reports with intentional `attention` | Runtime output from 2026-08-30 at `6d5edab`; resilience report `9600826aeb5a97e617b6312aaad38021109776e161d243d6b5ec34ca001e19a0`, install report `ee06f655bc97e14f919a3dca654f2af8fde582ae7a80eaa29e61b339eacacc98` |
+| `INVS_BIND_ADDRESS=127.0.0.1 make v1-pre-release-acceptance` | Passed: 224 Python tests, operational checks, migration replay, 11 resilience steps across 7 scenarios, 6 installation-lifecycle stages, replay guard, release-guard acceptance, and workflow reports with intentional `attention` | Runtime output from 2026-08-30 at `d92b172`; resilience report `d4c011e10242a789eb171ea3441b4bbea37f42d40b1fee6d5f4f15840b1cca97`, install report `a2a5f2a6fda2722e1dc0249bb6461c9446eee506e9d6ed7d02275af8a173eea7` |
 | `V1_FORWARD_RECORD=... V1_PAPER_REPORT=... INVS_BIND_ADDRESS=127.0.0.1 make v1-release-acceptance` | Guarded: requires genuine forward evidence and aggregate paper report as safe repository-relative regular files before running the complete ladder; rejects external symlink ancestors; not run because the genuine record is absent | `22e4d50`, `246702d` precondition checks |
 
 ## v1 implementation checkpoints
@@ -119,6 +119,8 @@ criterion.
   as `1.2.0`.
 - `6d5edab` — exercise the paper-preflight failure path through the actual daily-cycle
   CLI acceptance harness and verify account creation is not attempted.
+- `d92b172` — add release-entrypoint guard acceptance for missing, unsafe, and
+  parent-symlinked genuine-evidence paths.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the

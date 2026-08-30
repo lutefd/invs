@@ -3,25 +3,25 @@
 ## Result
 
 The latest v1 resilience and historical-bias harness rerun passed at commit
-`6d5edab0858c5d46a156606197ee90f4b98a9b87`:
+`d92b1726868aa1e4f5603b87bf53253190dcebbb`:
 
 ```sh
 INVS_BIND_ADDRESS=127.0.0.1 make v1-resilience-acceptance
 ```
 
-The machine-readable report was generated at `2026-08-30T15:27:14Z`:
+The machine-readable report was generated at `2026-08-30T15:38:53Z`:
 
 ```text
 data/research/acceptance/v1/v1-resilience.json
-sha256=9600826aeb5a97e617b6312aaad38021109776e161d243d6b5ec34ca001e19a0
+sha256=d4c011e10242a789eb171ea3441b4bbea37f42d40b1fee6d5f4f15840b1cca97
 ```
 
 All eleven harness stages passed, including the complete paper-account envelope
 preflight, input-byte resume binding, and explicit decision-clock regressions.
 The temporary restored PostgreSQL database was
-`restore_v1_20260830152448_2193159`; the harness removed it on exit and a follow-up
+`restore_v1_20260830153625_2279876`; the harness removed it on exit and a follow-up
 query found no remaining `restore_v1_*` databases. Stage logs remain under
-`data/research/acceptance/v1/resilience-20260830T152448Z-2193159/`.
+`data/research/acceptance/v1/resilience-20260830T153625Z-2279876/`.
 
 ## Scenarios
 
