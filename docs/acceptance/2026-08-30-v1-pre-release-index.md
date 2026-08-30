@@ -4,10 +4,10 @@
 
 This is the v1.0 pre-release evidence index, not an accepted v1.0 release. The
 runtime evidence below was executed against commit
-`bc2d55819978f6d6b5a7fa3d25e237cf888f601f` with
+`a5ffae4abc2403bf84fc1ba7b5b9522734cfb767` with
 `INVS_BIND_ADDRESS=127.0.0.1` where validation needed to override the operator's
-local non-loopback `.env` setting. The tracked documentation refresh is
-`135939e`.
+local non-loopback `.env` setting. The tracked documentation commits do not alter
+the runtime compatibility contract.
 
 The remaining release gate is a genuine wall-clock forward paper record. Historical
 simulation and recorded/replayed paper evidence are not substituted for that
