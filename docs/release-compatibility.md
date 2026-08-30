@@ -87,3 +87,10 @@ current result is recorded in
 [`2026-08-30-v1-resilience.md`](acceptance/2026-08-30-v1-resilience.md).
 The combined command results and remaining release gates are summarized in the
 [v1.0 pre-release evidence index](acceptance/2026-08-30-v1-pre-release-index.md).
+
+After a real paper session, use `make forward-record-capture` with a repository-
+relative ledger root, account ID, and output path. It is the only supported way to
+produce the `forward_record.status: genuine` evidence reference: the command
+requires a recent reconciled report and records account, report, and ledger
+manifest hashes. Retained historical or installation-replay fixtures remain
+ineligible.

@@ -211,3 +211,10 @@ report through selected backtest experiments to paper accounts. The companion
 checks, data-fitness classifications, and limitations. Use `make workflow-acceptance`
 to regenerate the thematic and US/Brazil cross-market integration fixtures; an
 `attention` result is expected until genuine wall-clock paper evidence exists.
+
+`paper-forward-record.schema.json` defines the genuine forward-evidence contract.
+The `invs-forward-record capture` CLI binds a recent reconciled paper report to its
+immutable account file, ledger manifest, and sequence bounds, preserving hashes and
+UTC capture timestamps. Use `make forward-record-capture` only after a real paper
+session; it cannot convert retained historical or installation-replay fixtures into
+wall-clock evidence.

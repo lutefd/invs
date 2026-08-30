@@ -225,7 +225,9 @@ The v1.0 integration work is in progress as of 2026-08-30. The compatibility
 contract, specification-driven daily-cycle runner, integrated thematic/cross-market
 workflow reports, security and recovery controls, and resilience/bias acceptance
 landed in `f8abe40`, `31e34b8`, `d5b9c22`, `586d79e`, and `9a0f558` respectively.
-The CLI-level daily-cycle failure/resume acceptance followed in `3f96623`.
+The CLI-level daily-cycle failure/resume acceptance followed in `3f96623`. The
+hash-pinned genuine forward-record contract and capture CLI landed in `e272e3d`,
+with the import-isolation correction in `b471908`.
 
 The [v1 resilience acceptance report](acceptance/2026-08-30-v1-resilience.md) passes
 the retained historical-bias and paper-ledger checks, CLI-level daily-cycle
@@ -235,6 +237,11 @@ reconciliation path. The [v1 workflow integration report](acceptance/2026-08-30-
 links the research, backtest, and paper layers for thematic and US/Brazil
 cross-market scenarios, but intentionally remains `attention` because the retained
 paper evidence is recorded/replayed.
+
+The supported forward-evidence path is `make forward-record-capture` after a real
+recent paper session. It validates the append-only ledger and reconciled report,
+records account/report/manifest hashes, and refuses stale or replay-only evidence;
+no genuine wall-clock record exists in the repository yet.
 
 The final v1.0 release boundary is still pending a genuine wall-clock forward paper
 record and final end-to-end workflow acceptance. The pre-release evidence index is
@@ -303,6 +310,8 @@ to close the v0.2 calendar gate. See the
 - Latest v1 security/recovery boundary: `586d79e` (`feat(operations): enforce security and recovery checks`)
 - Latest v1 resilience/bias boundary: `9a0f558` (`test(acceptance): prove v1 recovery and bias scenarios`)
 - Latest v1 daily-cycle recovery acceptance boundary: `3f96623` (`test(acceptance): exercise daily-cycle CLI recovery`)
+- Latest v1 forward-record contract boundary: `e272e3d` (`feat(acceptance): bind genuine forward paper evidence`)
+- Latest v1 forward-record integration correction: `b471908` (`fix(acceptance): isolate forward validation imports`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`

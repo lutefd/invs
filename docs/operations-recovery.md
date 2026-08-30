@@ -67,6 +67,25 @@ the temporary restored database disposable. The accepted result is recorded in t
 local operational evidence and does not create the genuine wall-clock forward paper
 record required for the v1.0 release gate.
 
+## Capture genuine forward paper evidence
+
+Once a real paper session has completed, capture its recent reconciled evidence
+from the ledger root:
+
+```sh
+make forward-record-capture \
+  FORWARD_LEDGER_ROOT=data/research/forward/v1/ledger \
+  FORWARD_ACCOUNT_ID=<account-id> \
+  FORWARD_OUTPUT=data/research/forward/v1/forward-record.json
+```
+
+This command validates the immutable account, append-only ledger, latest paper
+report, and adjacent manifest before writing a hash-pinned forward record. The
+report must be no more than seven calendar days old, and an existing output may
+only be reused when its bytes are identical. Do not run it against the retained
+v0.6 reproduction tree: replay evidence is intentionally not accepted as a
+wall-clock forward record.
+
 ## Reconcile before and after operations
 
 Run the full report from the repository root:

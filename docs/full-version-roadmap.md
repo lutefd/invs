@@ -1585,6 +1585,11 @@ failure/resume acceptance followed in `3f96623`. The [resilience acceptance
 report](acceptance/2026-08-30-v1-resilience.md) passes its six recovery/bias
 scenarios and all ten underlying stages.
 
+The genuine-forward gate is now fail-closed through the `paper-forward-record`
+contract and `make forward-record-capture`, landed in `e272e3d` with the import
+isolation correction in `b471908`. The command can capture only a recent
+reconciled paper session and cannot promote retained replay evidence.
+
 This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
 `attention` because the retained paper evidence is recorded/replayed rather than a
 genuine wall-clock forward record. Brazil and commodity evidence also retain their

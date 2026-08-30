@@ -1369,6 +1369,23 @@ immutable report with the `invs-workflow` CLI. A report reaches `passed` only wh
 the declared forward evidence is wall-clock, account-linked, and not labeled as
 installation replay.
 
+After a real paper session, capture the forward evidence through the immutable
+ledger path rather than entering a summary by hand:
+
+```sh
+make forward-record-capture \
+  FORWARD_LEDGER_ROOT=data/research/forward/v1/ledger \
+  FORWARD_ACCOUNT_ID=<account-id> \
+  FORWARD_OUTPUT=data/research/forward/v1/forward-record.json
+```
+
+The command requires a recent reconciled report (no more than seven calendar days
+old), validates the account and ledger, and records hashes for the account,
+report, and adjacent ledger manifest. It refuses missing, stale, unreconciled, or
+conflicting evidence. Point a custom workflow's `forward_record.status` at
+`genuine` and reference this output with its SHA-256; retained v0.6 replay data is
+not eligible for this path.
+
 Run the v1 recovery and historical-bias challenge suite separately:
 
 ```sh

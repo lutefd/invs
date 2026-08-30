@@ -4,7 +4,7 @@
 
 This is the v1.0 pre-release evidence index, not an accepted v1.0 release. The
 refreshed resilience evidence was executed against commit
-`3f96623f569007eb5921c6d96056c37f610cf124` with
+`b471908b3cfe52d82530cc3a8d42df006956b5af` with
 `INVS_BIND_ADDRESS=127.0.0.1` where validation needed to override the operator's
 local non-loopback `.env` setting. The tracked documentation commits do not alter
 the runtime compatibility contract.
@@ -17,7 +17,8 @@ criterion.
 
 | Command | Result | Evidence |
 | --- | --- | --- |
-| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 192 Python tests, 61 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 195 Python tests, 62 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 60 schemas, 16 migrations | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make notebook` | Passed: empty-safe vertical-slice notebook executed | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make dashboard-smoke` | Passed: dashboard JSON and PostgreSQL `EXPLAIN` checks | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make migrate` | Passed: existing PostgreSQL volume remained migration-ready | Runtime output from 2026-08-30 |
@@ -37,7 +38,10 @@ criterion.
   and incident/capacity runbooks; and
 - `9a0f558` — resilience and historical-bias acceptance harness; and
 - `3f96623` — CLI-level daily-cycle failure/resume acceptance through the actual
-  shell entrypoint.
+  shell entrypoint;
+- `e272e3d` — hash-pinned forward paper-record contract and capture CLI; and
+- `b471908` — integration correction keeping forward validation isolated from
+  feature-module imports.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the
@@ -53,7 +57,8 @@ The version compatibility and forward-upgrade procedure is in the
 | Historical bias | 13-probe retained bias suite passes | Accepted challenge boundary |
 | Thematic/cross-market workflow | Both reports validate and link all layers | `attention` until forward evidence exists |
 | Brazil/commodity coverage | Explicit bounded fitness labels and missing coverage | Not a broad coverage claim |
-| Wall-clock forward paper record | Not present | Required for v1.0 release acceptance |
+| Forward-record capture path | Contract, hash binding, stale/reconciliation checks, and CLI acceptance tests pass | Ready to capture only after a real recent paper session |
+| Wall-clock forward paper record | Not present; retained v0.6 evidence remains replay-only | Required for v1.0 release acceptance |
 
 Generated JSON reports under `data/research/acceptance/` are ignored runtime
 evidence. Regenerate them with the commands above; do not treat a retained replay

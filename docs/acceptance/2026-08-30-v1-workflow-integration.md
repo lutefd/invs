@@ -13,6 +13,12 @@ v0.6 evidence is recorded/replayed installation evidence rather than a genuine
 wall-clock forward paper record, which remains a v1 entry criterion. The cross-market
 fixture also exposes its bounded copper evidence as `installation_replay_only`.
 
+The genuine path is now fail-closed: `paper-forward-record.schema.json` and the
+`invs-forward-record` capture CLI require a recent reconciled paper report and pin
+the account, report, and ledger-manifest hashes. A self-declared summary without
+those bound artifacts or a retained replay fixture cannot satisfy the genuine status
+check.
+
 ## Coverage
 
 - thematic chain: reviewed theme → evidence pack → hypothesis → prediction →
