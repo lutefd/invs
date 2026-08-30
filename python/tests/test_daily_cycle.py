@@ -162,6 +162,61 @@ def test_cycle_spec_rejects_incomplete_paper_spec(tmp_path: Path) -> None:
         validate_cycle_spec(spec, repo_root=tmp_path)
 
 
+def test_cycle_spec_rejects_symlinked_input_file(tmp_path: Path) -> None:
+    spec = _spec(tmp_path)
+    target = tmp_path / "inputs" / "calendar.json"
+    link = tmp_path / "inputs" / "calendar-link.json"
+    link.symlink_to(target)
+    spec["feature"]["calendar_pin"] = "inputs/calendar-link.json"
+
+    with pytest.raises(DailyCycleError, match="must not traverse symlinks"):
+        validate_cycle_spec(spec, repo_root=tmp_path)
+
+
+def test_cycle_rejects_symlinked_report_path(tmp_path: Path) -> None:
+    spec = _spec(tmp_path)
+    report_path = tmp_path / ".runtime" / "cycles" / "test.json"
+    report_path.parent.mkdir(parents=True)
+    report_path.symlink_to(tmp_path / "report-target.json")
+
+    with pytest.raises(DailyCycleError, match="report_path must not traverse symlinks"):
+        run_cycle(spec, repo_root=tmp_path)
+
+
+def test_cycle_rejects_existing_report_temporary_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report_path = tmp_path / ".runtime" / "cycles" / "test.json"
+    report_path.parent.mkdir(parents=True)
+    temporary = report_path.with_name(f".{report_path.name}.4242.tmp")
+    target = tmp_path / "outside-report.json"
+    temporary.symlink_to(target)
+    monkeypatch.setattr(daily_cycle.os, "getpid", lambda: 4242)
+
+    with pytest.raises(DailyCycleError, match="cannot write cycle report"):
+        daily_cycle._write_report(report_path, {"status": "test"})
+
+    assert temporary.is_symlink()
+    assert not target.exists()
+
+
+def test_cycle_rejects_symlinked_stage_log_path(tmp_path: Path) -> None:
+    outside = tmp_path / "outside-logs"
+    outside.mkdir()
+    log_dir = tmp_path / "logs-link"
+    log_dir.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(DailyCycleError, match="stage log path must not traverse symlinks"):
+        daily_cycle._run_command(
+            ("true",),
+            root=tmp_path,
+            log_path=log_dir / "01-stage.log",
+            environment=dict(os.environ),
+        )
+
+    assert list(outside.iterdir()) == []
+
+
 def test_cycle_runs_and_resumes_from_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     spec = _spec(tmp_path)
     calls: list[tuple[str, ...]] = []

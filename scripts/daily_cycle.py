@@ -111,14 +111,29 @@ def _relative_path(value: Any, *, field: str) -> str:
     return value
 
 
-def _repo_file(repo_root: Path, value: Any, *, field: str) -> Path:
-    relative = _relative_path(value, field=field)
-    path = (repo_root / relative).resolve()
+def _safe_repo_path(repo_root: Path, relative: str, *, field: str) -> Path:
+    declared = repo_root / relative
+    current = repo_root
     try:
-        path.relative_to(repo_root)
+        parts = declared.relative_to(repo_root).parts
     except ValueError as error:
         raise DailyCycleError(f"{field} escapes the repository root") from error
-    if not path.is_file() or path.is_symlink():
+    for part in parts:
+        current /= part
+        if current.is_symlink():
+            raise DailyCycleError(f"{field} must not traverse symlinks: {relative}")
+    resolved = declared.resolve()
+    try:
+        resolved.relative_to(repo_root)
+    except ValueError as error:
+        raise DailyCycleError(f"{field} escapes the repository root") from error
+    return resolved
+
+
+def _repo_file(repo_root: Path, value: Any, *, field: str) -> Path:
+    relative = _relative_path(value, field=field)
+    path = _safe_repo_path(repo_root, relative, field=field)
+    if not path.is_file():
         raise DailyCycleError(f"{field} must identify a regular file: {relative}")
     return path
 
@@ -431,14 +446,8 @@ def _spec_hash(spec: Mapping[str, Any], *, root: Path) -> str:
 
 
 def _report_path(root: Path, spec: Mapping[str, Any]) -> Path:
-    path = (root / spec["report_path"]).resolve()
-    try:
-        path.relative_to(root)
-    except ValueError as error:
-        raise DailyCycleError("report_path escapes the repository root") from error
-    if path.exists() and path.is_symlink():
-        raise DailyCycleError("report_path must not be a symlink")
-    return path
+    relative = _relative_path(spec["report_path"], field="report_path")
+    return _safe_repo_path(root, relative, field="report_path")
 
 
 def _load_existing_report(
@@ -508,9 +517,13 @@ def _load_existing_report(
 
 def _write_report(path: Path, report: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise DailyCycleError(f"report path must not be a symlink: {path}")
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary_created = False
     try:
-        with temporary.open("w", encoding="utf-8") as stream:
+        with temporary.open("x", encoding="utf-8") as stream:
+            temporary_created = True
             stream.write(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
             stream.flush()
             os.fsync(stream.fileno())
@@ -518,8 +531,11 @@ def _write_report(path: Path, report: Mapping[str, Any]) -> None:
     except OSError as error:
         raise DailyCycleError(f"cannot write cycle report {path}: {error}") from error
     finally:
-        if temporary.exists():
-            temporary.unlink()
+        if temporary_created:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def _stage_log_path(root: Path, spec: Mapping[str, Any], index: int, name: str) -> Path:
@@ -528,10 +544,10 @@ def _stage_log_path(root: Path, spec: Mapping[str, Any], index: int, name: str) 
 
 
 def _run_command(command: Sequence[str], *, root: Path, log_path: Path, environment: Mapping[str, str]) -> int:
-    if log_path.is_symlink():
-        raise DailyCycleError(f"stage log path must not be a symlink: {log_path}")
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("ab") as log:
+    relative = log_path.relative_to(root).as_posix()
+    safe_log_path = _safe_repo_path(root, relative, field="stage log path")
+    safe_log_path.parent.mkdir(parents=True, exist_ok=True)
+    with safe_log_path.open("ab") as log:
         process = subprocess.run(command, cwd=root, env=dict(environment), stdout=log, stderr=subprocess.STDOUT, check=False)
     return process.returncode
 
