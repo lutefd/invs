@@ -235,12 +235,12 @@ The daily-cycle preflight was then hardened in `a4f8868` to require the complete
 v1 paper-account envelope, reject missing or unknown top-level fields and wrong
 schema versions before execution, and cover the failure path with a focused test
 and acceptance fixture. The full `make validate` and latest resilience, installation,
-and workflow reruns passed from `b4e89e5`; the integrated workflow still
+and workflow reruns passed from `a45a7ba`; the integrated workflow still
 intentionally reports `attention` until genuine forward evidence exists.
-The composed `v1-pre-release-acceptance` target and its latest report evidence were
-then pinned at `b4e89e5` and `67c59ad`; the genuine-only `v1-release-acceptance`
-wrapper landed in `3051376` and refuses to enter the ladder without both forward
-evidence references.
+The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
+report evidence was pinned in `67c59ad` and the latest runtime reports were rerun
+from `a45a7ba`. The genuine-only `v1-release-acceptance` wrapper landed in
+`3051376` and refuses to enter the ladder without both forward evidence references.
 
 The [v1 resilience acceptance report](acceptance/2026-08-30-v1-resilience.md) passes
 the retained historical-bias and paper-ledger checks, CLI-level daily-cycle

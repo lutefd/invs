@@ -7,7 +7,7 @@ current operational snapshot below was captured from checkout commit
 `92508ffe2432ca9b5ec89e1853d2282338e60544`. The runtime hardening was committed in
 `b5200fa8cc6e0a82e0933797098b59f3fc81f30b`. The full validation and latest v1
 acceptance reruns were executed from commit
-`b4e89e59f36f386e2b759b0427092bf8f7841787`; the operational snapshot remains the
+`a45a7baca8bb729246d6e32c8088eae0694525b2`; the operational snapshot remains the
 earlier host evidence cited below. The follow-up full `make test` rerun from
 `c12074a` passed the expanded timestamp-bound test suite, and the broader
 `make validate` rerun also passed from the current runtime HEAD. `INVS_BIND_ADDRESS=127.0.0.1`
@@ -44,7 +44,7 @@ criterion.
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-resilience-acceptance` | Passed: all eleven stages and seven scenarios | [Resilience acceptance report](2026-08-30-v1-resilience.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make v1-install-upgrade-acceptance` | Passed: fresh install, pre-v1 upgrade, idempotent reapply, backup/restore, tamper rejection, and interrupted recovery | [Install/upgrade acceptance report](2026-08-30-v1-install-upgrade.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make paper-acceptance-report PAPER_ACCOUNT_ID=... PAPER_DATA_ROOT=/data/research/acceptance/v0.6/reproduction PAPER_LEDGER_ROOT=/data/research/acceptance/v0.6/reproduction/ledger` | Passed: derived all five v1 paper checks from the retained deterministic ledger without source mutation | Runtime output from 2026-08-30 |
-| `INVS_BIND_ADDRESS=127.0.0.1 make v1-pre-release-acceptance` | Passed: 213 Python tests, operational checks, migration replay, 11 resilience steps across 7 scenarios, 6 installation-lifecycle stages, replay guard, and workflow reports with intentional `attention` | Runtime output from 2026-08-30 at `b4e89e5`; exact report hashes are in the linked acceptance reports |
+| `INVS_BIND_ADDRESS=127.0.0.1 make v1-pre-release-acceptance` | Passed: 213 Python tests, operational checks, migration replay, 11 resilience steps across 7 scenarios, 6 installation-lifecycle stages, replay guard, and workflow reports with intentional `attention` | Runtime output from 2026-08-30 at `a45a7ba`; exact report hashes are in the linked acceptance reports |
 | `V1_FORWARD_RECORD=... V1_PAPER_REPORT=... INVS_BIND_ADDRESS=127.0.0.1 make v1-release-acceptance` | Guarded: requires genuine forward evidence and aggregate paper report before running the complete ladder; not run because the genuine record is absent | `3051376` precondition check |
 
 ## v1 implementation checkpoints
