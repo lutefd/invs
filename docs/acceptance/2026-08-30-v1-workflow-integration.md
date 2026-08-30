@@ -50,6 +50,12 @@ When genuine evidence is available, run the same harness with the captured recor
 and an aggregate paper report that contains its account IDs:
 
 ```sh
+make paper-acceptance-report \
+  PAPER_ACCOUNT_ID=<account-id> \
+  PAPER_DATA_ROOT=/data/research/forward/v1 \
+  PAPER_LEDGER_ROOT=/data/research/forward/v1/ledger \
+  > data/research/forward/v1/paper-report.json
+
 V1_FORWARD_RECORD=data/research/forward/v1/forward-record.json \
 V1_PAPER_REPORT=data/research/forward/v1/paper-report.json \
 V1_PAPER_ACCOUNT_IDS="<account-id>" \

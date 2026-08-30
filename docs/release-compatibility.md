@@ -114,5 +114,7 @@ make workflow-acceptance
 ```
 
 The aggregate paper report must contain the supplied account IDs and accepted
-paper checks. The cross-market report may retain `attention` for explicitly
-non-backtest-safe commodity evidence.
+paper checks. Generate it from the account ledger with the read-only
+`make paper-acceptance-report` target before running the workflow command; do not
+hand-edit the acceptance booleans. The cross-market report may retain `attention`
+for explicitly non-backtest-safe commodity evidence.

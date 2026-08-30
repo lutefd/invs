@@ -1348,6 +1348,24 @@ docker compose run --rm --no-deps jupyter invs-paper reconcile \
   --ledger-root /data/research/acceptance/v0.6/operator/ledger
 ```
 
+To produce the aggregate paper evidence consumed by the v1 workflow, derive it
+from the immutable account ledger after at least one daily report exists:
+
+```sh
+mkdir -p data/research/forward/v1
+make paper-acceptance-report \
+  PAPER_ACCOUNT_ID=<account-id> \
+  PAPER_DATA_ROOT=/data/research/acceptance/v0.6/operator \
+  PAPER_LEDGER_ROOT=/data/research/acceptance/v0.6/operator/ledger \
+  > data/research/forward/v1/paper-report.json
+```
+
+The command is read-only against the source ledger. It derives the forward-session,
+duplicate-cycle, rebuild, backup/restore, and reconciliation checks; it returns
+`status: attention` when a report is halted or another required check is not proven.
+Use the resulting JSON as `V1_PAPER_REPORT` only when its account IDs match the
+captured forward record.
+
 Each decision and approval has deterministic idempotency. Repeating a command returns
 the existing result rather than duplicating orders or cash movements. `rebuild`
 derives positions, cash, and NAV from ledger events, while `reconcile` checks every

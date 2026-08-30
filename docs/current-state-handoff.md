@@ -268,6 +268,12 @@ recent paper session. It validates the append-only ledger and reconciled report,
 records account/report/manifest hashes, and refuses stale or replay-only evidence;
 no genuine wall-clock record exists in the repository yet.
 
+The aggregate report needed by the v1 workflow is now derived from the same ledger
+by `make paper-acceptance-report`, landed in `b450f9f`, with its release hash
+refreshed in `c35ee45`. The command is read-only against the source account and
+proves duplicate-cycle idempotency, rebuild equality, isolated backup/restore, and
+reconciliation; a halted or otherwise incomplete session remains `attention`.
+
 The final v1.0 release boundary is still pending a genuine wall-clock forward paper
 record and final end-to-end workflow acceptance. The pre-release evidence index is
 recorded, while the bounded Brazil and commodity fitness limitations remain in
@@ -350,6 +356,8 @@ to close the v0.2 calendar gate. See the
 - Latest v1 forward-record acceptance guard: `cf37708` (`test(acceptance): reject replay-only forward records`)
 - Latest v1 installation lifecycle acceptance boundary: `c011ab6` (`test(acceptance): add isolated v1 install upgrade drill`)
 - Latest v1 paper price-basis boundary: `7153626` (`test(paper): reject mixed price bases`)
+- Latest v1 paper acceptance-report boundary: `b450f9f` (`feat(paper): derive ledger acceptance reports`)
+- Latest v1 paper compatibility hash: `c35ee45` (`chore(release): refresh paper compatibility hash`)
 - Latest v0.4 deterministic read-model fix: `0b97702` (`fix(metadata): keep research snapshots deterministic`)
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`
