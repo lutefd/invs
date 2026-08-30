@@ -247,7 +247,7 @@ release compatibility hashes. `58e1615` integrates the read-only paper-session i
 preflight into every resumable daily-cycle paper-account path before account creation,
 and versions the daily-cycle and durable report contracts as `1.2.0`. The latest full
 validation, resilience, installation, and composed pre-release reruns passed from
-`d92b172` with 224 Python tests; the integrated
+`d7c4b4a` with 224 Python tests; the integrated
 workflow still intentionally reports `attention` until genuine forward evidence
 exists. The same
 path-boundary sequence hardens daily-cycle input, report, and stage-log paths
@@ -255,7 +255,7 @@ against symlink traversal and report-temp races; `010cfc0` also preflights repor
 and log destinations before execution.
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 report evidence was pinned in `67c59ad` and the latest runtime reports were rerun
-from `d92b172`. The genuine-only `v1-release-acceptance` wrapper landed in
+from `d7c4b4a`. The genuine-only `v1-release-acceptance` wrapper landed in
 `3051376` and refuses to enter the ladder without both forward evidence references;
 `22e4d50` also rejects missing, traversing, absolute, or symlinked references before
 any validation or container work begins. `246702d` closes the remaining parent-
@@ -273,7 +273,7 @@ paper evidence is recorded/replayed.
 The [v1 installation lifecycle acceptance report](acceptance/2026-08-30-v1-install-upgrade.md)
 passes the isolated fresh install, additive pre-v1 upgrade, idempotent migration
 reapply, PostgreSQL/data backup and restore, tamper rejection, and daily-cycle
-interruption/resume stages; the latest rerun is pinned to `d92b172` and the
+interruption/resume stages; the latest rerun is pinned to `d7c4b4a` and the
 acceptance implementation landed in `c011ab6`. Its Docker project, volume, and restore
 database are disposable and are removed after the run; the live `invs` volume is
 not part of the test.
@@ -315,7 +315,8 @@ brought the gate to 223 Python tests, and `2658490` versioned the daily-cycle
 contract as `1.1.0` with refreshed compatibility hashes. `58e1615` integrates the
 paper-input preflight into each resumable daily-cycle account path and versions the
 contract as `1.2.0`; the current full gate is 224 Python tests. The active v1
-evidence index records that latest result from `d92b172`.
+evidence index records that latest result from `d7c4b4a`, including the paper
+Make-target data-root acceptance.
 
 The supported forward-evidence path is `make forward-record-capture` after a real
 recent paper session. Newly generated paper reports carry an invocation-time UTC
@@ -470,6 +471,7 @@ and [XNAS publication report](acceptance/2026-08-30-nasdaq-calendar-publication.
 - Latest v1 integrated paper-session preflight: `58e1615` (`feat(operations): preflight paper inputs before account creation`)
 - Latest v1 paper-preflight CLI acceptance: `6d5edab` (`test(operations): cover paper preflight failure`)
 - Latest v1 release-guard acceptance: `d92b172` (`test(acceptance): guard genuine release entrypoint`)
+- Latest v1 paper Make-target acceptance: `d7c4b4a` (`fix(operations): honor paper data root in make run`)
 - Latest v1 release evidence path guard: `22e4d50` (`fix(acceptance): fail closed on release evidence paths`)
 - Latest v1 genuine release acceptance target: `3051376` (`test(acceptance): add genuine v1 release target`)
 - Latest v1 forward-record contract boundary: `e272e3d` (`feat(acceptance): bind genuine forward paper evidence`)
