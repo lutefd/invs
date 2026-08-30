@@ -19,7 +19,7 @@ criterion.
 
 | Command | Result | Evidence |
 | --- | --- | --- |
-| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 205 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
+| `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 206 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 61 schemas, 3 registries, 16 migrations, and complete data-fitness surfaces | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ingest SOURCE=all` | Passed: all five enabled source runs completed without rejected resources | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ops-status` | Passed: current enabled sources and projections within threshold; disk usage 17% | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
@@ -59,7 +59,8 @@ criterion.
 - `22e71cf` — shared input-schema and release-manifest alignment for that boundary; and
 - `7153626` — mixed price-basis rejection regression coverage;
 - `b450f9f` — read-only aggregate paper acceptance-report derivation from an immutable ledger; and
-- `c35ee45` — release compatibility hash refresh for the paper implementation.
+- `c35ee45` — release compatibility hash refresh for the paper implementation; and
+- `a4f8868` — complete paper-account envelope validation before daily-cycle execution.
 
 The version compatibility and forward-upgrade procedure is in the
 [release guide](../release-compatibility.md). The operator path is in the
