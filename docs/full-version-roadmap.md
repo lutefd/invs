@@ -1602,15 +1602,19 @@ gate passes 219 Python tests. Daily-cycle input, report, and stage-log path
 boundaries were hardened in `47034ae`, including symlink rejection and exclusive
 temporary report creation; `1d5d2ad` also confines the paper ledger to the mounted
 data tree, and `010cfc0` preflights report and log destinations before execution.
+The release and workflow entry points also reject evidence or output paths that
+escape through symlinked ancestors, covered by `246702d`.
 
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 passing report set was pinned in `67c59ad`, and the latest runtime reports were
-rerun from `010cfc0`. The aggregate paper report output was made safe and
+rerun from `246702d`. The aggregate paper report output was made safe and
 no-overwrite in `27d3fdd`, with conflict termination corrected in `28319fc` and
 dangling output/temporary symlinks rejected in `40e110e`. The genuine-only
 `v1-release-acceptance` target landed in `3051376`; `22e4d50` makes it reject
 missing, traversing, absolute, or symlinked forward-evidence references before
-running the complete ladder, and it cannot silently accept the replay workflow.
+running the complete ladder, and `246702d` extends that protection through
+symlinked parent directories and workflow output roots; it cannot silently accept
+the replay workflow.
 
 This is a pre-release boundary, not a v1.0 exit claim. The workflow reports remain
 `attention` because the retained paper evidence is recorded/replayed rather than a
@@ -1621,7 +1625,7 @@ release gate remains pending.
 The daily-cycle preflight was hardened in `a4f8868` to require the complete v1
 paper-account envelope before execution, with focused regression and acceptance
 coverage. The current full validation, resilience, installation-lifecycle, and
-composed pre-release reruns passed from `010cfc0`; this repository-side hardening
+composed pre-release reruns passed from `246702d`; this repository-side hardening
 does not substitute for the genuine-forward requirement.
 
 The current host readiness snapshot is recorded in the [v1 operational readiness

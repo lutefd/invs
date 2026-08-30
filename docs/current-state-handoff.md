@@ -235,17 +235,18 @@ The daily-cycle preflight was then hardened in `a4f8868` to require the complete
 v1 paper-account envelope, reject missing or unknown top-level fields and wrong
 schema versions before execution, and cover the failure path with a focused test
 and acceptance fixture. The latest full validation, resilience, installation, and
-composed pre-release reruns passed from `010cfc0`; the integrated workflow still
+composed pre-release reruns passed from `246702d`; the integrated workflow still
 intentionally reports `attention` until genuine forward evidence exists. The same
 path-boundary sequence hardens daily-cycle input, report, and stage-log paths
 against symlink traversal and report-temp races; `010cfc0` also preflights report
 and log destinations before execution.
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 report evidence was pinned in `67c59ad` and the latest runtime reports were rerun
-from `010cfc0`. The genuine-only `v1-release-acceptance` wrapper landed in
+from `246702d`. The genuine-only `v1-release-acceptance` wrapper landed in
 `3051376` and refuses to enter the ladder without both forward evidence references;
 `22e4d50` also rejects missing, traversing, absolute, or symlinked references before
-any validation or container work begins.
+any validation or container work begins. `246702d` closes the remaining parent-
+symlink escape path for release evidence and workflow output roots.
 
 The [v1 resilience acceptance report](acceptance/2026-08-30-v1-resilience.md) passes
 the retained historical-bias and paper-ledger checks, CLI-level daily-cycle
@@ -259,7 +260,8 @@ paper evidence is recorded/replayed.
 The [v1 installation lifecycle acceptance report](acceptance/2026-08-30-v1-install-upgrade.md)
 passes the isolated fresh install, additive pre-v1 upgrade, idempotent migration
 reapply, PostgreSQL/data backup and restore, tamper rejection, and daily-cycle
-interruption/resume stages at `c011ab6`. Its Docker project, volume, and restore
+interruption/resume stages; the latest rerun is pinned to `246702d` and the
+acceptance implementation landed in `c011ab6`. Its Docker project, volume, and restore
 database are disposable and are removed after the run; the live `invs` volume is
 not part of the test.
 
@@ -293,7 +295,8 @@ current full gate to 211 Python tests. The timestamp-bound acceptance regression
 in `c12074a` brought the gate to 213 Python tests. The daily-cycle path-boundary
 regressions in `47034ae` and the ledger-root guard in `1d5d2ad` brought the full
 gate to 218 Python tests; the destination-preflight regression in `010cfc0` brings
-the current full gate to 219 Python tests. The active v1 evidence index records
+the current full gate to 219 Python tests; the release-ancestor guard in `246702d`
+adds focused preflight coverage. The active v1 evidence index records
 that latest result.
 
 The supported forward-evidence path is `make forward-record-capture` after a real
@@ -409,6 +412,8 @@ to close the v0.2 calendar gate. See the
 - Latest v1 paper report-output protection: `40e110e` (`fix(paper): reject symlink report outputs`)
 - Latest v1 daily-cycle path-boundary hardening: `47034ae` (`fix(operations): harden daily-cycle path boundaries`)
 - Latest v1 daily-cycle ledger-boundary hardening: `1d5d2ad` (`fix(operations): confine daily-cycle ledgers`)
+- Latest v1 release/workflow ancestor-boundary hardening: `246702d` (`fix(acceptance): reject symlinked release ancestors`)
+- Latest v1 release evidence path guard: `22e4d50` (`fix(acceptance): fail closed on release evidence paths`)
 - Latest v1 genuine release acceptance target: `3051376` (`test(acceptance): add genuine v1 release target`)
 - Latest v1 forward-record contract boundary: `e272e3d` (`feat(acceptance): bind genuine forward paper evidence`)
 - Latest v1 forward-record integration correction: `b471908` (`fix(acceptance): isolate forward validation imports`)
