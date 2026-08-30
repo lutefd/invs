@@ -182,6 +182,26 @@ def test_cycle_runs_and_resumes_from_report(tmp_path: Path, monkeypatch: pytest.
     assert {stage["status"] for stage in second["stages"]} == {"resumed"}
 
 
+@pytest.mark.parametrize("relative_path", ["inputs/calendar.json", "inputs/paper.json"])
+def test_cycle_rejects_changed_referenced_input_on_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative_path: str
+) -> None:
+    spec = _spec(tmp_path)
+
+    def fake_run(command: tuple[str, ...], *, root: Path, log_path: Path, environment: dict[str, str]) -> int:
+        return 0
+
+    monkeypatch.setattr(daily_cycle, "_run_command", fake_run)
+    first = run_cycle(spec, repo_root=tmp_path)
+    assert first["status"] == "passed"
+
+    path = tmp_path / relative_path
+    path.write_bytes(path.read_bytes() + b"\n")
+
+    with pytest.raises(DailyCycleError, match="different cycle specification"):
+        run_cycle(spec, repo_root=tmp_path)
+
+
 def test_cycle_continues_to_observe_after_a_failed_derived_stage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

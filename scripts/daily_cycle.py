@@ -127,6 +127,17 @@ def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as error:
+        raise DailyCycleError(f"cannot hash cycle input {path}: {error}") from error
+    return digest.hexdigest()
+
+
 def _timestamp() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -394,8 +405,28 @@ def build_plan(spec: Mapping[str, Any]) -> tuple[Stage, ...]:
     return tuple(stages)
 
 
-def _spec_hash(spec: Mapping[str, Any]) -> str:
-    encoded = json.dumps(spec, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+def _spec_hash(spec: Mapping[str, Any], *, root: Path) -> str:
+    """Hash the cycle envelope and the bytes of every referenced input file."""
+
+    material = dict(spec)
+    feature = dict(spec["feature"])
+    for field in ("universe", "schedule", "calendar_pin", "registry", "taxonomy_registry"):
+        path = _repo_file(root, feature[field], field=f"feature.{field}")
+        feature[f"{field}_sha256"] = _sha256_file(path)
+    if feature["security_mappings"] is not None:
+        path = _repo_file(root, feature["security_mappings"], field="feature.security_mappings")
+        feature["security_mappings_sha256"] = _sha256_file(path)
+    material["feature"] = feature
+    material["paper"] = [
+        {
+            **entry,
+            "spec_sha256": _sha256_file(
+                _repo_file(root, entry["spec"], field=f"paper[{index}].spec")
+            ),
+        }
+        for index, entry in enumerate(spec["paper"])
+    ]
+    encoded = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     return _sha256_bytes(encoded)
 
 
@@ -425,7 +456,7 @@ def _load_existing_report(
         raise DailyCycleError(f"existing cycle report has an invalid field set: {path}")
     if report["schema_version"] != SCHEMA_VERSION or report["cycle_id"] != spec["cycle_id"] or report["session_date"] != spec["session_date"]:
         raise DailyCycleError("existing cycle report identity does not match the cycle spec")
-    if report["spec_sha256"] != _spec_hash(spec):
+    if report["spec_sha256"] != _spec_hash(spec, root=root):
         raise DailyCycleError("existing cycle report belongs to a different cycle specification")
     if not isinstance(report["stages"], list):
         raise DailyCycleError("existing cycle report stages must be an array")
@@ -527,7 +558,7 @@ def run_cycle(spec: Mapping[str, Any], *, repo_root: str | Path) -> dict[str, An
                 "schema_version": SCHEMA_VERSION,
                 "cycle_id": normalized["cycle_id"],
                 "session_date": normalized["session_date"],
-                "spec_sha256": _spec_hash(normalized),
+                "spec_sha256": _spec_hash(normalized, root=root),
                 "status": "running",
                 "started_at": now,
                 "updated_at": now,
