@@ -3,21 +3,21 @@
 ## Result
 
 The v1 resilience and historical-bias harness passed at commit
-`9a0f5587e21f7b3c6048b74a6ae0dcd95c7d62f3`:
+`bc2d55819978f6d6b5a7fa3d25e237cf888f601f`:
 
 ```sh
 make v1-resilience-acceptance
 ```
 
-The machine-readable report was generated at `2026-08-30T05:46:30Z`:
+The machine-readable report was generated at `2026-08-30T05:59:56Z`:
 
 ```text
 data/research/acceptance/v1/v1-resilience.json
-sha256=e734d6f962d766c4c6f2ecda2b5dfb546502798d0c048e6a42f5835d64e98832
+sha256=db44b66d381afb3efee43755a37700d00985481ce3f3dabadd581d2fc6e02664
 ```
 
 All ten harness stages passed. The temporary restored PostgreSQL database was
-`restore_v1_20260830054421_3953892`; the harness removed it on exit and a follow-up
+`restore_v1_20260830055756_4026247`; the harness removed it on exit and a follow-up
 query found no remaining `restore_v1_*` databases.
 
 ## Scenarios
