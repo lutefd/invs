@@ -91,9 +91,9 @@ The following baseline limitations drive the version order:
   corporate-action mechanism gate. Exact official XNAS/BVMF artifacts close the
   bounded historical calendar/decision-clock gate, while broader date coverage still
   requires separately admitted evidence. The canonical BVMF/XNYS current/reference
-  publisher remains available only from receipt time, and a source-wired XNAS
-  current/reference adapter now covers the configured Nasdaq universe path under the
-  same receipt-time limitation.
+  publisher remains available only from receipt time, and the configured Nasdaq
+  universe path now has a bounded XNAS current/reference publication under the same
+  receipt-time limitation.
 - A bounded official B3 InstrumentsConsolidated path is implemented and live-accepted
   for exact current/reference Brazil identity/listing snapshots. It retains ISIN and
   source trading intervals but does not provide broad historical lifecycle coverage.

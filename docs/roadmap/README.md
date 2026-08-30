@@ -97,11 +97,13 @@ The B3 2026 market-calendar evidence parser in `6f61a84` now feeds official B3
 hours alongside NYSE calendar/hours parsing (`acd8eec`), the receipt-time XNAS
 adapter (`c97a8eb`), and deterministic canonical publication (`77fee79`). Live
 acceptance published five bounded BVMF sessions and all 365 XNYS dates for 2026,
-then proved pinned after-close next-session selection across an XNYS holiday. These
-current/reference versions are eligible only from receipt time, not historically
-admitted calendars. See the
+then proved pinned after-close next-session selection across an XNYS holiday. A
+bounded XNAS publication later added all 365 2026 sessions from the current Nasdaq
+Trader page; these current/reference versions are eligible only from receipt time,
+not historically admitted calendars. See the
 [B3 source report](../acceptance/2026-08-23-b3-market-calendar-evidence.md) and
-[exchange-calendar publication report](../acceptance/2026-08-23-exchange-calendar-publication.md).
+[exchange-calendar publication report](../acceptance/2026-08-23-exchange-calendar-publication.md),
+and [XNAS publication report](../acceptance/2026-08-30-nasdaq-calendar-publication.md).
 The exact-artifact historical follow-up is accepted in the
 [historical calendar and decision-clock report](../acceptance/2026-08-24-historical-calendar-publication.md).
 The bounded corporate-action and adjustment follow-up is accepted in the

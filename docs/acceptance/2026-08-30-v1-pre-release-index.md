@@ -32,6 +32,7 @@ criterion.
 | `INVS_BIND_ADDRESS=127.0.0.1 make test` | Passed: 219 Python tests, 63 schemas, Go tests/vet, Ruff, release/security checks, backup fixture | Runtime output from 2026-08-30 at `c97a8eb` |
 | `INVS_BIND_ADDRESS=127.0.0.1 make release-validate` | Passed: v1.0.0 compatibility contract, 61 schemas, 3 registries, 16 migrations, and complete data-fitness surfaces | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ingest SOURCE=all` | Passed: all five enabled source runs completed without rejected resources | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
+| `INVS_BIND_ADDRESS=127.0.0.1 INVS_CONFIG_FILE=./config/config.local.yaml make ingest SOURCE=nasdaq-calendar RUN_KEY=nasdaq-calendar-2026-08-30` | Passed: real XNAS current/reference publication, 365 sessions, zero rejected records | [XNAS calendar publication report](2026-08-30-nasdaq-calendar-publication.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make ops-status` | Passed: current enabled sources and projections within threshold; disk usage 17% | [Current operational readiness note](2026-08-30-v1-live-operations.md) |
 | `INVS_BIND_ADDRESS=127.0.0.1 make notebook` | Passed: empty-safe vertical-slice notebook executed | Runtime output from 2026-08-30 |
 | `INVS_BIND_ADDRESS=127.0.0.1 make dashboard-smoke` | Passed: dashboard JSON and PostgreSQL `EXPLAIN` checks | Runtime output from 2026-08-30 |
