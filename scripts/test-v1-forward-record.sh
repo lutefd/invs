@@ -34,7 +34,7 @@ if (( exit_code == 0 )); then
 	echo 'forward-record replay probe returned success unexpectedly' >&2
 exit 1
 fi
-if ! grep -Fq 'latest paper session is older than 7 calendar days at capture' "$log_path"; then
+if ! grep -Fq 'observation report is missing fields: recorded_at' "$log_path"; then
 	echo 'forward-record replay probe failed for an unexpected reason' >&2
 cat "$log_path" >&2
 exit 1

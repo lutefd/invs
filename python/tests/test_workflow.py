@@ -201,6 +201,7 @@ def _forward_evidence(tmp_path: Path, *, session_date: str | None = None) -> dic
             "report_id": "50000000-0000-4000-8000-000000000001",
             "account_id": ACCOUNT_A,
             "session_date": session_date,
+            "recorded_at": captured_at.isoformat().replace("+00:00", "Z"),
             "decision_id": "50000000-0000-4000-8000-000000000003",
             "input_fingerprint": "c" * 64,
             "decision_status": "no_op",

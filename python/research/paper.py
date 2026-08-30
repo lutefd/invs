@@ -1267,6 +1267,7 @@ def _report_from_events(
     decision_id: str,
     fingerprint: str,
     *,
+    recorded_at: str,
     risk: Mapping[str, Any] | None = None,
     warnings: Sequence[str] = (),
 ) -> dict[str, Any]:
@@ -1346,6 +1347,7 @@ def _report_from_events(
         "report_id": report_id,
         "account_id": account["account_id"],
         "session_date": session["session_date"].isoformat(),
+        "recorded_at": recorded_at,
         "decision_id": decision_id,
         "input_fingerprint": fingerprint,
         "decision_status": status,
@@ -1528,12 +1530,14 @@ def _publish_report(
     fingerprint: str,
     warnings: Sequence[str],
 ) -> dict[str, Any]:
+    recorded_at = timestamp(datetime.now(UTC))
     report = _report_from_events(
         store,
         account,
         session,
         decision_id,
         fingerprint,
+        recorded_at=recorded_at,
         warnings=warnings,
     )
     store.write_report(report)
@@ -1657,7 +1661,7 @@ def _acceptance_reports(
         report = store.read_report(session_date)
         if not isinstance(report, Mapping):
             raise PaperLedgerError(f"paper report is not an object: {path}")
-        allowed = _PAPER_REPORT_REQUIRED_FIELDS | {"warnings"}
+        allowed = _PAPER_REPORT_REQUIRED_FIELDS | {"recorded_at", "warnings"}
         if not _PAPER_REPORT_REQUIRED_FIELDS.issubset(report) or not set(report).issubset(allowed):
             raise PaperLedgerError(f"paper report has an invalid field set: {path}")
         if report["schema_version"] != PAPER_SCHEMA_VERSION or report["account_id"] != store.account_id:
@@ -1671,6 +1675,11 @@ def _acceptance_reports(
             raise PaperLedgerError(f"paper report decision status is unsupported: {path}")
         if report["reconciled"] is not True:
             raise PaperLedgerError(f"paper report is not reconciled: {path}")
+        if "recorded_at" in report:
+            try:
+                _utc(report["recorded_at"], field="paper report.recorded_at")
+            except PaperSpecError as error:
+                raise PaperLedgerError(f"paper report recorded_at is invalid: {path}") from error
         for field in ("ledger_sequence_start", "ledger_sequence_end"):
             if not isinstance(report[field], int) or isinstance(report[field], bool) or report[field] < 1:
                 raise PaperLedgerError(f"paper report {field} is invalid: {path}")

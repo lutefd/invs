@@ -14,6 +14,7 @@
     "report_id": { "$ref": "common.schema.json#/$defs/uuid" },
     "account_id": { "$ref": "common.schema.json#/$defs/uuid" },
     "session_date": { "$ref": "common.schema.json#/$defs/date" },
+    "recorded_at": { "$ref": "common.schema.json#/$defs/utcTimestamp" },
     "decision_id": { "$ref": "common.schema.json#/$defs/uuid" },
     "input_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
     "decision_status": { "enum": ["proposed", "approved", "rejected", "halted", "no_op", "settled"] },

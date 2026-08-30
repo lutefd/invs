@@ -18,6 +18,7 @@ FORWARD_SCHEMA_VERSION = "1.0.0"
 FORWARD_SCHEMA = "../schemas/paper-forward-record.schema.json"
 CAPTURE_METHOD = "invs-paper-forward-capture"
 MAX_SESSION_AGE_DAYS = 7
+MAX_REPORT_RECORDING_DELAY = timedelta(hours=24)
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
@@ -241,52 +242,40 @@ def _validate_paper_order(
 
 
 def _validate_paper_report(
-    raw: Mapping[str, Any], *, account_id: str, session: date, start: int, end: int
+    raw: Mapping[str, Any],
+    *,
+    account_id: str,
+    session: date,
+    start: int,
+    end: int,
+    captured_at: datetime | None = None,
 ) -> str:
+    expected_fields = {
+        "schema_version",
+        "report_id",
+        "account_id",
+        "session_date",
+        "recorded_at",
+        "decision_id",
+        "input_fingerprint",
+        "decision_status",
+        "risk",
+        "approval",
+        "orders",
+        "nav_base",
+        "cash_base",
+        "positions_value_base",
+        "gross_exposure",
+        "drawdown",
+        "ledger_sequence_start",
+        "ledger_sequence_end",
+        "reconciled",
+    }
+    if "warnings" in raw:
+        expected_fields.add("warnings")
     report = _exact(
         raw,
-        {
-            "schema_version",
-            "report_id",
-            "account_id",
-            "session_date",
-            "decision_id",
-            "input_fingerprint",
-            "decision_status",
-            "risk",
-            "approval",
-            "orders",
-            "nav_base",
-            "cash_base",
-            "positions_value_base",
-            "gross_exposure",
-            "drawdown",
-            "ledger_sequence_start",
-            "ledger_sequence_end",
-            "reconciled",
-            "warnings",
-        }
-        if "warnings" in raw
-        else {
-            "schema_version",
-            "report_id",
-            "account_id",
-            "session_date",
-            "decision_id",
-            "input_fingerprint",
-            "decision_status",
-            "risk",
-            "approval",
-            "orders",
-            "nav_base",
-            "cash_base",
-            "positions_value_base",
-            "gross_exposure",
-            "drawdown",
-            "ledger_sequence_start",
-            "ledger_sequence_end",
-            "reconciled",
-        },
+        expected_fields,
         field="observation report",
     )
     if report["schema_version"] != FORWARD_SCHEMA_VERSION:
@@ -308,7 +297,16 @@ def _validate_paper_report(
     _string(risk["policy_version"], field="observation report.risk.policy_version")
     _string_array(risk["codes"], field="observation report.risk.codes")
     _string_array(risk["reasons"], field="observation report.risk.reasons")
-    _timestamp_value(risk["checked_at"], field="observation report.risk.checked_at")
+    decision_at = _timestamp_value(risk["checked_at"], field="observation report.risk.checked_at")
+    recorded_at = _timestamp_value(report["recorded_at"], field="observation report.recorded_at")
+    if recorded_at < decision_at:
+        raise ForwardRecordError("observation report.recorded_at precedes its risk check")
+    if recorded_at - decision_at > MAX_REPORT_RECORDING_DELAY:
+        raise ForwardRecordError(
+            "observation report.recorded_at is more than 24 hours after its risk check"
+        )
+    if captured_at is not None and recorded_at > captured_at:
+        raise ForwardRecordError("observation report.recorded_at is after forward capture")
     if report["approval"] not in {"pending", "approved", "rejected", "auto_approved", "not_required"}:
         raise ForwardRecordError("observation report.approval is unsupported")
     orders = report["orders"]
@@ -349,6 +347,7 @@ def _validate_observation(
     account_ids: set[str],
     session_dates: set[date],
     top_fitness: str | None,
+    captured_at: datetime,
 ) -> tuple[dict[str, Any], str]:
     observation = _exact(
         raw,
@@ -444,7 +443,14 @@ def _validate_observation(
     report = _strict_json(report_path)
     if not isinstance(report, Mapping):
         raise ForwardRecordError(f"observation report is not an object: {report_relative}")
-    report_id = _validate_paper_report(report, account_id=account_id, session=session, start=start, end=end)
+    report_id = _validate_paper_report(
+        report,
+        account_id=account_id,
+        session=session,
+        start=start,
+        end=end,
+        captured_at=captured_at,
+    )
     if report_id != observation["report_id"]:
         raise ForwardRecordError("observation report_id does not match the report file")
 
@@ -563,6 +569,7 @@ def validate_forward_record(value: Mapping[str, Any], *, repo_root: str | Path) 
             account_ids=set(normalized_accounts),
             session_dates=set(parsed_dates),
             top_fitness=fitness,
+            captured_at=captured_at,
         )
         pair = (normalized["account_id"], date.fromisoformat(normalized["session_date"]))
         if pair in seen_pairs:
@@ -612,7 +619,7 @@ def load_forward_record(path: str | Path, *, repo_root: str | Path) -> dict[str,
 
 
 def _timestamp_now() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _write_immutable(path: Path, value: Mapping[str, Any]) -> None:

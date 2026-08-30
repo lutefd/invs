@@ -228,6 +228,7 @@ def test_paper_accepts_split_adjusted_prices_without_actions(tmp_path: Path) -> 
     )
 
     assert report["decision_status"] == "proposed"
+    assert isinstance(report["recorded_at"], str)
     assert report["reconciled"] is True
 
 

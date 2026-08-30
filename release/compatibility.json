@@ -306,7 +306,7 @@
         "name": "paper-report",
         "path": "schemas/paper-report.schema.json",
         "schema_version": "1.0.0",
-        "sha256": "083057dcb8c4980c45ad2d8c9a45dd7b72f300376ac3e0b7c3c37db3809c9146"
+        "sha256": "30308882863f250b584aea29304a69e7c9f61213b3731d44d876d03c09fa1a6b"
       },
       {
         "name": "paper-target",
@@ -535,13 +535,13 @@
         "name": "paper",
         "path": "python/research/paper.py",
         "version": "python-paper-1.0.0",
-        "sha256": "6a6956c1b4e2e7e950e3ef7a16f2623a22c0f882c00a51f9dfe9966ec791f6bf"
+        "sha256": "4550ae7516200bb33f5d0da5badc5716d0b255bf4dfc3b18faecaa6c4d01b1fe"
       },
       {
         "name": "forward-record",
         "path": "python/research/forward_record.py",
         "version": "python-forward-record-1.0.0",
-        "sha256": "07b07cc6cdbca276b6fe58a3b51250b3df2705d9eb8fae40c048fff47511dc20"
+        "sha256": "006ea93337d164876e8e0c2da95546e2754e779698efca63beac9614c6265a30"
       },
       {
         "name": "market-basic",
