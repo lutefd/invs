@@ -72,18 +72,14 @@ If the local `.env` intentionally contains a non-loopback binding, prefix the
 repository validation with `INVS_BIND_ADDRESS=127.0.0.1`; this evaluates the
 committed security baseline without modifying the operator's local file.
 
+The maintained `v1-pre-release-acceptance` target composes the repository-side
+validation, operational checks, installation lifecycle, resilience/bias,
+replay-only forward-record guard, and workflow checks into one reproducible
+pre-release run. It does not run a live source refresh, create a genuine forward
+record, or claim an accepted v1.0 release; those remain explicit evidence steps.
+
 ```sh
-INVS_BIND_ADDRESS=127.0.0.1 make test
-make notebook
-make dashboard-smoke
-make migrate
-make historical-truth-db-test
-INVS_BIND_ADDRESS=127.0.0.1 make v1-install-upgrade-acceptance
-make reconcile
-make health
-make workflow-acceptance
-make v1-forward-record-acceptance
-make v1-resilience-acceptance
+INVS_BIND_ADDRESS=127.0.0.1 make v1-pre-release-acceptance
 ```
 
 `workflow-acceptance` intentionally reports `attention` until the genuine forward
