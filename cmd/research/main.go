@@ -260,6 +260,32 @@ func dispatch(ctx context.Context, repository *metadata.Repository, operation st
 			return nil, err
 		}
 		return repository.GetResearchStatusReport(ctx, value.AsOf)
+	case "register-backtest-experiment":
+		var value metadata.BacktestExperimentRegistration
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.RegisterBacktestExperiment(ctx, value)
+	case "start-backtest-run":
+		var value metadata.BacktestRunRegistration
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.StartBacktestRun(ctx, value)
+	case "backtest-run-event":
+		var value metadata.BacktestRunEvent
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.AppendBacktestRunEvent(ctx, value)
+	case "backtest-report":
+		var value struct {
+			ExperimentID string `json:"experiment_id"`
+		}
+		if err := decodeInput(input, &value); err != nil {
+			return nil, err
+		}
+		return repository.GetBacktestExperimentReport(ctx, value.ExperimentID)
 	case "outcome":
 		var value metadata.ResearchPredictionOutcome
 		if err := decodeInput(input, &value); err != nil {
