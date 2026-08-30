@@ -56,7 +56,7 @@ The generated reports are ignored runtime evidence and are reproducible from the
 committed fixtures and prior acceptance commands. They must not be described as a
 v1 release acceptance until the forward-record check changes to `passed`.
 
-The latest replay rerun from `c79711daa17125bed760983cf266175ba63875e9` kept both
+The latest replay rerun from `b4e89e59f36f386e2b759b0427092bf8f7841787` kept both
 reports at `status: attention` with `forward_record_status: recorded_replay`:
 
 ```text
