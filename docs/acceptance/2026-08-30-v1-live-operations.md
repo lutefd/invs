@@ -37,7 +37,7 @@ refresh.
 | `INVS_BIND_ADDRESS=127.0.0.1 make notebook` | Passed: vertical-slice notebook executed in the Jupyter container |
 | `INVS_BIND_ADDRESS=127.0.0.1 make dashboard-smoke` | Passed: dashboard queries and PostgreSQL `EXPLAIN` checks completed |
 | `make backup` followed by `make backup-validate` | Passed for `/home/luis/invs-backups/v1-current-20260830-0917`; 1,550 immutable files and PostgreSQL dump SHA-256 `54a87c4041d4f55d53667f5ce6f5534db1d3bac4748bb5c7e8a62eb5a75246bf` |
-| `INVS_BACKUP_ROOT=/home/luis/invs-backups/v1-current-20260830-0917 make ops-status` | Passed with the validated external backup selected for the backup-age check |
+| `INVS_BIND_ADDRESS=127.0.0.1 INVS_BACKUP_ROOT=/home/luis/invs-backups/v1-current-20260830-0917 make ops-status` | Passed with the validated external backup selected for the backup-age check |
 
 The backup is outside the checkout and remains recoverable host state; it is not a
 portable repository fixture. The setup target continues to print the standard
