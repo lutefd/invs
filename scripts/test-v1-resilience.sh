@@ -61,6 +61,7 @@ run_step historical-truth make historical-truth-db-test
 run_step bias-and-backtest make backtest-reproduction
 run_step paper-ledger make paper-reproduction
 run_step daily-resume make v1-daily-cycle-acceptance
+run_step forward-record-guard make v1-forward-record-acceptance
 
 backup_dir="$temporary_root/backup"
 restore_dir="$temporary_root/restored"
@@ -147,6 +148,7 @@ jq -n \
 			"historical_bias": ($backtest_status == "passed"),
 			"paper_interruption_idempotency_and_rebuild": ($paper_status == "passed"),
 			"daily_cycle_resume_after_failed_dependency": ([ $steps[] | select(.name == "daily-resume") | .status ] | .[0] == "passed"),
+			"forward_record_replay_rejected": ([ $steps[] | select(.name == "forward-record-guard") | .status ] | .[0] == "passed"),
 			"disposable_backup_restore_integrity": ([ $steps[] | select(.name == "backup-fixture") | .status ] | .[0] == "passed"),
 			"clean_root_postgres_restore_and_reconcile": ([ $steps[] | select(.name == "restore-reconcile") | .status ] | .[0] == "passed")
 		},
