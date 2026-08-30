@@ -231,6 +231,23 @@ def test_paper_accepts_split_adjusted_prices_without_actions(tmp_path: Path) -> 
     assert report["reconciled"] is True
 
 
+def test_paper_rejects_mixed_price_bases(tmp_path: Path) -> None:
+    from research.backtest_inputs import BacktestInputError
+    from research.portfolio import load_paper_inputs
+
+    account, root = _account_fixture(tmp_path)
+    prices_path = root / "inputs" / "prices.json"
+    prices = json.loads(prices_path.read_text(encoding="utf-8"))
+    prices["rows"][0]["price_basis"] = "split_adjusted"
+    content = canonical_json(prices) + b"\n"
+    prices_path.write_bytes(content)
+    price_ref = next(reference for reference in account["inputs"] if reference["kind"] == "prices")
+    price_ref["sha256"] = hashlib.sha256(content).hexdigest()
+
+    with pytest.raises(BacktestInputError, match="must not mix price bases"):
+        load_paper_inputs(account["inputs"], data_root=root)
+
+
 def test_paper_rejects_split_adjusted_prices_with_actions(tmp_path: Path) -> None:
     from research.backtest_inputs import BacktestInputError
     from research.portfolio import load_paper_inputs
