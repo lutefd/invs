@@ -234,14 +234,15 @@ forward-record rejection guard landed in `cf37708`.
 The daily-cycle preflight was then hardened in `a4f8868` to require the complete
 v1 paper-account envelope, reject missing or unknown top-level fields and wrong
 schema versions before execution, and cover the failure path with a focused test
-and acceptance fixture. The full `make validate` and latest resilience, installation,
-and workflow reruns passed from `1d5d2ad`; the integrated workflow still
+and acceptance fixture. The latest full validation, resilience, installation, and
+composed pre-release reruns passed from `010cfc0`; the integrated workflow still
 intentionally reports `attention` until genuine forward evidence exists. The same
-commit hardens daily-cycle input, report, and stage-log path boundaries against
-symlink traversal and report-temp races.
+path-boundary sequence hardens daily-cycle input, report, and stage-log paths
+against symlink traversal and report-temp races; `010cfc0` also preflights report
+and log destinations before execution.
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 report evidence was pinned in `67c59ad` and the latest runtime reports were rerun
-from `1d5d2ad`. The genuine-only `v1-release-acceptance` wrapper landed in
+from `010cfc0`. The genuine-only `v1-release-acceptance` wrapper landed in
 `3051376` and refuses to enter the ladder without both forward evidence references;
 `22e4d50` also rejects missing, traversing, absolute, or symlinked references before
 any validation or container work begins.
@@ -290,9 +291,10 @@ the complete daily-cycle preflight and input-byte resumability checks.
 The follow-up legacy-report compatibility regression in `59c435f` brought the
 current full gate to 211 Python tests. The timestamp-bound acceptance regressions
 in `c12074a` brought the gate to 213 Python tests. The daily-cycle path-boundary
-regressions in `47034ae` and the ledger-root guard in `1d5d2ad` brought the current
-full gate to 218 Python tests; the
-active v1 evidence index records that latest result.
+regressions in `47034ae` and the ledger-root guard in `1d5d2ad` brought the full
+gate to 218 Python tests; the destination-preflight regression in `010cfc0` brings
+the current full gate to 219 Python tests. The active v1 evidence index records
+that latest result.
 
 The supported forward-evidence path is `make forward-record-capture` after a real
 recent paper session. Newly generated paper reports carry an invocation-time UTC

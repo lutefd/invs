@@ -1598,14 +1598,14 @@ post-capture timestamps during genuine capture.
 Retained pre-timestamp reports remain aggregate/replay-compatible, while the
 operator timing rules are documented and the pre-risk/post-capture rejection
 branches are covered by `59c435f`, `7058d10`, and `c12074a`; the current full test
-gate passes 218 Python tests. Daily-cycle input, report, and stage-log path
+gate passes 219 Python tests. Daily-cycle input, report, and stage-log path
 boundaries were hardened in `47034ae`, including symlink rejection and exclusive
 temporary report creation; `1d5d2ad` also confines the paper ledger to the mounted
-data tree.
+data tree, and `010cfc0` preflights report and log destinations before execution.
 
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 passing report set was pinned in `67c59ad`, and the latest runtime reports were
-rerun from `1d5d2ad`. The aggregate paper report output was made safe and
+rerun from `010cfc0`. The aggregate paper report output was made safe and
 no-overwrite in `27d3fdd`, with conflict termination corrected in `28319fc` and
 dangling output/temporary symlinks rejected in `40e110e`. The genuine-only
 `v1-release-acceptance` target landed in `3051376`; `22e4d50` makes it reject
@@ -1620,9 +1620,9 @@ release gate remains pending.
 
 The daily-cycle preflight was hardened in `a4f8868` to require the complete v1
 paper-account envelope before execution, with focused regression and acceptance
-coverage. The current `make validate`, resilience, and installation-lifecycle
-reruns passed from `1d5d2ad`; this repository-side hardening does not substitute
-for the genuine-forward requirement.
+coverage. The current full validation, resilience, installation-lifecycle, and
+composed pre-release reruns passed from `010cfc0`; this repository-side hardening
+does not substitute for the genuine-forward requirement.
 
 The current host readiness snapshot is recorded in the [v1 operational readiness
 note](acceptance/2026-08-30-v1-live-operations.md): all enabled sources refreshed,
