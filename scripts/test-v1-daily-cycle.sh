@@ -44,7 +44,7 @@ jq -n \
 	--arg account_id '40000000-0000-4000-8000-000000000001' \
 	'{
 		"$schema": $schema,
-		"schema_version": "1.1.0",
+		"schema_version": "1.2.0",
 		"cycle_id": $cycle_id,
 		"session_date": $session_date,
 		"decision_at": $decision_at,
@@ -93,7 +93,8 @@ scripts/daily-cycle.sh --repo-root "$repo_root" --spec "$spec_path" > "$run_root
 jq -e '
 	.status == "passed"
 	and ([.stages[] | select(.status != "passed" and .status != "resumed")] | length == 0)
-	and ([.stages[] | select(.name | startswith("paper:"))] | length == 3)
+	and ([.stages[] | select(.name | startswith("paper:"))] | length == 4)
+	and ([.stages[] | select(.name | endswith(":validate-inputs"))] | length == 1)
 	and ([.stages[] | select(.name == "backup" and .status == "resumed")] | length == 1)
 ' "${run_root}/cycle.json" >/dev/null
 

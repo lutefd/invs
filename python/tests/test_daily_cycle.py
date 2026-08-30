@@ -105,7 +105,7 @@ def _spec(tmp_path: Path) -> dict:
     _write(paper_path, _paper_account())
     return {
         "$schema": "../schemas/daily-cycle.schema.json",
-        "schema_version": "1.1.0",
+        "schema_version": "1.2.0",
         "cycle_id": "daily-cycle-test",
         "session_date": "2026-08-29",
         "decision_at": "2026-08-29T21:05:00Z",
@@ -145,6 +145,23 @@ def test_cycle_spec_requires_all_operator_inputs(tmp_path: Path) -> None:
     assert "paper:40000000-0000-4000-8000-000000000001:run" in {
         stage.name for stage in plan
     }
+    paper_validate = next(
+        stage
+        for stage in plan
+        if stage.name == "paper:40000000-0000-4000-8000-000000000001:validate-inputs"
+    )
+    assert paper_validate.dependencies == ("feature-batch",)
+    assert "PAPER_DATA_ROOT=/data" in paper_validate.command
+    assert "PAPER_SESSION_DATE=2026-08-29" in paper_validate.command
+    assert "PAPER_DECISION_AT=2026-08-29T21:05:00Z" in paper_validate.command
+    paper_create = next(
+        stage
+        for stage in plan
+        if stage.name == "paper:40000000-0000-4000-8000-000000000001:create"
+    )
+    assert paper_create.dependencies == (
+        "paper:40000000-0000-4000-8000-000000000001:validate-inputs",
+    )
     paper_run = next(
         stage
         for stage in plan
@@ -336,3 +353,22 @@ def test_cycle_continues_to_observe_after_a_failed_derived_stage(
     assert status_by_name["observe"] == "passed"
     assert status_by_name[f"paper:{ACCOUNT_ID}:run"] == "skipped"
     assert status_by_name["backup"] == "passed"
+
+
+def test_cycle_does_not_create_account_when_paper_input_preflight_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = _spec(tmp_path)
+
+    def fake_run(command: tuple[str, ...], *, root: Path, log_path: Path, environment: dict[str, str]) -> int:
+        return 9 if command[1] == "paper-validate-inputs" else 0
+
+    monkeypatch.setattr(daily_cycle, "_run_command", fake_run)
+    report = run_cycle(spec, repo_root=tmp_path)
+    status_by_name = {stage["name"]: stage["status"] for stage in report["stages"]}
+    assert report["status"] == "attention"
+    assert status_by_name[f"paper:{ACCOUNT_ID}:validate-inputs"] == "failed"
+    assert status_by_name[f"paper:{ACCOUNT_ID}:create"] == "skipped"
+    assert status_by_name[f"paper:{ACCOUNT_ID}:run"] == "skipped"
+    assert status_by_name[f"paper:{ACCOUNT_ID}:reconcile"] == "skipped"
+    assert status_by_name["observe"] == "passed"

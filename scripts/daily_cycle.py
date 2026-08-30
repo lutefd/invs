@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _CYCLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{2,127}$")
 _SOURCE = re.compile(r"^[a-z0-9_-]+$")
@@ -393,6 +393,7 @@ def build_plan(spec: Mapping[str, Any]) -> tuple[Stage, ...]:
     for entry in spec["paper"]:
         account_id = entry["account_id"]
         prefix = f"paper:{account_id}"
+        validate_name = f"{prefix}:validate-inputs"
         create_name = f"{prefix}:create"
         run_name = f"{prefix}:run"
         reconcile_name = f"{prefix}:reconcile"
@@ -400,9 +401,21 @@ def build_plan(spec: Mapping[str, Any]) -> tuple[Stage, ...]:
         stages.extend(
             [
                 Stage(
+                    validate_name,
+                    (
+                        "make",
+                        "paper-validate-inputs",
+                        f"PAPER_SPEC={entry['spec']}",
+                        "PAPER_DATA_ROOT=/data",
+                        f"PAPER_SESSION_DATE={spec['session_date']}",
+                        f"PAPER_DECISION_AT={spec['decision_at']}",
+                    ),
+                    ("feature-batch",),
+                ),
+                Stage(
                     create_name,
                     ("make", "paper-create-account", f"PAPER_SPEC={entry['spec']}", f"PAPER_LEDGER_ROOT={ledger}"),
-                    ("feature-batch",),
+                    (validate_name,),
                 ),
                 Stage(
                     run_name,

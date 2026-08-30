@@ -143,14 +143,14 @@
       {
         "name": "daily-cycle",
         "path": "schemas/daily-cycle.schema.json",
-        "schema_version": "1.1.0",
-        "sha256": "62b614c9afe16bbc6674267d9635a951ba2c09a2a38fa42e03fc10f49646f635"
+        "schema_version": "1.2.0",
+        "sha256": "e0ea510b868683a9e11bdad69c2930c6a16b0e699888b9436980cfadef2a135e"
       },
       {
         "name": "daily-cycle-report",
         "path": "schemas/daily-cycle-report.schema.json",
-        "schema_version": "1.1.0",
-        "sha256": "c1a665d312342ca96405d9b30c710b04d40df0ea76e4c8a15be25c46c511a31a"
+        "schema_version": "1.2.0",
+        "sha256": "c276071e8548741d93edc00679aaca0efb671820f14202fbecbc03928fb7a826"
       },
       {
         "name": "data-source",
