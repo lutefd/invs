@@ -522,6 +522,87 @@ def _costs(spec: Mapping[str, Any], gross: Decimal) -> tuple[Decimal, Decimal, D
     return commission, spread, slippage, tax
 
 
+def _fill_terms(
+    spec: Mapping[str, Any], row: Mapping[str, Any], side: str, quantity: Decimal
+) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal, Decimal]:
+    commission, spread, slippage, tax = _costs(spec, row["open"] * quantity)
+    spread_rate = _d(spec["cost_policy"]["spread_bps"]) / (_BPS * 2)
+    slippage_rate = _d(spec["cost_policy"]["slippage_bps"]) / _BPS
+    direction = _ONE if side == "buy" else -_ONE
+    fill_price = row["open"] * (_ONE + direction * (spread_rate + slippage_rate))
+    trade_notional = fill_price * quantity
+    return fill_price, trade_notional, commission, spread, slippage, tax
+
+
+def _max_affordable_quantity(
+    spec: Mapping[str, Any],
+    row: Mapping[str, Any],
+    quantity: Decimal,
+    available_local: Decimal,
+) -> Decimal:
+    """Find the largest fractional buy that fits after fees and tax."""
+
+    low = _ZERO
+    high = quantity
+    for _ in range(120):
+        middle = (low + high) / 2
+        _, trade_notional, commission, _, _, tax = _fill_terms(spec, row, "buy", middle)
+        if trade_notional + commission + tax <= available_local:
+            low = middle
+        else:
+            high = middle
+    if not spec["accounting_policy"]["fractional_shares"]:
+        low = low.to_integral_value(rounding=ROUND_DOWN)
+    return low
+
+
+def _fund_trade_currency(
+    spec: Mapping[str, Any],
+    inputs: BacktestInputs,
+    state: _State,
+    *,
+    currency: str,
+    required_local: Decimal,
+    event_at: datetime,
+    session_date: date,
+) -> bool:
+    """Exchange base cash for a foreign-currency buy and retain both audit legs."""
+
+    base_currency = spec["accounting_policy"]["base_currency"]
+    available_local = state.cash.get(currency, _ZERO)
+    shortfall = required_local - available_local
+    if shortfall <= 0:
+        return True
+    if currency == base_currency:
+        return False
+    required_base = _convert(inputs, shortfall, currency, base_currency, event_at)
+    if state.cash.get(base_currency, _ZERO) < required_base:
+        return False
+    state.cash[currency] = available_local + shortfall
+    state.cash[base_currency] = state.cash.get(base_currency, _ZERO) - required_base
+    _ledger(
+        state,
+        session_date=session_date,
+        event_at=event_at,
+        event_type="fx_conversion",
+        currency=base_currency,
+        amount_local=-required_base,
+        amount_base=-required_base,
+        note=f"fund {currency} buy",
+    )
+    _ledger(
+        state,
+        session_date=session_date,
+        event_at=event_at,
+        event_type="fx_conversion",
+        currency=currency,
+        amount_local=shortfall,
+        amount_base=_convert(inputs, shortfall, currency, base_currency, event_at),
+        note=f"fund {currency} buy",
+    )
+    return True
+
+
 def _reject_order(
     spec: Mapping[str, Any], state: _State, order: _PendingOrder, session: Mapping[str, Any], reason: str
 ) -> None:
@@ -569,17 +650,41 @@ def _execute_orders(
         elif max_participation < _ONE:
             _reject_order(spec, state, order, session, f"volume evidence missing for {order.security_id}")
             continue
-        commission, spread, slippage, tax = _costs(spec, row["open"] * quantity)
-        spread_rate = _d(spec["cost_policy"]["spread_bps"]) / (_BPS * 2)
-        slippage_rate = _d(spec["cost_policy"]["slippage_bps"]) / _BPS
-        direction = _ONE if order.side == "buy" else -_ONE
-        fill_price = row["open"] * (_ONE + direction * (spread_rate + slippage_rate))
-        gross = row["open"] * quantity
-        trade_notional = fill_price * quantity
+        if order.side == "buy":
+            _, estimated_trade_notional, estimated_commission, _, _, estimated_tax = _fill_terms(
+                spec, row, order.side, quantity
+            )
+            available_local = state.cash.get(order.currency, _ZERO)
+            base_currency = spec["accounting_policy"]["base_currency"]
+            if order.currency != base_currency:
+                available_local += _convert(
+                    inputs,
+                    state.cash.get(base_currency, _ZERO),
+                    base_currency,
+                    order.currency,
+                    session["open_at"],
+                )
+            if estimated_trade_notional + estimated_commission + estimated_tax > available_local:
+                quantity = _max_affordable_quantity(spec, row, quantity, available_local)
+                if quantity <= 0:
+                    _reject_order(spec, state, order, session, f"insufficient {order.currency} cash for {order.security_id}")
+                    continue
+        fill_price, trade_notional, commission, spread, slippage, tax = _fill_terms(
+            spec, row, order.side, quantity
+        )
         local_cash_change = trade_notional + commission + tax
-        if order.side == "buy" and state.cash.get(order.currency, _ZERO) < local_cash_change:
+        if order.side == "buy" and not _fund_trade_currency(
+            spec,
+            inputs,
+            state,
+            currency=order.currency,
+            required_local=local_cash_change,
+            event_at=session["open_at"],
+            session_date=session["session_date"],
+        ):
             _reject_order(spec, state, order, session, f"insufficient {order.currency} cash for {order.security_id}")
             continue
+        gross = row["open"] * quantity
         if order.side == "buy":
             state.cash[order.currency] = state.cash.get(order.currency, _ZERO) - local_cash_change
             state.quantities[order.security_id] = state.quantities.get(order.security_id, _ZERO) + quantity
