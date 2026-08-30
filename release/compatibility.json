@@ -535,7 +535,7 @@
         "name": "paper",
         "path": "python/research/paper.py",
         "version": "python-paper-1.0.0",
-        "sha256": "57ad8e6c568baf38c1638841a7462fe3379632135d30132f29d0de0360acc7fb"
+        "sha256": "6a6956c1b4e2e7e950e3ef7a16f2623a22c0f882c00a51f9dfe9966ec791f6bf"
       },
       {
         "name": "forward-record",
