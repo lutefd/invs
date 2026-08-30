@@ -317,6 +317,39 @@ def test_paper_acceptance_report_derives_checks_without_mutating_ledger(tmp_path
     assert store.events() == before
 
 
+def test_paper_acceptance_report_keeps_legacy_reports_replay_compatible(tmp_path: Path) -> None:
+    from research.paper import (
+        build_paper_acceptance_report,
+        create_paper_account,
+        run_paper_session,
+    )
+
+    account, root = _account_fixture(tmp_path, price_basis="split_adjusted")
+    ledger_root = root / "ledger"
+    create_paper_account(account, ledger_root=ledger_root)
+    run_paper_session(
+        account,
+        data_root=root,
+        ledger_root=ledger_root,
+        session_date="2025-01-02",
+    )
+
+    report_path = ledger_root / "accounts" / account["account_id"] / "reports" / "report-2025-01-02.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report.pop("recorded_at")
+    report_path.write_bytes(canonical_json(report) + b"\n")
+
+    acceptance = build_paper_acceptance_report(
+        account,
+        data_root=root,
+        ledger_root=ledger_root,
+    )
+
+    assert acceptance["status"] == "passed"
+    assert all(acceptance["acceptance"].values())
+    assert "recorded_at" not in acceptance["accounts"][0]["final_report"]
+
+
 def test_paper_proposal_approval_fill_and_rebuild_are_idempotent(tmp_path: Path) -> None:
     from research.paper import (
         LedgerStore,
