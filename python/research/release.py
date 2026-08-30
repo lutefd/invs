@@ -14,6 +14,8 @@ from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Any, Final
 
+from .data_fitness import DataFitnessError, validate_data_fitness_matrix
+
 MANIFEST_VERSION: Final[str] = "1.0.0"
 RELEASE_VERSION: Final[str] = "1.0.0"
 
@@ -370,6 +372,7 @@ def _validate_registries(entries: Any, repo_root: Path) -> None:
     expected = {
         "feature-set": ("schemas/feature-set-registry.json", "registry_version"),
         "feature-taxonomy": ("schemas/feature-taxonomy-registry.json", "registry_version"),
+        "data-fitness": ("release/data-fitness.json", "registry_version"),
     }
     seen: set[str] = set()
     for index, item in enumerate(values):
@@ -389,8 +392,15 @@ def _validate_registries(entries: Any, repo_root: Path) -> None:
         document = _strict_json(path)
         if document.get(version_key) != item["version"]:
             raise CompatibilityError(f"contracts.registries.{name} version does not match its file")
+        if name == "data-fitness":
+            try:
+                validate_data_fitness_matrix(path, repo_root=repo_root)
+            except DataFitnessError as error:
+                raise CompatibilityError(f"data-fitness matrix is invalid: {error}") from error
     if seen != set(expected):
-        raise CompatibilityError("contracts.registries must include the feature-set and feature-taxonomy registries")
+        raise CompatibilityError(
+            "contracts.registries must include the feature-set, feature-taxonomy, and data-fitness registries"
+        )
 
 
 def _validate_migrations(migrations: Mapping[str, Any], repo_root: Path) -> None:

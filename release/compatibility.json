@@ -159,6 +159,12 @@
         "sha256": "1a87b5d1e1bc8c0db58379a02e4d9a8e88aad893a46f7957867a61e11f8bbb8d"
       },
       {
+        "name": "data-fitness-matrix",
+        "path": "schemas/data-fitness-matrix.schema.json",
+        "schema_version": "none",
+        "sha256": "1613a629acdeca53375c62666cfea330a7047ee569d9be75761388e2d52a6232"
+      },
+      {
         "name": "economic-observation",
         "path": "schemas/economic-observation.schema.json",
         "schema_version": "1.0.0",
@@ -441,6 +447,12 @@
         "path": "schemas/feature-taxonomy-registry.json",
         "version": "1.0.0",
         "sha256": "3846e55fbe172dc25bce58911f5577926d417982c077aaef46328a65e09b67a7"
+      },
+      {
+        "name": "data-fitness",
+        "path": "release/data-fitness.json",
+        "version": "1.0.0",
+        "sha256": "1cff670fe1c790acb0554a28766d43c3c04fd688453d811c6a70951542203a2c"
       }
     ],
     "migrations": {

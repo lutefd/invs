@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invs.local/data-fitness-matrix.schema.json",
+  "title": "INVS data fitness matrix",
+  "description": "Versioned historical-fitness and operational-access registry for research inputs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "registry_version",
+    "release_version",
+    "unknown_source_policy",
+    "backtest_admission",
+    "reachable_surfaces",
+    "source_codes",
+    "entries"
+  ],
+  "properties": {
+    "$schema": { "const": "../schemas/data-fitness-matrix.schema.json" },
+    "registry_version": { "const": "1.0.0" },
+    "release_version": { "const": "1.0.0" },
+    "unknown_source_policy": { "const": "reject_unlisted" },
+    "backtest_admission": { "const": "backtest_safe_only" },
+    "reachable_surfaces": { "$ref": "#/$defs/reachableSurfaces" },
+    "source_codes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/slug" }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "fitness": {
+      "enum": [
+        "backtest_safe",
+        "current_research_only",
+        "installation_replay_only",
+        "unsupported"
+      ]
+    },
+    "reachableSurfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog_datasets", "backtest_input_kinds", "feature_sets", "workflow_evidence"],
+      "properties": {
+        "catalog_datasets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "backtest_input_kinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "prices",
+              "calendar",
+              "membership",
+              "corporate_actions",
+              "fx",
+              "feature",
+              "macro",
+              "risk_free"
+            ]
+          }
+        },
+        "feature_sets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "workflow_evidence": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "reference", "access_status"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "reference": { "type": "string", "minLength": 1 },
+        "access_status": {
+          "enum": ["accepted", "bounded", "review_required", "not_admitted", "fixture_only"]
+        }
+      }
+    },
+    "access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "credentials", "unattended"],
+      "properties": {
+        "mode": {
+          "enum": ["api", "public_file", "contracted_product", "manual", "fixture"]
+        },
+        "credentials": { "enum": ["none", "optional", "required", "not_admitted"] },
+        "unattended": { "type": "boolean" }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regions", "entities", "fields", "start", "end", "frequency", "known_gaps"],
+      "properties": {
+        "regions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "entities": { "type": "string", "minLength": 1 },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "start": { "anyOf": [{ "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }, { "type": "null" }] },
+        "end": { "anyOf": [{ "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }, { "type": "null" }] },
+        "frequency": { "type": "string", "minLength": 1 },
+        "known_gaps": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "timeSemantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed", "published", "available", "precision", "historical_availability", "decision_rule"],
+      "properties": {
+        "observed": { "type": "string", "minLength": 1 },
+        "published": { "type": "string", "minLength": 1 },
+        "available": { "type": "string", "minLength": 1 },
+        "precision": { "enum": ["microsecond", "second", "date", "unknown", "not_applicable"] },
+        "historical_availability": {
+          "enum": ["exact_publication", "source_declared", "installation_receipt", "not_available", "not_applicable"]
+        },
+        "decision_rule": { "type": "string", "minLength": 1 }
+      }
+    },
+    "identityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["natural_key", "mapping_source", "historical_identity"],
+      "properties": {
+        "natural_key": { "type": "string", "minLength": 1 },
+        "mapping_source": { "type": "string", "minLength": 1 },
+        "historical_identity": {
+          "enum": ["versioned", "current_only", "not_applicable", "fixture_defined"]
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "commit", "status"],
+      "properties": {
+        "kind": { "enum": ["implementation", "acceptance", "fixture", "limitation"] },
+        "path": { "type": "string", "minLength": 1 },
+        "commit": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+            { "type": "null" }
+          ]
+        },
+        "status": { "enum": ["accepted", "bounded", "blocked", "ready"] }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "dataset",
+        "source",
+        "contract_version",
+        "feature_set",
+        "authority",
+        "access",
+        "coverage",
+        "time_semantics",
+        "revision_policy",
+        "historical_fitness",
+        "identity_policy",
+        "quality_checks",
+        "evidence",
+        "consumers",
+        "backtest_input_kinds",
+        "notes"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "dataset": { "$ref": "#/$defs/slug" },
+        "source": { "$ref": "#/$defs/slug" },
+        "contract_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "feature_set": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "authority": { "$ref": "#/$defs/authority" },
+        "access": { "$ref": "#/$defs/access" },
+        "coverage": { "$ref": "#/$defs/coverage" },
+        "time_semantics": { "$ref": "#/$defs/timeSemantics" },
+        "revision_policy": {
+          "enum": ["append", "replace", "current_snapshot", "installation_replay", "source_versioned", "unknown"]
+        },
+        "historical_fitness": { "$ref": "#/$defs/fitness" },
+        "identity_policy": { "$ref": "#/$defs/identityPolicy" },
+        "quality_checks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "consumers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "research_catalog",
+              "historical_resolver",
+              "feature_sets",
+              "backtest",
+              "paper",
+              "workflow",
+              "adjustments",
+              "operator",
+              "acceptance"
+            ]
+          }
+        },
+        "backtest_input_kinds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "prices",
+              "calendar",
+              "membership",
+              "corporate_actions",
+              "fx",
+              "feature",
+              "macro",
+              "risk_free"
+            ]
+          }
+        },
+        "notes": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

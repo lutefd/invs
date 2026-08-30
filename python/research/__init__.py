@@ -22,6 +22,7 @@ from .catalog import (
     SecurityMapping,
     load_security_mappings,
 )
+from .data_fitness import DataFitnessError, validate_data_fitness_matrix
 from .documents import (
     DocumentArtifactConflictError,
     DocumentArtifactError,
@@ -149,6 +150,7 @@ __all__ = [
     "BacktestSpecValidationError",
     "CalendarPolicy",
     "ComputationPolicy",
+    "DataFitnessError",
     "DatasetSchemaError",
     "DatasetStatus",
     "DocumentArtifactConflictError",
@@ -228,6 +230,7 @@ __all__ = [
     "trading_session_at",
     "universe_as_of",
     "validate_adjustment_artifact",
+    "validate_data_fitness_matrix",
     "validate_experiment_spec",
     "validate_feature_batch",
     "validate_fundamental_growth_artifact",

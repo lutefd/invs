@@ -187,7 +187,7 @@
         },
         "registries": {
           "type": "array",
-          "minItems": 2,
+          "minItems": 3,
           "items": { "$ref": "#/$defs/registry_ref" }
         },
         "migrations": {
