@@ -56,6 +56,16 @@ The generated reports are ignored runtime evidence and are reproducible from the
 committed fixtures and prior acceptance commands. They must not be described as a
 v1 release acceptance until the forward-record check changes to `passed`.
 
+The latest replay rerun from `02e19c503a488523de3cc6d64c6174fb4b16aee4` kept both
+reports at `status: attention` with `forward_record_status: recorded_replay`:
+
+```text
+data/research/acceptance/v1/thematic-workflow.json
+sha256=c03ed3397f6863769f27eed0214b3032ae2bede5a5c34ab25ee41a881d7d4b6d
+data/research/acceptance/v1/cross-market-workflow.json
+sha256=ed3ead64c6ce0f5d77bdbc02e9e4d9c341c28878c296f54d20f6c7ca85bdbc32
+```
+
 When genuine evidence is available, run the same harness with the captured record
 and an aggregate paper report that contains its account IDs:
 

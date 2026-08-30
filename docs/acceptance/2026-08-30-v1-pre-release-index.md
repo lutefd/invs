@@ -4,12 +4,12 @@
 
 This is the v1.0 pre-release evidence index, not an accepted v1.0 release. The
 current operational snapshot below was captured from checkout commit
-`92508ffe2432ca9b5ec89e1853d2282338e60544`. The latest repository validation and
-forward-record guard rerun were executed from commit
-`b5200fa8cc6e0a82e0933797098b59f3fc81f30b`; the recorded resilience, installation,
-and workflow reports remain the earlier accepted repository-side evidence cited
-below. `INVS_BIND_ADDRESS=127.0.0.1` was used where validation needed to override
-the operator's local non-loopback `.env` setting.
+`92508ffe2432ca9b5ec89e1853d2282338e60544`. The runtime hardening was committed in
+`b5200fa8cc6e0a82e0933797098b59f3fc81f30b`. The full validation and latest v1
+acceptance reruns were executed from commit
+`02e19c503a488523de3cc6d64c6174fb4b16aee4`; the operational snapshot remains the
+earlier host evidence cited below. `INVS_BIND_ADDRESS=127.0.0.1` was used where
+validation needed to override the operator's local non-loopback `.env` setting.
 
 The remaining release gate is a genuine wall-clock forward paper record. Historical
 simulation and recorded/replayed paper evidence are not substituted for that
