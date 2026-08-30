@@ -3,17 +3,17 @@
 ## Result
 
 The latest disposable installation lifecycle harness rerun passed at commit
-`58e16159842eb3dbd5bc34e84732feb22f06191d`:
+`6d5edab0858c5d46a156606197ee90f4b98a9b87`:
 
 ```sh
 INVS_BIND_ADDRESS=127.0.0.1 make v1-install-upgrade-acceptance
 ```
 
-The machine-readable report was generated at `2026-08-30T15:08:37Z`:
+The machine-readable report was generated at `2026-08-30T15:24:48Z`:
 
 ```text
 data/research/acceptance/v1/v1-install-upgrade.json
-sha256=b9ce96992c60131eb969594d266fc431ae4d924b0bf09a3c80d1095e44a3f4a0
+sha256=ee06f655bc97e14f919a3dca654f2af8fde582ae7a80eaa29e61b339eacacc98
 ```
 
 ## Scenarios
@@ -28,9 +28,9 @@ sha256=b9ce96992c60131eb969594d266fc431ae4d924b0bf09a3c80d1095e44a3f4a0
 | Interrupted-run recovery | Actual daily-cycle CLI failure followed by resume and completion | Passed |
 
 The harness records separate stage logs under
-`data/research/acceptance/v1/install-upgrade-20260830T150812Z-2091652/` and removes
-the disposable Compose project `invs-v1-install-2091651-2091652`, volume, and restore
-database `restore_v1_install_20260830150812_2091652` on exit. The live `invs`
+`data/research/acceptance/v1/install-upgrade-20260830T152422Z-2188504/` and removes
+the disposable Compose project `invs-v1-install-2188503-2188504`, volume, and restore
+database `restore_v1_install_20260830152422_2188504` on exit. The live `invs`
 PostgreSQL volume and long-lived services were not used by this acceptance.
 
 ## Boundary

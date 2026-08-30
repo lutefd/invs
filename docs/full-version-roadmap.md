@@ -1615,11 +1615,13 @@ escape through symlinked ancestors, covered by `246702d`.
 `2658490` versions the daily-cycle and durable report schemas as `1.1.0` and
 refreshes the compatibility manifest hashes. `58e1615` integrates the paper-input
 preflight into each resumable daily-cycle account path before account creation and
-versions those contracts as `1.2.0`; the current full gate is 224 Python tests.
+versions those contracts as `1.2.0`; the current full gate is 224 Python tests,
+with the paper-preflight failure path exercised through the CLI acceptance harness
+in `6d5edab`.
 
 The composed `v1-pre-release-acceptance` target landed in `b4e89e5`; its initial
 passing report set was pinned in `67c59ad`, and the latest runtime reports were
-rerun from `58e1615`. The aggregate paper report output was made safe and
+rerun from `6d5edab`. The aggregate paper report output was made safe and
 no-overwrite in `27d3fdd`, with conflict termination corrected in `28319fc` and
 dangling output/temporary symlinks rejected in `40e110e`. The genuine-only
 `v1-release-acceptance` target landed in `3051376`; `22e4d50` makes it reject
