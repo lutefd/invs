@@ -489,6 +489,7 @@ and [XNAS publication report](acceptance/2026-08-30-nasdaq-calendar-publication.
 - Latest v0.6 validation boundary: `95a79b5` (`fix(test): await fresh postgres initialization`)
 - Latest v1 compatibility boundary: `f8abe40` (`feat(release): add fail-closed v1 compatibility contract`)
 - Latest v1 daily-cycle boundary: `31e34b8` (`feat(operations): orchestrate the local daily research cycle`)
+- Latest v1 daily stock-discovery boundary: `de118b7` (`feat(discovery): rank and track daily stock candidates`)
 - Latest v1 workflow boundary: `d5b9c22` (`feat(research): add integrated workflow reports`)
 - Latest v1 security/recovery boundary: `586d79e` (`feat(operations): enforce security and recovery checks`)
 - Latest v1 resilience/bias boundary: `9a0f558` (`test(acceptance): prove v1 recovery and bias scenarios`)
@@ -529,6 +530,7 @@ and [XNAS publication report](acceptance/2026-08-30-nasdaq-calendar-publication.
 - v0.4 operator path: `make research-acceptance`
 - v0.5 operator paths: `make backtest-acceptance` and `make backtest-reproduction`
 - v0.6 operator paths: `make paper-acceptance` and `make paper-reproduction`
+- Live market/discovery operator paths: `make market-cycle`, `make discovery-run`, and `make discovery-validate`
 - Latest v0.4 read/report boundary: `b6d6bd3` (`feat(metadata): add point-in-time research read models`)
 - Latest v0.4 theme fixture boundary: `161a23e` (`feat(theme): add reviewed ai infrastructure reference`)
 - Latest v0.3 implementation boundary: `c126d39` (`feat(features): support multi-dataset feature batches`)
