@@ -24,6 +24,7 @@ def _write_artifact(
     rows: list[dict[str, object]],
     *,
     available_at: str = AVAILABLE_AT,
+    directory: str = "inputs",
 ) -> dict[str, object]:
     document = {
         "schema_version": "1.0.0",
@@ -32,14 +33,14 @@ def _write_artifact(
         "available_at": available_at,
         "rows": rows,
     }
-    path = root / "inputs" / f"{kind}.json"
+    path = root / directory / f"{kind}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     content = canonical_json(document) + b"\n"
     path.write_bytes(content)
     return {
         "kind": kind,
         "artifact_id": document["artifact_id"],
-        "path": f"inputs/{kind}.json",
+        "path": f"{directory}/{kind}.json",
         "sha256": hashlib.sha256(content).hexdigest(),
         "available_at": available_at,
         "fitness": "current_research_only",
@@ -393,6 +394,71 @@ def test_paper_proposal_approval_fill_and_rebuild_are_idempotent(tmp_path: Path)
     assert rebuilt["nav_base"] == second["nav_base"]
     assert rebuilt["cash_base"] == second["cash_base"]
     assert run_paper_session(account, data_root=root, ledger_root=ledger_root, session_date="2025-01-03") == second
+
+
+def test_later_session_can_pin_new_inputs_without_mutating_account(tmp_path: Path) -> None:
+    from research.paper import LedgerStore, create_paper_account, run_paper_session
+
+    account, root = _account_fixture(tmp_path)
+    ledger_root = root / "ledger"
+    create_paper_account(account, ledger_root=ledger_root)
+    first = run_paper_session(
+        account, data_root=root, ledger_root=ledger_root, session_date="2025-01-02"
+    )
+
+    override_prices = [
+        _price(SECURITY_A, "2025-01-02", "10", "10"),
+        _price(SECURITY_B, "2025-01-02", "20", "20"),
+        _price(SECURITY_A, "2025-01-03", "10", "12"),
+        _price(SECURITY_B, "2025-01-03", "20", "22"),
+    ]
+    override_refs = [
+        _write_artifact(root, "prices", 11, override_prices, directory="session-two"),
+        _write_artifact(
+            root,
+            "calendar",
+            12,
+            [
+                {
+                    "session_date": day,
+                    "open_at": f"{day}T14:30:00Z",
+                    "close_at": f"{day}T21:00:00Z",
+                    "available_at": AVAILABLE_AT,
+                }
+                for day in ("2025-01-02", "2025-01-03")
+            ],
+            directory="session-two",
+        ),
+        _write_artifact(
+            root,
+            "membership",
+            13,
+            [
+                {
+                    "security_id": security_id,
+                    "valid_from": "2025-01-01",
+                    "valid_until": None,
+                    "member": True,
+                    "available_at": AVAILABLE_AT,
+                    "revision": 0,
+                }
+                for security_id in (SECURITY_A, SECURITY_B)
+            ],
+            directory="session-two",
+        ),
+    ]
+    second = run_paper_session(
+        account,
+        data_root=root,
+        ledger_root=ledger_root,
+        session_date="2025-01-03",
+        input_references=override_refs,
+    )
+
+    assert second["input_fingerprint"] != first["input_fingerprint"]
+    assert LedgerStore(ledger_root, account["account_id"]).load_account()["inputs"] == sorted(
+        account["inputs"], key=lambda item: item["kind"]
+    )
 
 
 def test_risk_rejection_is_persisted_without_orders(tmp_path: Path) -> None:

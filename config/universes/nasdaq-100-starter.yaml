@@ -1,0 +1,26 @@
+schema_version: 1.0.0
+universe_id: 51efed8d-2106-5ac7-b12a-a66cfe0eb097
+name: nasdaq-100-starter
+membership_as_of: 2026-09-06
+source_url: https://indexes.nasdaq.com/docs/FS_NDX.pdf
+members:
+  - { ticker: NVDA, security_id: 87d51474-47b1-544f-aed7-91ef2683adf6, issuer_id: cd4a182b-8f52-5bc7-a8f6-707c2009fcae, sector: technology, themes: [ai, semiconductors] }
+  - { ticker: AAPL, security_id: 469fc20f-7d4b-45bb-b827-05f8410e71aa, issuer_id: 1b3d88f5-55b8-4dc5-a6be-2f77e9e99201, sector: technology, themes: [consumer_technology] }
+  - { ticker: MU, security_id: 2bd2c9e5-bab6-596c-afe2-e021c93409a9, issuer_id: 6b240f2b-280c-568d-b3fa-813f844831e2, sector: technology, themes: [semiconductors] }
+  - { ticker: MSFT, security_id: b40636a9-cc8e-5e0d-8760-98163e63f4e5, issuer_id: 5f7f9bec-8908-56b4-a0e5-7ab4e1ed71c1, sector: technology, themes: [ai, cloud] }
+  - { ticker: AMD, security_id: 75241642-b216-5655-9db2-a387a96f7d25, issuer_id: 9d0ceb4b-98ed-51af-b420-3fbfda90ed61, sector: technology, themes: [ai, semiconductors] }
+  - { ticker: AMZN, security_id: 8020b83e-14bc-5b2b-9501-d72e4177997b, issuer_id: 8e78475b-3d81-571d-977f-c666d1dbab24, sector: consumer_discretionary, themes: [cloud, ecommerce] }
+  - { ticker: TSLA, security_id: 58a09b99-99e8-5d37-8dcb-911b4736c653, issuer_id: 1f3a18dc-12ef-5c45-b617-0ad0f9d34e67, sector: consumer_discretionary, themes: [electric_vehicles] }
+  - { ticker: GOOGL, security_id: 9297739e-0c80-50f2-bdf8-57bec8ead48b, issuer_id: d63877a5-47f3-54ec-8860-cd1411d50a9f, sector: communication_services, themes: [advertising, ai, cloud] }
+  - { ticker: INTC, security_id: 77edb43b-1528-59d2-8d61-205b1b7723bf, issuer_id: 0e2c0b62-2f52-5bda-ba5f-dacc0fb25303, sector: technology, themes: [semiconductors] }
+  - { ticker: TMUS, security_id: 514bd0b2-c484-5732-a6c2-5c8346b915a0, issuer_id: 8d1af602-900d-5723-ae9d-9aa7b68eac26, sector: communication_services, themes: [telecommunications, wireless] }
+  - { ticker: META, security_id: 263e0a2c-94e6-57e5-af2b-c7b7db98c945, issuer_id: 5814c20d-2579-546f-999e-0482fbd7a252, sector: communication_services, themes: [advertising, ai] }
+  - { ticker: AVGO, security_id: 5826a37b-99fb-54ef-b120-9eeca41cede5, issuer_id: 4c2b3b3a-15b5-5985-bc09-d8507a5c65cc, sector: technology, themes: [semiconductors] }
+  - { ticker: COST, security_id: dece459f-ecb8-5dbb-a987-b723fc9a52a3, issuer_id: 304828c8-6e12-52e0-ba08-211854c11195, sector: consumer_staples, themes: [retail] }
+  - { ticker: WMT, security_id: 82b4fd04-8043-591a-8e29-9f8d09a2fa1e, issuer_id: c0f194be-be0d-5849-9c9d-d3251e9ccc96, sector: consumer_staples, themes: [retail] }
+  - { ticker: NFLX, security_id: b4a2ced1-a795-5b21-9aed-7caf71a53fdc, issuer_id: 6f628652-0f72-5981-89c7-8bf00cbc7fee, sector: communication_services, themes: [streaming] }
+  - { ticker: PLTR, security_id: 905861a5-fb65-5132-a995-2df150398cf6, issuer_id: 5b99a840-1598-50ea-add7-8403c4b4d310, sector: technology, themes: [ai, analytics] }
+  - { ticker: QCOM, security_id: 98b58f59-e0cc-59f9-8379-4635dedc525f, issuer_id: 9cf901f6-90cd-5998-90a4-04899b475baa, sector: technology, themes: [semiconductors, wireless] }
+  - { ticker: CSCO, security_id: 4f17f3bb-f9e2-5096-8822-241d4ded2313, issuer_id: a6be7aea-5ce9-5978-b6c9-7703b79d5119, sector: technology, themes: [networking] }
+  - { ticker: AMAT, security_id: df40c617-0266-5103-af15-69a369412bc9, issuer_id: 0b8bc315-7dd3-5bf2-a358-50d802ea5669, sector: technology, themes: [semiconductors] }
+  - { ticker: LRCX, security_id: adc0d36c-a95c-5c43-b39e-3a48ef3adbc6, issuer_id: 95af67c1-c65b-5589-8fe5-af3dafa4b7c2, sector: technology, themes: [semiconductors] }

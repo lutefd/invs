@@ -378,6 +378,12 @@ func scanFeatures(report *Report, roots Roots) error {
 		if walkErr != nil {
 			return walkErr
 		}
+		// Dataset-level batch manifests have a separate strict schema and are
+		// validated by feature-batch-validate. This scanner verifies only child
+		// feature artifacts and must not decode a batch envelope as a child.
+		if entry.IsDir() && path != roots.FeatureRoot && entry.Name() == "batches" {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() || entry.Name() != "manifest.json" {
 			return nil
 		}

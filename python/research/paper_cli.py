@@ -43,6 +43,15 @@ def _strict_json(path: Path) -> dict[str, Any]:
     return document
 
 
+def _session_inputs(path: str | None) -> list[dict[str, Any]] | None:
+    if path is None:
+        return None
+    document = _strict_json(Path(path))
+    if set(document) != {"inputs"} or not isinstance(document["inputs"], list):
+        raise ValueError("session input document must contain exactly one inputs array")
+    return document["inputs"]
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="invs-paper",
@@ -58,6 +67,10 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--ledger-root", required=True)
     run.add_argument("--session-date", required=True)
     run.add_argument("--decision-at")
+    run.add_argument(
+        "--inputs",
+        help="JSON input-reference bundle for this session; account terms remain immutable",
+    )
     preflight = commands.add_parser(
         "validate-inputs", help="validate one paper session without creating ledger state"
     )
@@ -65,6 +78,10 @@ def _parser() -> argparse.ArgumentParser:
     preflight.add_argument("--data-root", required=True)
     preflight.add_argument("--session-date", required=True)
     preflight.add_argument("--decision-at")
+    preflight.add_argument(
+        "--inputs",
+        help="JSON input-reference bundle for this session; account terms remain immutable",
+    )
     approve = commands.add_parser("approve", help="append a manual approval or rejection")
     approve.add_argument("--account-id", required=True)
     approve.add_argument("--decision-id", required=True)
@@ -105,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
                 ledger_root=args.ledger_root,
                 session_date=args.session_date,
                 decision_at=args.decision_at,
+                input_references=_session_inputs(args.inputs),
             )
         elif args.command == "validate-inputs":
             output = preflight_paper_session(
@@ -112,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
                 data_root=args.data_root,
                 session_date=args.session_date,
                 decision_at=args.decision_at,
+                input_references=_session_inputs(args.inputs),
             )
         elif args.command == "approve":
             output = approve_paper_decision(

@@ -1576,7 +1576,7 @@ local platform.
   by historical simulation.
 - All known data sources are labeled by historical fitness and operational health.
 
-## Current v1.0 implementation boundary — 2026-08-30
+## Current v1.0 implementation boundary — 2026-09-06
 
 v1.0 is in progress. The compatibility contract is enforced by `make
 release-validate`; the specification-driven local daily-cycle runner, integrated
@@ -1588,6 +1588,15 @@ report](acceptance/2026-08-30-v1-resilience.md) passes its seven recovery/bias
 scenarios and all eleven underlying stages. The additional forward-record guard
 in `cf37708` proves that the retained v0.6 replay ledger cannot be promoted into
 genuine wall-clock evidence.
+
+The 2026-09-06 live-operator continuation adds the first curated 20-security
+Nasdaq-100 operating profile, a serialized `make market-cycle` path, immutable
+feature/paper input materialization, per-session paper input pins, explicit Yahoo
+revision quarantine, and a weekday user-level systemd timer. Its first live run
+published a 20/20 `market-basic` batch for the 2026-09-04 close with zero rejected
+partitions and zero reconciliation findings. The local activation timestamp is
+later than that close, so paper remains gated until the next complete forward
+session; this is operational progress, not v1.0 release evidence.
 
 The genuine-forward gate is now fail-closed through the `paper-forward-record`
 contract and `make forward-record-capture`, landed in `e272e3d` with the import

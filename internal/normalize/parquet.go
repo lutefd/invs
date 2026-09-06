@@ -20,6 +20,15 @@ import (
 var ErrMigrationRequired = errors.New("normalized parquet migration required")
 var ErrNaturalKeyConflict = errors.New("canonical natural key conflict")
 
+// PriceWriteResult reports rows admitted to the canonical partition and any
+// provider revisions quarantined at an already-committed natural key.
+type PriceWriteResult struct {
+	Path         string
+	RowsChanged  int
+	Accepted     []model.PriceBar
+	ConflictKeys []string
+}
+
 type PriceRow struct {
 	SchemaVersion      string `parquet:"schema_version"`
 	Source             string `parquet:"source"`
@@ -283,49 +292,93 @@ func (w *Writer) ValidateExisting() error {
 }
 
 func (w *Writer) WritePrices(securityID string, obs []model.PriceBar) (string, int, error) {
+	result, err := w.writePrices(securityID, obs, false)
+	if err != nil {
+		return "", 0, err
+	}
+	return result.Path, result.RowsChanged, nil
+}
+
+// WritePricesQuarantining appends new bars while retaining committed values
+// when a mutable provider revises an old natural key. The caller receives the
+// exact conflict keys and only the newly admitted observations for metadata
+// publication. Raw payload retention remains the evidence for later review.
+func (w *Writer) WritePricesQuarantining(securityID string, obs []model.PriceBar) (PriceWriteResult, error) {
+	return w.writePrices(securityID, obs, true)
+}
+
+func (w *Writer) writePrices(securityID string, obs []model.PriceBar, quarantine bool) (PriceWriteResult, error) {
 	if _, err := uuid.Parse(securityID); err != nil {
-		return "", 0, fmt.Errorf("security ID must be UUID: %w", err)
+		return PriceWriteResult{}, fmt.Errorf("security ID must be UUID: %w", err)
 	}
 	source := sourceOfPrices(obs)
 	for _, o := range obs {
 		if o.SecurityID != securityID || o.Source != source {
-			return "", 0, errors.New("price observation/path identity mismatch")
+			return PriceWriteResult{}, errors.New("price observation/path identity mismatch")
 		}
 	}
 	dir, err := w.partition("prices", "source="+source, "security_id="+securityID)
 	if err != nil {
-		return "", 0, err
+		return PriceWriteResult{}, err
 	}
 	in := make([]PriceRow, 0, len(obs))
 	for _, o := range obs {
 		r, err := priceRow(o)
 		if err != nil {
-			return "", 0, err
+			return PriceWriteResult{}, err
 		}
 		in = append(in, r)
 	}
 	partition := map[string]string{"dataset": "prices", "source": source, "security_id": securityID}
 	existing, err := readCommitted[PriceRow](dir, partition)
 	if err != nil {
-		return "", 0, fmt.Errorf("read existing prices: %w", err)
+		return PriceWriteResult{}, fmt.Errorf("read existing prices: %w", err)
 	}
 	for _, r := range existing {
 		if r.Source != source || r.SecurityID != securityID {
-			return "", 0, fmt.Errorf("read existing prices: %w: partition identity mismatch", ErrMigrationRequired)
+			return PriceWriteResult{}, fmt.Errorf("read existing prices: %w: partition identity mismatch", ErrMigrationRequired)
 		}
 	}
-	rows, err := merge(existing, in, priceKey, samePrice)
-	if err != nil {
-		return "", 0, err
+	byKey := make(map[string]PriceRow, len(existing)+len(in))
+	for _, row := range existing {
+		byKey[priceKey(row)] = row
+	}
+	accepted := make([]model.PriceBar, 0, len(obs))
+	conflicts := make([]string, 0)
+	for index, row := range in {
+		key := priceKey(row)
+		if previous, ok := byKey[key]; ok {
+			if !samePrice(previous, row) {
+				conflicts = append(conflicts, key)
+			}
+			continue
+		}
+		byKey[key] = row
+		accepted = append(accepted, obs[index])
+	}
+	if len(conflicts) > 0 && !quarantine {
+		return PriceWriteResult{ConflictKeys: conflicts}, fmt.Errorf(
+			"%w: %s", ErrNaturalKeyConflict, conflicts[0],
+		)
+	}
+	rows := make([]PriceRow, 0, len(byKey))
+	for _, row := range byKey {
+		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool { return priceKey(rows[i]) < priceKey(rows[j]) })
 	metadata, err := metadataFromRows(in, func(r PriceRow) publicationMetadata {
 		return publicationMetadata{Source: r.Source, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID, NormalizerVersion: r.NormalizerVersion}
 	})
 	if err != nil && !slices.Equal(existing, rows) {
-		return "", 0, err
+		return PriceWriteResult{}, err
 	}
-	return publish(w, dir, partition, existing, rows, priceKey, metadata)
+	path, changed, err := publish(w, dir, partition, existing, rows, priceKey, metadata)
+	if err != nil {
+		return PriceWriteResult{}, err
+	}
+	return PriceWriteResult{
+		Path: path, RowsChanged: changed, Accepted: accepted, ConflictKeys: conflicts,
+	}, nil
 }
 func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObservation) (string, int, error) {
 	if _, err := uuid.Parse(issuerID); err != nil {

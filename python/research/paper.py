@@ -573,6 +573,33 @@ def paper_account_sha256(account: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json(validate_paper_account(account))).hexdigest()
 
 
+def _account_with_session_inputs(
+    account: Mapping[str, Any], input_references: Sequence[Mapping[str, Any]] | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return immutable account terms and the per-session input view.
+
+    The account specification remains append-only.  A later forward session may
+    pin a new immutable input bundle without changing strategy, universe, risk,
+    or accounting terms.  Re-validating the full candidate deliberately reuses
+    the same strict artifact-reference contract as account creation.
+    """
+
+    persisted = validate_paper_account(account)
+    if input_references is None:
+        return persisted, persisted
+    if not isinstance(input_references, Sequence) or isinstance(
+        input_references, (str, bytes, bytearray)
+    ):
+        raise PaperSpecError("session inputs must be an array of artifact references")
+    candidate = dict(persisted)
+    candidate["inputs"] = [dict(item) for item in input_references]
+    working = validate_paper_account(candidate)
+    for field in set(persisted) - {"inputs"}:
+        if working[field] != persisted[field]:
+            raise PaperConflictError(f"session inputs changed immutable account field {field}")
+    return persisted, working
+
+
 def _write_immutable(path: Path, document: Mapping[str, Any]) -> None:
     content = canonical_json(document) + b"\n"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1256,6 +1283,7 @@ def preflight_paper_session(
     data_root: str | Path,
     session_date: str | date,
     decision_at: str | datetime | None = None,
+    input_references: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Validate one paper session before creating or mutating ledger state.
 
@@ -1265,7 +1293,7 @@ def preflight_paper_session(
     The actual account creation and decision run remain separate operations.
     """
 
-    normalized = validate_paper_account(account)
+    _, normalized = _account_with_session_inputs(account, input_references)
     inputs = load_paper_inputs(normalized["inputs"], data_root=data_root)
     sessions = sessions_for_account(normalized, inputs)
     current_date = (
@@ -1484,13 +1512,14 @@ def run_paper_session(
     ledger_root: str | Path,
     session_date: str | date,
     decision_at: str | datetime | None = None,
+    input_references: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run one recorded decision and next-open settlement cycle idempotently."""
 
-    normalized = validate_paper_account(account)
-    store = LedgerStore(ledger_root, normalized["account_id"])
+    persisted_spec, normalized = _account_with_session_inputs(account, input_references)
+    store = LedgerStore(ledger_root, persisted_spec["account_id"])
     persisted = store.load_account()
-    if persisted != normalized:
+    if persisted != persisted_spec:
         raise PaperConflictError("supplied paper account differs from immutable ledger account")
     current_date = date.fromisoformat(session_date) if isinstance(session_date, str) else session_date
     inputs = load_paper_inputs(normalized["inputs"], data_root=data_root)

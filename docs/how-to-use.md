@@ -1494,6 +1494,58 @@ PostgreSQL restore → reconciliation path. Its report is written to
 `data/research/acceptance/v1/v1-resilience.json`; the accepted 2026-08-30 result and
 its limitations are in the [resilience acceptance report](acceptance/2026-08-30-v1-resilience.md).
 
+### Live Nasdaq starter cycle
+
+For the first unattended real-market path, the repository includes a curated
+20-security Nasdaq-100 starter profile at
+`config/universes/nasdaq-100-starter.yaml`. The local collector configuration is
+the source of ticker/identifier mappings; the profile adds paper-risk metadata and
+the explicit 2026-09-06 membership-admission boundary.
+
+Run one complete operator pass:
+
+```sh
+make market-cycle
+```
+
+The command serializes concurrent launches, collects Yahoo daily prices, reconciles
+the canonical tree, exports the selected XNAS calendar version from PostgreSQL,
+materializes immutable feature inputs, and publishes a `market-basic` batch. Once a
+complete market close is later than the recorded local activation timestamp, it also
+creates or resumes the equal-weight paper account with a new hash-pinned session
+input bundle, runs the close decision, and reconciles the ledger. A pre-activation
+close can produce current-research features but is reported as
+`awaiting_forward_session`; it is never counted as genuine forward evidence.
+
+Install the user-level systemd timer after validating one manual pass:
+
+```sh
+make install-market-timer
+systemctl --user list-timers invs-market-cycle.timer
+journalctl --user -u invs-market-cycle.service -n 100 --no-pager
+```
+
+The timer runs Monday through Friday at 18:30 `America/Sao_Paulo`, after the US
+regular close in both daylight-saving regimes. Runtime state is under
+`.runtime/market-cycle/`, logs are under `logs/`, canonical features remain under
+`data/features/`, and operator snapshots plus the paper ledger are under
+`data/research/forward/nasdaq-100-starter/`. Each snapshot directory includes a
+human-readable `market-snapshot.json` with ticker, close, currency, basis,
+availability, and source-record locator for all 20 securities.
+
+Yahoo adjusted history can change retroactively. The collector retains the new raw
+payload, quarantines changed already-committed natural keys, records their count in
+the ingestion-run cursor, preserves the prior canonical bar, and still admits new
+sessions. This feed remains explicitly labeled
+`current_research_only`/`installation_replay_only`; it is not backtest-safe
+historical evidence.
+
+Paper account terms remain immutable. Later sessions may supply a separate
+`{"inputs": [...]}` bundle through `PAPER_INPUTS`/`invs-paper --inputs`; the bundle
+is validated and its fingerprint is recorded in the decision and report. Changing
+strategy, universe, accounting, or risk terms still conflicts with the persisted
+account.
+
 ### Complete v1.0 daily cycle
 
 The complete local operator path is specification-driven so every derived artifact

@@ -67,6 +67,11 @@ The current host refresh, reconciliation, notebook/dashboard checks, and externa
 backup validation are recorded in the [operational readiness note](../acceptance/2026-08-30-v1-live-operations.md).
 The final release gate still requires a genuine wall-clock forward paper record; the
 workflow reports remain `attention` until that evidence exists.
+The live 2026-09-06 continuation now runs a curated 20-security Nasdaq-100 starter
+cycle, publishes current-research feature batches, quarantines mutable Yahoo
+revisions, and has a weekday host timer. Its paper ledger is intentionally waiting
+for the first complete post-activation close, so the genuine-forward gate remains
+open.
 No strategy or backtester scope was pulled
 into the v0.2 exit work. The
 historical-contract slice in `4d483ac` added ADRs 0006 and 0007,

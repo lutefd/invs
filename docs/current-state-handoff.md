@@ -231,6 +231,36 @@ with the import-isolation correction in `b471908` and full paper-account/report
 validation plus append-only ledger replay in `be16303`. The repeatable replay-only
 forward-record rejection guard landed in `cf37708`.
 
+### Live Nasdaq starter activation — 2026-09-06
+
+The first real-market operating slice is active on the host. A checked-in 20-name
+Nasdaq-100 starter profile drives a local configuration with SEC-verified issuer
+CIKs and stable security IDs. `make market-cycle` collects the full price universe,
+reconciles canonical storage, derives its exact XNAS calendar pin from PostgreSQL,
+publishes `market-basic`, and prepares the forward paper path. The first live pass
+selected the 2026-09-04 close, accepted 20 of 20 feature partitions with zero
+rejects, and reconciled with zero filesystem findings.
+
+Activation was recorded at 2026-09-06T20:41:05Z. Because the selected close
+predates activation, the paper stage correctly reports `awaiting_forward_session`;
+the first genuine paper decision must come from a later complete close. A user-level
+systemd timer runs the cycle at 18:30 `America/Sao_Paulo` on weekdays. Host services
+intentionally remain published on `0.0.0.0` for Tailscale access; Tailscale ACLs,
+host firewall rules, and service authentication remain part of that policy.
+
+Two runtime gaps were closed for this path. Mutable Yahoo corrections at committed
+price natural keys are retained as raw evidence and explicitly quarantined while
+new bars continue to append; the first run quarantined one AAPL adjusted-history
+revision without altering the committed bar. Paper account terms remain immutable,
+while each later session can pin a new strictly validated immutable input bundle and
+record a new decision fingerprint. This makes multi-day forward operation possible
+without weakening account or ledger immutability.
+
+This activation still does not complete v1.0. Yahoo price fitness remains
+installation-replay/current-research only, the curated profile is not automated full
+Nasdaq-100 constituent maintenance, and the release gate still requires accumulated
+genuine wall-clock paper reports plus final workflow/release acceptance.
+
 The daily-cycle preflight was then hardened in `a4f8868` to require the complete
 v1 paper-account envelope, reject missing or unknown top-level fields and wrong
 schema versions before execution, and cover the failure path with a focused test

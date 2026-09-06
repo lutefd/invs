@@ -79,6 +79,10 @@ type normalizedStore interface {
 	WriteFX(string, string, []model.FXObservation) (string, int, error)
 }
 
+type priceRevisionQuarantineWriter interface {
+	WritePricesQuarantining(string, []model.PriceBar) (normalize.PriceWriteResult, error)
+}
+
 type operatorMetadataStore interface {
 	LookupRun(context.Context, string, string, string) (metadata.Run, error)
 	CancelRun(context.Context, metadata.Run, time.Time, string) error
@@ -626,11 +630,29 @@ func (a *app) collectPrices(ctx context.Context) error {
 			errs = append(errs, err)
 			continue
 		}
-		path, n, err := a.normalized.WritePrices(s.SecurityID, r.Bars)
+		path, n, accepted := "", 0, r.Bars
+		if writer, ok := a.normalized.(priceRevisionQuarantineWriter); ok {
+			result, writeErr := writer.WritePricesQuarantining(s.SecurityID, r.Bars)
+			err = writeErr
+			path, n, accepted = result.Path, result.RowsChanged, result.Accepted
+			if len(result.ConflictKeys) > 0 {
+				conflictCount, _ := m.Cursor["price_revision_conflicts"].(int)
+				m.Cursor["price_revision_conflicts"] = conflictCount + len(result.ConflictKeys)
+				a.log.Warn(
+					"provider price revisions quarantined",
+					"source", "yahoo",
+					"security_id", s.SecurityID,
+					"conflicts", len(result.ConflictKeys),
+					"first_natural_key", result.ConflictKeys[0],
+				)
+			}
+		} else {
+			path, n, err = a.normalized.WritePrices(s.SecurityID, r.Bars)
+		}
 		if err != nil {
 			errs = append(errs, err)
 		} else {
-			snapshots = append(snapshots, r.Bars...)
+			snapshots = append(snapshots, accepted...)
 			m.OutputRows += n
 			m.Cursor["last_security_id"] = s.SecurityID
 			a.log.Info("normalized dataset", "source", "yahoo", "security_id", s.SecurityID, "path", path, "rows", len(r.Bars))

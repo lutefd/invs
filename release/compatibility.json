@@ -535,7 +535,7 @@
         "name": "paper",
         "path": "python/research/paper.py",
         "version": "python-paper-1.0.0",
-        "sha256": "650975f9a45b59b2f71e4d56c7fb7b295c6c21b28cb8e284d8a8ab695665bf09"
+        "sha256": "918359ed484307adf3f0d9054729c5d942fc2b85d66d0def7d06e31e5b434af2"
       },
       {
         "name": "forward-record",
@@ -613,7 +613,7 @@
       {
         "name": "python-project",
         "path": "python/pyproject.toml",
-        "sha256": "aa9783886144b2a7920c87c7a877e6c2b6c0e07c576bbcad9c658dbd69cba969"
+        "sha256": "83d2754d0a9e0f9daee869275e5a9c0db028d7fefdc4d38e888f863e0cccdff1"
       },
       {
         "name": "compose",

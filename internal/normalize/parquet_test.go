@@ -433,6 +433,51 @@ func TestPriceCorrectionAtSameNaturalKeyConflicts(t *testing.T) {
 	}
 }
 
+func TestPriceRevisionQuarantineRetainsOldBarAndAppendsNewBar(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	firstAt := time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC)
+	original := price(firstAt)
+	if _, _, err := w.WritePrices(securityID, []model.PriceBar{original}); err != nil {
+		t.Fatal(err)
+	}
+	corrected := original
+	corrected.Close = "2.5"
+	newBar := price(firstAt.Add(24 * time.Hour))
+	result, err := w.WritePricesQuarantining(
+		securityID, []model.PriceBar{corrected, newBar},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RowsChanged != 1 || len(result.Accepted) != 1 || len(result.ConflictKeys) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	rows := rowsFromManifest[PriceRow](t, result.Path)
+	if len(rows) != 2 || rows[0].Close != original.Close || rows[1].Close != newBar.Close {
+		t.Fatalf("rows=%+v", rows)
+	}
+}
+
+func TestStrictPriceConflictDoesNotAppendOtherBars(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	firstAt := time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC)
+	original := price(firstAt)
+	path, _, err := w.WritePrices(securityID, []model.PriceBar{original})
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrected := original
+	corrected.Close = "2.5"
+	newBar := price(firstAt.Add(24 * time.Hour))
+	if _, _, err := w.WritePrices(securityID, []model.PriceBar{corrected, newBar}); !errors.Is(err, ErrNaturalKeyConflict) {
+		t.Fatalf("got %v", err)
+	}
+	rows := rowsFromManifest[PriceRow](t, path)
+	if len(rows) != 1 || rows[0].Close != original.Close {
+		t.Fatalf("rows=%+v", rows)
+	}
+}
+
 func TestPriceSameRawPayloadWithDifferentTimingIsNoOp(t *testing.T) {
 	w, _ := NewWriter(t.TempDir())
 	at := time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC)

@@ -236,3 +236,22 @@ func TestReadFeatureManifestSupportsPinnedV11AndLegacyV1(t *testing.T) {
 		t.Fatalf("legacy 1.0 fixture: %v", err)
 	}
 }
+
+func TestReconcileLeavesBatchManifestsToBatchValidator(t *testing.T) {
+	dataRoot := t.TempDir()
+	batchDir := filepath.Join(dataRoot, "features", "batches", "market-basic", "1.0.0", "batch-test")
+	if err := os.MkdirAll(batchDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(batchDir, "manifest.json"), []byte(`{"batch":"envelope"}`), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := Reconcile(context.Background(), Roots{DataRoot: dataRoot}, nil, time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Summary.FeatureArtifactErrors != 0 {
+		t.Fatalf("batch manifest was decoded as child artifact: %+v", report.FeatureArtifactErrors)
+	}
+}
