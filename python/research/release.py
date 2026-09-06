@@ -426,6 +426,7 @@ def _validate_migrations(migrations: Mapping[str, Any], repo_root: Path) -> None
 def _validate_implementations(entries: Any, repo_root: Path) -> None:
     expected_names = {
         "backtest",
+        "discovery",
         "paper",
         "forward-record",
         "market-basic",

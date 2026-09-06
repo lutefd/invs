@@ -237,9 +237,20 @@ The first real-market operating slice is active on the host. A checked-in 20-nam
 Nasdaq-100 starter profile drives a local configuration with SEC-verified issuer
 CIKs and stable security IDs. `make market-cycle` collects the full price universe,
 reconciles canonical storage, derives its exact XNAS calendar pin from PostgreSQL,
-publishes `market-basic`, and prepares the forward paper path. The first live pass
+publishes `market-basic` and `market-momentum`, catalogs a daily cross-sectional
+discovery index, and prepares the forward paper path. The first live pass
 selected the 2026-09-04 close, accepted 20 of 20 feature partitions with zero
 rejects, and reconciled with zero filesystem findings.
+
+The first discovery baseline retained all 20 rankings and labeled MU, AMD, INTC,
+LRCX, and AAPL as the five research-watchlist candidates. The deterministic score
+combines 3-, 6-, and 12-month momentum with smaller low-volatility and shallow-
+drawdown components. PostgreSQL retains each market session's ranks, scores,
+features, candidacy, and rejection reasons, while the `stock-discovery` Grafana
+dashboard exposes the latest table and rank/candidate history. The same market
+session is idempotent, and `automatic_trading` is explicitly false. The baseline is
+not a performance claim; forward return and hit-rate evidence can only accumulate
+after later closes.
 
 Activation was recorded at 2026-09-06T20:41:05Z. Because the selected close
 predates activation, the paper stage correctly reports `awaiting_forward_session`;

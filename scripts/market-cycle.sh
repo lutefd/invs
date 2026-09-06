@@ -108,6 +108,20 @@ make feature-batch \
   FEATURE_SET=market-basic \
   FEATURE_SET_VERSION=1.0.0
 
+momentum_result=$(make --no-print-directory feature-batch \
+  BATCH_UNIVERSE="$universe_host" \
+  BATCH_SCHEDULE="$schedule_host" \
+  CALENDAR_PIN="$calendar_pin_host" \
+  SECURITY_MAPPINGS="$mappings_host" \
+  FEATURE_SET=market-momentum \
+  FEATURE_SET_VERSION=1.0.0)
+printf '%s\n' "$momentum_result"
+momentum_manifest=$(printf '%s\n' "$momentum_result" | jq -er '.manifest_path')
+make --no-print-directory discovery-run \
+  DISCOVERY_PROFILE="$profile_host" \
+  DISCOVERY_MOMENTUM_MANIFEST="$momentum_manifest" \
+  DISCOVERY_MARKET_SESSION="$(jq -r '.session_date' "$result_path")"
+
 status=$(jq -r '.status' "$result_path")
 if [[ "$status" == paper_ready ]]; then
   account_id=$(jq -r '.paper.account_id' "$result_path")

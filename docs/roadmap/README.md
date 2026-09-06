@@ -68,8 +68,10 @@ backup validation are recorded in the [operational readiness note](../acceptance
 The final release gate still requires a genuine wall-clock forward paper record; the
 workflow reports remain `attention` until that evidence exists.
 The live 2026-09-06 continuation now runs a curated 20-security Nasdaq-100 starter
-cycle, publishes current-research feature batches, quarantines mutable Yahoo
-revisions, and has a weekday host timer. Its paper ledger is intentionally waiting
+cycle, publishes current-research feature batches, writes and catalogs an immutable
+daily momentum/risk discovery ranking, quarantines mutable Yahoo revisions, and has
+a weekday host timer. The first five watchlist candidates are explicitly research-
+only; daily rank history starts from the 2026-09-04 baseline. Its paper ledger is intentionally waiting
 for the first complete post-activation close, so the genuine-forward gate remains
 open.
 No strategy or backtester scope was pulled

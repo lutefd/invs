@@ -31,9 +31,9 @@ def _assert_rejected(tmp_path: Path, manifest: dict) -> None:
 def test_checked_in_manifest_is_valid() -> None:
     result = validate_release_manifest(MANIFEST_PATH, repo_root=REPO_ROOT)
     assert result.manifest["release_version"] == "1.0.0"
-    assert len(result.manifest["contracts"]["schemas"]) == 61
+    assert len(result.manifest["contracts"]["schemas"]) == 62
     assert len(result.manifest["contracts"]["registries"]) == 3
-    assert len(result.manifest["contracts"]["migrations"]["files"]) == 16
+    assert len(result.manifest["contracts"]["migrations"]["files"]) == 17
 
 
 def test_unknown_top_level_field_is_rejected(tmp_path: Path) -> None:

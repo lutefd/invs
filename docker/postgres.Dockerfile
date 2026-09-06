@@ -18,3 +18,4 @@ COPY --chmod=0444 migrations/000013_research_theme_context.up.sql /docker-entryp
 COPY --chmod=0444 migrations/000014_research_hypothesis_review_at.up.sql /docker-entrypoint-initdb.d/000014_research_hypothesis_review_at.sql
 COPY --chmod=0444 migrations/000015_backtest_experiments.up.sql /docker-entrypoint-initdb.d/000015_backtest_experiments.sql
 COPY --chmod=0444 migrations/000016_paper_accounts.up.sql /docker-entrypoint-initdb.d/000016_paper_accounts.sql
+COPY --chmod=0444 migrations/000017_discovery_indexes.up.sql /docker-entrypoint-initdb.d/000017_discovery_indexes.sql

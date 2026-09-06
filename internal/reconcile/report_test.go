@@ -237,6 +237,37 @@ func TestReadFeatureManifestSupportsPinnedV11AndLegacyV1(t *testing.T) {
 	}
 }
 
+func TestReadFeatureManifestSupportsMarketMomentum(t *testing.T) {
+	body, err := os.ReadFile("../../schemas/feature-manifest.fixture.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest featureManifest
+	if err := json.Unmarshal(body, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest.FeatureSet = "market-momentum"
+	manifest.FeatureNames = []string{
+		"return_1m", "return_3m", "return_6m", "return_12m",
+		"realized_volatility_1m", "max_drawdown_1m",
+	}
+	manifest.InputFingerprint, err = featureInputFingerprint(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "manifest.json")
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readFeatureManifest(path); err != nil {
+		t.Fatalf("market-momentum fixture: %v", err)
+	}
+}
+
 func TestReconcileLeavesBatchManifestsToBatchValidator(t *testing.T) {
 	dataRoot := t.TempDir()
 	batchDir := filepath.Join(dataRoot, "features", "batches", "market-basic", "1.0.0", "batch-test")

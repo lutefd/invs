@@ -7,6 +7,10 @@ unit_dir="$user_config_root/systemd/user"
 make_path=$(command -v make)
 mkdir -p "$unit_dir"
 
+# Ensure unattended runs use the current operator and catalog binaries before
+# the timer is enabled. Later code upgrades should reinstall the timer.
+docker compose build collector jupyter
+
 service_path="$unit_dir/invs-market-cycle.service"
 timer_path="$unit_dir/invs-market-cycle.timer"
 temporary_service="$service_path.tmp"

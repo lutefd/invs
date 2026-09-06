@@ -1510,7 +1510,9 @@ make market-cycle
 
 The command serializes concurrent launches, collects Yahoo daily prices, reconciles
 the canonical tree, exports the selected XNAS calendar version from PostgreSQL,
-materializes immutable feature inputs, and publishes a `market-basic` batch. Once a
+materializes immutable feature inputs, and publishes both `market-basic` and
+`market-momentum` batches. It then writes and catalogs one immutable stock-discovery
+index for that market session. Once a
 complete market close is later than the recorded local activation timestamp, it also
 creates or resumes the equal-weight paper account with a new hash-pinned session
 input bundle, runs the close decision, and reconciles the ledger. A pre-activation
@@ -1532,6 +1534,37 @@ regular close in both daylight-saving regimes. Runtime state is under
 `data/research/forward/nasdaq-100-starter/`. Each snapshot directory includes a
 human-readable `market-snapshot.json` with ticker, close, currency, basis,
 availability, and source-record locator for all 20 securities.
+
+The discovery index ranks every eligible starter-universe security using
+cross-sectional percentiles: 3-month return (25%), 6-month return (30%), 12-month
+return (30%), lower 1-month realized volatility (10%), and shallower 1-month maximum
+drawdown (5%). The top five are labeled `candidate`; that label means
+`research_watchlist_only` and never creates or changes a paper order. Missing or null
+momentum inputs are retained as explicit rejected rows rather than silently dropped.
+
+Daily indexes are retained under
+`data/research/discovery/nasdaq-100-starter/indexes/` and cataloged in PostgreSQL as
+`discovery_indexes` plus `discovery_rankings`. Re-running the same market session is
+idempotent. Inspect the latest ranks and their daily history in Grafana at
+`/d/stock-discovery/stock-discovery`, or query them directly:
+
+```sh
+docker compose exec -T postgres sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT market_session, rank, ticker, score, candidate
+   FROM discovery_latest_rankings ORDER BY rank NULLS LAST"'
+```
+
+To validate a retained artifact independently:
+
+```sh
+make discovery-validate \
+  DISCOVERY_MANIFEST=/data/research/discovery/nasdaq-100-starter/indexes/<session>-<id>/manifest.json
+```
+
+This first tracking layer records rank, score, candidacy, features, and rejection
+history. Forward returns and candidate hit-rate analytics need later post-discovery
+market sessions; the initial 2026-09-04 index is only a baseline observation.
 
 Yahoo adjusted history can change retroactively. The collector retains the new raw
 payload, quarantines changed already-committed natural keys, records their count in

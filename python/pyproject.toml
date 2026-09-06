@@ -29,6 +29,7 @@ invs-forward-record = "research.forward_record_cli:main"
 invs-release = "research.release_cli:main"
 invs-workflow = "research.workflow_cli:main"
 invs-operator = "research.operator_cli:main"
+invs-discovery = "research.discovery_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["research"]

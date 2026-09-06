@@ -165,6 +165,12 @@
         "sha256": "1613a629acdeca53375c62666cfea330a7047ee569d9be75761388e2d52a6232"
       },
       {
+        "name": "discovery-index",
+        "path": "schemas/discovery-index.schema.json",
+        "schema_version": "1.0.0",
+        "sha256": "ebe922d663d82298a728dd2fca956743408e2e3a3e7c08d05f56a84700e1c521"
+      },
+      {
         "name": "economic-observation",
         "path": "schemas/economic-observation.schema.json",
         "schema_version": "1.0.0",
@@ -456,7 +462,7 @@
       }
     ],
     "migrations": {
-      "latest": "migrations/000016_paper_accounts.up.sql",
+      "latest": "migrations/000017_discovery_indexes.up.sql",
       "files": [
         {
           "path": "migrations/000001_core_metadata.up.sql",
@@ -521,6 +527,10 @@
         {
           "path": "migrations/000016_paper_accounts.up.sql",
           "sha256": "6b3dfb55d7a3717c4ef6eda43520d6cbaab8eb74436a25e006a429d937421cae"
+        },
+        {
+          "path": "migrations/000017_discovery_indexes.up.sql",
+          "sha256": "6a960616bc8862d3dbfad8172b5a6851f52e7ac6c7b1dbb9de8bbfb32daeec6d"
         }
       ]
     },
@@ -530,6 +540,12 @@
         "path": "python/research/experiments.py",
         "version": "python-backtest-1.0.0",
         "sha256": "14d33a642831644a828e396c06caab199e6588ae9d69a936c19402586d0a60bd"
+      },
+      {
+        "name": "discovery",
+        "path": "python/research/discovery.py",
+        "version": "python-discovery-1.0.0",
+        "sha256": "25e0ad6967be7e6a03242a8ef89b0dda819fb53c37a029d16fe59b02ee6aa809"
       },
       {
         "name": "paper",
@@ -613,7 +629,7 @@
       {
         "name": "python-project",
         "path": "python/pyproject.toml",
-        "sha256": "83d2754d0a9e0f9daee869275e5a9c0db028d7fefdc4d38e888f863e0cccdff1"
+        "sha256": "3ac9dc5c9625e5e34047c3c1759153e1a2c007328093856b5c7d8da21c20e7e6"
       },
       {
         "name": "compose",
@@ -623,7 +639,7 @@
       {
         "name": "collector-dockerfile",
         "path": "docker/collector.Dockerfile",
-        "sha256": "fe57de118c75f79de52283a921a3f907ac8bd60f85306ff70450046c54d1c4ad"
+        "sha256": "a3a4d797009f0d5f9c9228cd6f883a8675a7e3516fbe79f8d9879b7fc52ea0d9"
       },
       {
         "name": "jupyter-dockerfile",
@@ -633,7 +649,7 @@
       {
         "name": "postgres-dockerfile",
         "path": "docker/postgres.Dockerfile",
-        "sha256": "3df09efe684ab500a5682912b611895fd83687efaca83de840993d818311c5c3"
+        "sha256": "1acb28887449816cd1da031659a39ef4417ee443d61904422f1bb342bcb84792"
       }
     ]
   },

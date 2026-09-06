@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -453,14 +454,18 @@ func readFeatureManifest(path string) (featureManifest, error) {
 	}
 	isV1 := manifest.SchemaVersion == "1.0.0" && manifest.ManifestVersion == "1.0.0" && manifest.Artifact.ArtifactVersion == "1.0.0"
 	isV11 := manifest.SchemaVersion == "1.1.0" && manifest.ManifestVersion == "1.1.0" && manifest.Artifact.ArtifactVersion == "1.1.0"
-	if (!isV1 && !isV11) || manifest.FeatureSet != "market-basic" || manifest.FeatureSetVersion != "1.0.0" {
+	if (!isV1 && !isV11) || manifest.FeatureSetVersion != "1.0.0" {
 		return featureManifest{}, errors.New("unsupported feature manifest version or feature set")
 	}
 	if isV1 && manifest.CalendarPin != (featureCalendarPin{}) {
 		return featureManifest{}, errors.New("feature manifest 1.0.0 cannot declare a calendar pin")
 	}
-	if len(manifest.FeatureNames) != 4 || manifest.FeatureNames[0] != "close" || manifest.FeatureNames[1] != "return_1d" || manifest.FeatureNames[2] != "range_1d" || manifest.FeatureNames[3] != "volume" {
-		return featureManifest{}, errors.New("feature manifest feature_names do not match market-basic v1")
+	expectedFeatureNames := map[string][]string{
+		"market-basic":    {"close", "return_1d", "range_1d", "volume"},
+		"market-momentum": {"return_1m", "return_3m", "return_6m", "return_12m", "realized_volatility_1m", "max_drawdown_1m"},
+	}[manifest.FeatureSet]
+	if expectedFeatureNames == nil || !slices.Equal(manifest.FeatureNames, expectedFeatureNames) {
+		return featureManifest{}, errors.New("feature manifest feature_names do not match its supported contract")
 	}
 	if _, err := uuid.Parse(manifest.Artifact.ArtifactID); err != nil || manifest.Artifact.GeneratorVersion == "" || !validGitCommit(manifest.Artifact.GitCommit) || !validUTCTimestamp(manifest.Artifact.CreatedAt) {
 		return featureManifest{}, errors.New("feature manifest artifact metadata is incomplete")

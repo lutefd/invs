@@ -134,6 +134,10 @@ def _write_report(
     )
 
 
+def _recent_checked_at() -> str:
+    return (datetime.now(UTC) - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
+
+
 def test_capture_binds_recent_reconciled_ledger_to_forward_evidence(tmp_path: Path) -> None:
     from research.forward_record import capture_forward_record, load_forward_record
     from research.paper import create_paper_account
@@ -141,7 +145,7 @@ def test_capture_binds_recent_reconciled_ledger_to_forward_evidence(tmp_path: Pa
     ledger_root = tmp_path / "ledger"
     create_paper_account(_account(), ledger_root=ledger_root)
     session_date = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
-    _write_report(ledger_root, session_date)
+    _write_report(ledger_root, session_date, checked_at=_recent_checked_at())
 
     output = capture_forward_record(
         repo_root=tmp_path,
@@ -251,7 +255,7 @@ def test_forward_evidence_rejects_old_session_even_with_valid_file_hashes(tmp_pa
     ledger_root = tmp_path / "ledger"
     create_paper_account(_account(), ledger_root=ledger_root)
     session_date = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
-    _write_report(ledger_root, session_date)
+    _write_report(ledger_root, session_date, checked_at=_recent_checked_at())
     output = capture_forward_record(
         repo_root=tmp_path,
         ledger_root=ledger_root,
@@ -279,7 +283,7 @@ def test_forward_evidence_rejects_minimal_account_fixture(tmp_path: Path) -> Non
     ledger_root = tmp_path / "ledger"
     create_paper_account(_account(), ledger_root=ledger_root)
     session_date = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
-    _write_report(ledger_root, session_date)
+    _write_report(ledger_root, session_date, checked_at=_recent_checked_at())
     output = capture_forward_record(
         repo_root=tmp_path,
         ledger_root=ledger_root,

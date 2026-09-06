@@ -1,0 +1,54 @@
+{
+  "annotations": {"list": []},
+  "description": "Daily, point-in-time stock discovery ranks. Candidates are a research watchlist, not trade recommendations or automatic orders.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Latest complete cross-sectional rank. The score combines 3/6/12-month momentum, low one-month volatility, and shallow one-month drawdown.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": true, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "rank"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT market_session, rank, ticker, sector, candidate, score::double precision AS score, (return_3m * 100)::double precision AS return_3m_pct, (return_6m * 100)::double precision AS return_6m_pct, (return_12m * 100)::double precision AS return_12m_pct, realized_volatility_1m::double precision AS volatility_1m, (max_drawdown_1m * 100)::double precision AS drawdown_1m_pct, eligibility_status FROM discovery_latest_rankings ORDER BY rank NULLS LAST, ticker", "refId": "A"}],
+      "title": "Latest discovery index",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Daily score history makes rank stability and deterioration visible. It is not filled across missing discovery sessions.",
+      "fieldConfig": {"defaults": {"min": 0, "max": 100}, "overrides": []},
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 12},
+      "id": 2,
+      "options": {"legend": {"calcs": [], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "time_series", "rawQuery": true, "rawSql": "SELECT index.decision_at AS time, ranking.ticker AS metric, ranking.score::double precision AS value FROM discovery_indexes index JOIN discovery_rankings ranking USING (discovery_id) WHERE ranking.eligibility_status = 'eligible' AND $__timeFilter(index.decision_at) ORDER BY time, metric", "refId": "A"}],
+      "title": "Discovery score history",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Retained daily candidates. Repeated appearances indicate ranking persistence; they do not imply an order or position.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 12},
+      "id": 3,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": true, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": true, "displayName": "decision_at"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT index.market_session, index.decision_at, ranking.rank, ranking.ticker, ranking.score::double precision AS score FROM discovery_indexes index JOIN discovery_rankings ranking USING (discovery_id) WHERE ranking.candidate ORDER BY index.market_session DESC, ranking.rank", "refId": "A"}],
+      "title": "Candidate history",
+      "type": "table"
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 41,
+  "tags": ["research", "discovery", "ranking", "watchlist"],
+  "templating": {"list": []},
+  "time": {"from": "now-90d", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Stock discovery",
+  "uid": "stock-discovery",
+  "version": 1
+}

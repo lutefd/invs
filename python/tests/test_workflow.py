@@ -210,7 +210,7 @@ def _forward_evidence(tmp_path: Path, *, session_date: str | None = None) -> dic
                 "policy_version": "1.0.0",
                 "codes": [],
                 "reasons": [],
-                "checked_at": f"{session_date}T21:00:00Z",
+                "checked_at": (captured_at - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
             },
             "approval": "not_required",
             "orders": [],

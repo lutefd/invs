@@ -1592,11 +1592,14 @@ genuine wall-clock evidence.
 The 2026-09-06 live-operator continuation adds the first curated 20-security
 Nasdaq-100 operating profile, a serialized `make market-cycle` path, immutable
 feature/paper input materialization, per-session paper input pins, explicit Yahoo
-revision quarantine, and a weekday user-level systemd timer. Its first live run
-published a 20/20 `market-basic` batch for the 2026-09-04 close with zero rejected
-partitions and zero reconciliation findings. The local activation timestamp is
+revision quarantine, a deterministic daily discovery index, PostgreSQL rank history,
+a stock-discovery dashboard, and a weekday user-level systemd timer. Its first live
+run published 20/20 `market-basic` and `market-momentum` batches for the 2026-09-04
+close with zero rejected partitions and zero reconciliation findings, then retained
+all 20 ranks and five research-only candidates. The local activation timestamp is
 later than that close, so paper remains gated until the next complete forward
-session; this is operational progress, not v1.0 release evidence.
+session; the discovery baseline and paper state are operational progress, not v1.0
+release or performance evidence.
 
 The genuine-forward gate is now fail-closed through the `paper-forward-record`
 contract and `make forward-record-capture`, landed in `e272e3d` with the import
