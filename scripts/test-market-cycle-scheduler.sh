@@ -5,8 +5,13 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 cd "$repo_root"
 
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/invs-market-cycle-scheduler.XXXXXX")
+paper_output_host=""
+paper_output_created=0
 cleanup() {
 	rm -rf -- "$test_root"
+	if [[ "$paper_output_created" == 1 ]]; then
+		rm -rf -- "$paper_output_host"
+	fi
 }
 trap cleanup EXIT
 
@@ -24,6 +29,12 @@ printf '%s\n' \
 '#!/usr/bin/env bash' \
 'set -euo pipefail' \
 'printf "%s\\n" "$*" >> "${INVS_SCHEDULER_TEST_MAKE_LOG:?}"' \
+'if [[ -n "${INVS_SCHEDULER_TEST_EXPECTED_PAPER_CLOCK:-}" ]] && [[ " $* " == *" paper-validate-inputs "* || " $* " == *" paper-run "* ]]; then' \
+'    case " $* " in' \
+'        *"PAPER_DECISION_AT=${INVS_SCHEDULER_TEST_EXPECTED_PAPER_CLOCK}"*) ;;' \
+'        *) echo "unexpected paper decision clock: $*" >&2; exit 1 ;;' \
+'    esac' \
+'fi' \
 'if [[ " $* " == *" feature-batch "* ]]; then' \
 '    printf "%s\\n" '\''{"manifest_path":"/data/research/features/market-momentum/test.json"}'\''' \
 'fi' \
@@ -37,7 +48,12 @@ printf '%s\n' \
 'if [[ " $* " == *" exec "* ]]; then' \
 '    printf "%s\\n" '\''{"manifest":{"data_source_id":"test-source","mic":"XNAS","calendar_version":"test-calendar","session_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","available_at":"2026-09-18T00:00:00Z"},"sessions":[]}'\''' \
 'elif [[ " $* " == *" run "* ]]; then' \
-'    printf "%s\\n" '\''{"status":"awaiting_forward_session","session_date":"2026-09-18","feature":{"universe":"/data/research/forward/test-scheduler/universe.json","schedule":"/data/research/forward/test-scheduler/schedule.json","calendar_pin":"/data/research/forward/test-scheduler/calendar.json","security_mappings":"/data/research/forward/test-scheduler/mappings.json"},"paper":null}'\''' \
+'    if [[ "${INVS_SCHEDULER_TEST_PAPER_READY:-0}" == 1 ]]; then' \
+'        paper_output="${INVS_SCHEDULER_TEST_PAPER_OUTPUT_CONTAINER:?}"' \
+'        printf '\''{"status":"paper_ready","session_date":"2026-09-18","feature":{"universe":"/data/research/forward/test-scheduler/universe.json","schedule":"/data/research/forward/test-scheduler/schedule.json","calendar_pin":"/data/research/forward/test-scheduler/calendar.json","security_mappings":"/data/research/forward/test-scheduler/mappings.json"},"paper":{"account_id":"test-paper-account","spec":"%s/ledger/generated-account.json","inputs":"%s/ledger/session-inputs.json","ledger_root":"%s/ledger"}}\n'\'' "$paper_output" "$paper_output" "$paper_output"' \
+'    else' \
+'        printf "%s\\n" '\''{"status":"awaiting_forward_session","session_date":"2026-09-18","feature":{"universe":"/data/research/forward/test-scheduler/universe.json","schedule":"/data/research/forward/test-scheduler/schedule.json","calendar_pin":"/data/research/forward/test-scheduler/calendar.json","security_mappings":"/data/research/forward/test-scheduler/mappings.json"},"paper":null}'\''' \
+'    fi' \
 'fi' \
 > "$tool_root/docker"
 chmod 0755 "$tool_root/docker"
@@ -159,5 +175,28 @@ grep -Fq -- 'ingest' "$make_log"
 grep -Fq -- 'reconcile' "$make_log"
 grep -Fq -- 'feature-batch' "$make_log"
 grep -Fq -- 'discovery-run' "$make_log"
+
+paper_output_host="$repo_root/data/research/forward/.market-cycle-scheduler-${test_root##*.}"
+test ! -e "$paper_output_host"
+mkdir -p "$paper_output_host/ledger/accounts/test-paper-account/reports"
+paper_output_created=1
+printf '%s\n' '{"account_id":"test-paper-account"}' \
+    > "$paper_output_host/ledger/accounts/test-paper-account/account.json"
+printf '%s\n' '{"risk":{"checked_at":"2026-09-18T21:05:00Z"}}' \
+    > "$paper_output_host/ledger/accounts/test-paper-account/reports/report-2026-09-18.json"
+
+INVS_SCHEDULER_TEST_EXPECTED_PAPER_CLOCK=2026-09-18T21:05:00Z \
+INVS_SCHEDULER_TEST_PAPER_OUTPUT_CONTAINER="/data/research/forward/.market-cycle-scheduler-${test_root##*.}" \
+INVS_SCHEDULER_TEST_PAPER_READY=1 \
+INVS_MAKE_PATH="$make_path" \
+INVS_MARKET_RUNTIME_DIR="$test_root/runtime-paper" \
+INVS_MARKET_LOG_ROOT="$test_root/logs-paper" \
+INVS_MARKET_OUTPUT_ROOT="data/research/forward/.market-cycle-scheduler-${test_root##*.}" \
+PATH="$runtime_bin" \
+/usr/bin/bash scripts/market-cycle.sh > "$test_root/market-cycle-paper-retry.log"
+
+grep -Fq -- 'paper_status=existing_report session_date=2026-09-18 decision_at=2026-09-18T21:05:00Z' \
+    "$test_root/market-cycle-paper-retry.log"
+grep -Fq -- 'PAPER_DECISION_AT=2026-09-18T21:05:00Z' "$make_log"
 
 printf '%s\n' 'market-cycle scheduler environment acceptance passed'

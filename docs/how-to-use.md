@@ -1517,7 +1517,10 @@ complete market close is later than the recorded local activation timestamp, it 
 creates or resumes the equal-weight paper account with a new hash-pinned session
 input bundle, runs the close decision, and reconciles the ledger. A pre-activation
 close can produce current-research features but is reported as
-`awaiting_forward_session`; it is never counted as genuine forward evidence.
+`awaiting_forward_session`; it is never counted as genuine forward evidence. If a
+retry finds an existing paper report for that session, it reuses the report's
+immutable decision clock before validation and execution, allowing the scheduler to
+resume idempotently without changing the paper record.
 
 Install the user-level systemd timer after validating one manual pass:
 

@@ -152,19 +152,28 @@ if [[ "$status" == paper_ready ]]; then
     persisted_spec="$ledger_host/accounts/$account_id/account.json"
   fi
   session_date=$(jq -r '.session_date' "$result_path")
+  paper_decision_at="$decision_at"
+  paper_report="$ledger_host/accounts/$account_id/reports/report-$session_date.json"
+  if [[ -L "$paper_report" ]]; then
+    echo "market_cycle=failed reason=paper_report_is_symlink path=$paper_report" >&2
+    exit 1
+  elif [[ -f "$paper_report" ]]; then
+    paper_decision_at=$(jq -er '.risk.checked_at | strings' "$paper_report")
+    echo "paper_status=existing_report session_date=$session_date decision_at=$paper_decision_at"
+  fi
   "$make_command" paper-validate-inputs \
     PAPER_SPEC="$persisted_spec" \
     PAPER_DATA_ROOT=/data \
     PAPER_INPUTS="$inputs_container" \
     PAPER_SESSION_DATE="$session_date" \
-    PAPER_DECISION_AT="$decision_at"
+    PAPER_DECISION_AT="$paper_decision_at"
   "$make_command" paper-run \
     PAPER_SPEC="$persisted_spec" \
     PAPER_DATA_ROOT=/data \
     PAPER_INPUTS="$inputs_container" \
     PAPER_LEDGER_ROOT="$ledger_container" \
     PAPER_SESSION_DATE="$session_date" \
-    PAPER_DECISION_AT="$decision_at"
+    PAPER_DECISION_AT="$paper_decision_at"
   "$make_command" paper-reconcile PAPER_ACCOUNT_ID="$account_id" PAPER_LEDGER_ROOT="$ledger_container"
 else
   echo "paper_status=$status reason=$(jq -r '.paper_reason // "not ready"' "$result_path")"
