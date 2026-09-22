@@ -5,11 +5,28 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 cd "$repo_root"
 
 runtime_dir="${INVS_MARKET_RUNTIME_DIR:-.runtime/market-cycle}"
+log_root="${INVS_MARKET_LOG_ROOT:-logs}"
 output_host="${INVS_MARKET_OUTPUT_ROOT:-data/research/forward/nasdaq-100-starter}"
 output_container="/data/${output_host#data/}"
 profile_host="${INVS_MARKET_PROFILE:-config/universes/nasdaq-100-starter.yaml}"
 source="${INVS_MARKET_SOURCE:-prices}"
-mkdir -p "$runtime_dir" logs
+
+resolve_make_command() {
+  local candidate="${INVS_MAKE_PATH:-}"
+  if [[ -z "$candidate" ]]; then
+    candidate=$(command -v make 2>/dev/null || true)
+  elif [[ "$candidate" != */* ]]; then
+    candidate=$(command -v "$candidate" 2>/dev/null || true)
+  fi
+  if [[ -z "$candidate" || ! -x "$candidate" ]]; then
+    echo "market_cycle=failed reason=make_unavailable configured=${INVS_MAKE_PATH:-auto}" >&2
+    return 127
+  fi
+  printf '%s\n' "$candidate"
+}
+
+make_command=$(resolve_make_command)
+mkdir -p "$runtime_dir" "$log_root"
 
 exec 9>"$runtime_dir/market-cycle.lock"
 if ! flock -n 9; then
@@ -23,14 +40,14 @@ if [[ ! -f "$activation_path" ]]; then
 fi
 activation=$(tr -d '[:space:]' <"$activation_path")
 invocation=$(date -u +%Y-%m-%dT%H%M%SZ)
-log_path="logs/market-cycle-${invocation}.log"
+log_path="$log_root/market-cycle-${invocation}.log"
 exec > >(tee -a "$log_path") 2>&1
 
 echo "market_cycle_start=$invocation activation=$activation source=$source"
 if [[ "${INVS_MARKET_SKIP_COLLECTION:-0}" != 1 ]]; then
-  make ingest SOURCE="$source" RUN_KEY="market-${source}-${invocation}"
+  "$make_command" ingest SOURCE="$source" RUN_KEY="market-${source}-${invocation}"
 fi
-make reconcile
+"$make_command" reconcile
 
 calendar_path="$runtime_dir/calendar-snapshot.json"
 docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' >"$calendar_path" <<'SQL'
@@ -100,7 +117,7 @@ universe_host=$(container_to_host "$(jq -r '.feature.universe' "$result_path")")
 schedule_host=$(container_to_host "$(jq -r '.feature.schedule' "$result_path")")
 calendar_pin_host=$(container_to_host "$(jq -r '.feature.calendar_pin' "$result_path")")
 mappings_host=$(container_to_host "$(jq -r '.feature.security_mappings' "$result_path")")
-make feature-batch \
+"$make_command" feature-batch \
   BATCH_UNIVERSE="$universe_host" \
   BATCH_SCHEDULE="$schedule_host" \
   CALENDAR_PIN="$calendar_pin_host" \
@@ -108,7 +125,7 @@ make feature-batch \
   FEATURE_SET=market-basic \
   FEATURE_SET_VERSION=1.0.0
 
-momentum_result=$(make --no-print-directory feature-batch \
+momentum_result=$("$make_command" --no-print-directory feature-batch \
   BATCH_UNIVERSE="$universe_host" \
   BATCH_SCHEDULE="$schedule_host" \
   CALENDAR_PIN="$calendar_pin_host" \
@@ -117,7 +134,7 @@ momentum_result=$(make --no-print-directory feature-batch \
   FEATURE_SET_VERSION=1.0.0)
 printf '%s\n' "$momentum_result"
 momentum_manifest=$(printf '%s\n' "$momentum_result" | jq -er '.manifest_path')
-make --no-print-directory discovery-run \
+"$make_command" --no-print-directory discovery-run \
   DISCOVERY_PROFILE="$profile_host" \
   DISCOVERY_MOMENTUM_MANIFEST="$momentum_manifest" \
   DISCOVERY_MARKET_SESSION="$(jq -r '.session_date' "$result_path")"
@@ -131,24 +148,24 @@ if [[ "$status" == paper_ready ]]; then
   ledger_host=$(container_to_host "$ledger_container")
   persisted_spec="$ledger_host/accounts/$account_id/account.json"
   if [[ ! -f "$persisted_spec" ]]; then
-    make paper-create-account PAPER_SPEC="$generated_spec" PAPER_LEDGER_ROOT="$ledger_container"
+    "$make_command" paper-create-account PAPER_SPEC="$generated_spec" PAPER_LEDGER_ROOT="$ledger_container"
     persisted_spec="$ledger_host/accounts/$account_id/account.json"
   fi
   session_date=$(jq -r '.session_date' "$result_path")
-  make paper-validate-inputs \
+  "$make_command" paper-validate-inputs \
     PAPER_SPEC="$persisted_spec" \
     PAPER_DATA_ROOT=/data \
     PAPER_INPUTS="$inputs_container" \
     PAPER_SESSION_DATE="$session_date" \
     PAPER_DECISION_AT="$decision_at"
-  make paper-run \
+  "$make_command" paper-run \
     PAPER_SPEC="$persisted_spec" \
     PAPER_DATA_ROOT=/data \
     PAPER_INPUTS="$inputs_container" \
     PAPER_LEDGER_ROOT="$ledger_container" \
     PAPER_SESSION_DATE="$session_date" \
     PAPER_DECISION_AT="$decision_at"
-  make paper-reconcile PAPER_ACCOUNT_ID="$account_id" PAPER_LEDGER_ROOT="$ledger_container"
+  "$make_command" paper-reconcile PAPER_ACCOUNT_ID="$account_id" PAPER_LEDGER_ROOT="$ledger_container"
 else
   echo "paper_status=$status reason=$(jq -r '.paper_reason // "not ready"' "$result_path")"
 fi

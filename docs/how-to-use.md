@@ -1527,6 +1527,18 @@ systemctl --user list-timers invs-market-cycle.timer
 journalctl --user -u invs-market-cycle.service -n 100 --no-pager
 ```
 
+The installer records the discovered absolute GNU Make executable as
+`INVS_MAKE_PATH` in the service and includes its directory in the service `PATH`.
+The cycle uses that explicit path for all nested Make targets, so this remains
+valid when GNU Make is installed by Homebrew outside systemd's default `PATH`.
+Because a long-lived user manager may not inherit the login session's Docker
+supplementary group, the generated service invokes that command through the
+absolute `sg` tool as `sg docker -c "<absolute-make> market-cycle"`. Installation
+fails closed unless `sg`, the `docker` group, and current-user membership are
+available; do not add `SupplementaryGroups=docker` to this user unit.
+Re-run `make install-market-timer` after changing the host Make installation or
+repository path; do not hand-edit the generated unit under `~/.config/systemd`.
+
 The timer runs Monday through Friday at 18:30 `America/Sao_Paulo`, after the US
 regular close in both daylight-saving regimes. Runtime state is under
 `.runtime/market-cycle/`, logs are under `logs/`, canonical features remain under
