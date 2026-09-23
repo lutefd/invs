@@ -15,6 +15,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/invs-feature-catalog ./cmd/feature-catalog && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/invs-feature-report ./cmd/feature-report && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/invs-discovery-catalog ./cmd/discovery-catalog && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/invs-discovery-backfill-catalog ./cmd/discovery-backfill-catalog && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/invs-research ./cmd/research
 
 FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
@@ -28,6 +29,7 @@ COPY --from=build /out/invs-action-snapshot /usr/local/bin/invs-action-snapshot
 COPY --from=build /out/invs-feature-catalog /usr/local/bin/invs-feature-catalog
 COPY --from=build /out/invs-feature-report /usr/local/bin/invs-feature-report
 COPY --from=build /out/invs-discovery-catalog /usr/local/bin/invs-discovery-catalog
+COPY --from=build /out/invs-discovery-backfill-catalog /usr/local/bin/invs-discovery-backfill-catalog
 COPY --from=build /out/invs-research /usr/local/bin/invs-research
 COPY --chmod=0444 config/config.example.yaml /etc/invs/config.yaml
 COPY docker/collector-entrypoint.sh /usr/local/bin/collector-entrypoint
