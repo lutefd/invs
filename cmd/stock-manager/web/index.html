@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stock tracker · INVS</title>
+  <style>
+    :root { color-scheme: dark; --bg:#10151d; --surface:#19212c; --line:#2c3948; --text:#edf3fa; --muted:#a7b6c7; --accent:#70c5ad; --danger:#ff9a9a; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,sans-serif; }
+    main { max-width:1160px; margin:0 auto; padding:36px 24px 64px; }
+    header { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:28px; }
+    h1 { font-size:30px; line-height:1.15; margin:0 0 8px; letter-spacing:-.02em; }
+    h2 { font-size:19px; margin:0 0 8px; }
+    p { margin:0; color:var(--muted); }
+    a { color:var(--accent); }
+    .button, button { border:1px solid #438c7c; border-radius:9px; background:#204b43; color:white; padding:10px 15px; font:inherit; font-weight:650; cursor:pointer; text-decoration:none; }
+    button:hover,.button:hover { background:#286052; }
+    button:disabled { cursor:wait; opacity:.65; }
+    .layout { display:grid; grid-template-columns:minmax(300px, .85fr) minmax(420px, 1.4fr); gap:20px; align-items:start; }
+    .card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:22px; }
+    .card + .card { margin-top:18px; }
+    .intro { margin-bottom:18px; }
+    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:13px; margin-top:19px; }
+    label { display:block; color:var(--muted); font-size:13px; font-weight:600; }
+    input,select { width:100%; margin-top:6px; border:1px solid #3a495a; border-radius:8px; padding:10px 11px; background:#111923; color:var(--text); font:inherit; }
+    input:focus,select:focus { outline:2px solid #4fa992; outline-offset:1px; }
+    .full { grid-column:1/-1; }
+    .hint { margin-top:5px; font-size:12px; color:var(--muted); font-weight:400; }
+    .actions { display:flex; align-items:center; gap:14px; margin-top:18px; }
+    .message { min-height:24px; margin-top:12px; color:var(--accent); }
+    .message.error { color:var(--danger); }
+    .stats { display:flex; align-items:center; gap:12px; margin:17px 0 20px; }
+    .stat { padding:10px 13px; border:1px solid var(--line); border-radius:10px; min-width:92px; }
+    .stat strong { display:block; font-size:20px; }
+    .stat span { color:var(--muted); font-size:12px; }
+    .table-wrap { overflow:auto; }
+    table { width:100%; border-collapse:collapse; min-width:490px; }
+    th,td { text-align:left; vertical-align:top; border-bottom:1px solid var(--line); padding:11px 9px; }
+    th { color:var(--muted); font-size:12px; font-weight:650; }
+    td small { display:block; color:var(--muted); }
+    .symbol { font-weight:750; letter-spacing:.02em; }
+    .pill { display:inline-block; border:1px solid #426958; border-radius:999px; color:#b4ebcd; padding:2px 8px; font-size:11px; white-space:nowrap; }
+    .secondary { background:transparent; border-color:#465568; color:var(--text); padding:6px 10px; font-size:13px; }
+    .empty { padding:20px 0; color:var(--muted); }
+    .notice { margin-top:20px; padding:14px 16px; background:#152630; border-left:3px solid #70c5ad; border-radius:4px 9px 9px 4px; color:#d1e1ea; }
+    .notice code { color:white; }
+    @media(max-width:850px) { .layout { grid-template-columns:1fr; } }
+    @media(max-width:560px) { main { padding:25px 14px 45px; } header { flex-direction:column; } .form-grid { grid-template-columns:1fr; } .full { grid-column:auto; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Stock tracker</h1>
+      <p>Add a Nasdaq stock to the collector and discovery profile. Review rankings and prices in Grafana.</p>
+    </div>
+    <a id="dashboard-link" class="button" href="#">Open discovery dashboard</a>
+  </header>
+
+  <div class="layout">
+    <section>
+      <div class="card">
+        <div class="intro">
+          <h2>Add a stock</h2>
+          <p>Existing collector mappings are reused. New tickers get stable IDs and a Yahoo mapping.</p>
+        </div>
+        <form id="stock-form">
+          <div class="form-grid">
+            <label>Ticker
+              <input id="ticker" name="ticker" maxlength="16" required autocomplete="off" placeholder="e.g. CRWD">
+            </label>
+            <label>Yahoo symbol
+              <input id="yahoo-symbol" name="yahoo_symbol" maxlength="16" autocomplete="off" placeholder="Defaults to ticker">
+            </label>
+            <label class="full">Company name
+              <input id="legal-name" name="legal_name" maxlength="160" required autocomplete="off" placeholder="CrowdStrike Holdings, Inc.">
+            </label>
+            <label>Ticker valid from
+              <input id="identifier-valid-from" name="identifier_valid_from" type="date" required>
+              <span class="hint">Prices start no earlier than this date for this ticker.</span>
+            </label>
+            <label>Universe effective date
+              <input id="membership-as-of" name="membership_as_of" type="date" required>
+              <span class="hint">This becomes the profile’s membership date.</span>
+            </label>
+            <label>Sector
+              <select id="sector" name="sector" required>
+                <option value="technology">Technology</option>
+                <option value="communication_services">Communication services</option>
+                <option value="consumer_discretionary">Consumer discretionary</option>
+                <option value="consumer_staples">Consumer staples</option>
+                <option value="energy">Energy</option>
+                <option value="financials">Financials</option>
+                <option value="health_care">Health care</option>
+                <option value="industrials">Industrials</option>
+                <option value="materials">Materials</option>
+                <option value="real_estate">Real estate</option>
+                <option value="utilities">Utilities</option>
+              </select>
+            </label>
+            <label>Themes
+              <input id="themes" name="themes" autocomplete="off" placeholder="ai, cybersecurity">
+              <span class="hint">Optional, comma separated.</span>
+            </label>
+            <label class="full">SEC CIK <span class="hint">Optional</span>
+              <input id="cik" name="cik" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="e.g. 1535527">
+            </label>
+          </div>
+          <div class="actions">
+            <button id="submit-button" type="submit">Add to tracked stocks</button>
+          </div>
+          <p id="form-message" class="message" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <div class="notice">
+        New stocks appear after a cycle publishes the next eligible market session. Re-running a session that is already published does not change its index. The scheduled daily cycle collects and ranks the tracked profile; historical charts are separate retrospective reconstructions.
+      </div>
+    </section>
+
+    <section>
+      <div class="card">
+        <h2>Tracked stocks</h2>
+        <div class="stats">
+          <div class="stat"><strong id="tracked-count">—</strong><span>tracked</span></div>
+          <div class="stat"><strong id="membership-date">—</strong><span>profile as of</span></div>
+        </div>
+        <div id="tracked-table" class="table-wrap"><p class="empty">Loading tracked stocks…</p></div>
+      </div>
+
+      <div id="available-card" class="card" hidden>
+        <h2>Ready to track</h2>
+        <p class="intro">These Nasdaq listings already have collector mappings.</p>
+        <div id="available-table" class="table-wrap"></div>
+      </div>
+    </section>
+  </div>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) => String(value || '');
+  const dateToday = () => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+  let state;
+
+  function makeCell(text, className) {
+    const cell = document.createElement('td');
+    if (className) cell.className = className;
+    cell.textContent = text;
+    return cell;
+  }
+
+  function renderTable(target, items, available) {
+    target.replaceChildren();
+    if (!items.length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = available ? 'No other configured Nasdaq stocks are waiting to be tracked.' : 'No stocks are tracked yet.';
+      target.append(empty);
+      return;
+    }
+    const table = document.createElement('table');
+    const head = document.createElement('thead');
+    const header = document.createElement('tr');
+    ['Ticker', 'Company', available ? 'Action' : 'Sector · themes'].forEach((label) => {
+      const th = document.createElement('th'); th.textContent = label; header.append(th);
+    });
+    head.append(header); table.append(head);
+    const body = document.createElement('tbody');
+    items.forEach((stock) => {
+      const row = document.createElement('tr');
+      const ticker = makeCell(esc(stock.ticker), 'symbol');
+      if (!available) ticker.append(document.createElement('br'));
+      row.append(ticker);
+      row.append(makeCell(esc(stock.legal_name || 'Name missing')));
+      const details = document.createElement('td');
+      if (available) {
+        const button = document.createElement('button');
+        button.className = 'secondary'; button.type = 'button'; button.textContent = 'Track';
+        button.addEventListener('click', () => {
+          $('ticker').value = stock.ticker;
+          $('legal-name').value = stock.legal_name;
+          $('yahoo-symbol').value = stock.yahoo_symbol;
+          $('identifier-valid-from').value = state.prices_start;
+          $('sector').focus();
+          $('form-message').textContent = 'Choose this stock’s sector and themes, then add it.';
+        });
+        details.append(button);
+      } else {
+        const pill = document.createElement('span'); pill.className = 'pill'; pill.textContent = esc(stock.sector.replaceAll('_', ' ')); details.append(pill);
+        if (stock.themes && stock.themes.length) {
+          const note = document.createElement('small'); note.textContent = stock.themes.join(', '); details.append(note);
+        }
+      }
+      row.append(details); body.append(row);
+    });
+    table.append(body); target.append(table);
+  }
+
+  async function loadStocks() {
+    const response = await fetch('/api/stocks');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not load the stock profile.');
+    state = data;
+    $('tracked-count').textContent = data.tracked.length;
+    $('membership-date').textContent = data.membership_as_of;
+    $('membership-as-of').min = data.membership_as_of;
+    $('membership-as-of').max = dateToday();
+    $('membership-as-of').value = dateToday();
+    $('identifier-valid-from').value = data.prices_start || dateToday();
+    $('dashboard-link').href = `http://${location.hostname}:${data.grafana_port}/d/stock-discovery/stock-discovery?var-ticker=.*`;
+    renderTable($('tracked-table'), data.tracked, false);
+    $('available-card').hidden = data.available.length === 0;
+    renderTable($('available-table'), data.available, true);
+  }
+
+  $('ticker').addEventListener('input', () => {
+    $('ticker').value = $('ticker').value.toUpperCase().replace(/[^A-Z0-9.-]/g, '');
+    if (!$('yahoo-symbol').dataset.manual) $('yahoo-symbol').value = $('ticker').value;
+  });
+  $('yahoo-symbol').addEventListener('input', () => { $('yahoo-symbol').dataset.manual = 'true'; });
+
+  $('stock-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = $('submit-button');
+    const message = $('form-message');
+    button.disabled = true; message.className = 'message'; message.textContent = 'Saving stock mapping…';
+    const body = {
+      ticker: $('ticker').value,
+      legal_name: $('legal-name').value,
+      yahoo_symbol: $('yahoo-symbol').value,
+      identifier_valid_from: $('identifier-valid-from').value,
+      cik: $('cik').value,
+      sector: $('sector').value,
+      themes: $('themes').value.split(',').map((value) => value.trim()).filter(Boolean),
+      membership_as_of: $('membership-as-of').value,
+    };
+    try {
+      const response = await fetch('/api/stocks', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not add this stock.');
+      message.textContent = `${data.ticker} is tracked. It will be ranked on the next eligible market session; published sessions stay unchanged.`;
+      $('stock-form').reset();
+      $('yahoo-symbol').dataset.manual = '';
+      await loadStocks();
+    } catch (error) {
+      message.className = 'message error'; message.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadStocks().catch((error) => {
+    $('tracked-table').textContent = error.message;
+    $('form-message').className = 'message error'; $('form-message').textContent = error.message;
+  });
+</script>
+</body>
+</html>

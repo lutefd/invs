@@ -1,20 +1,20 @@
 {
   "annotations": {"list": []},
-  "description": "Forward daily stock-discovery ranks are shown separately from explicitly labeled retrospective hindsight reconstructions. Candidates are research labels, not trade recommendations or automatic orders.",
+  "description": "Manage tracked Nasdaq stocks in the local stock manager, then explore daily forward ranks and explicitly labeled retrospective views here. Newly tracked names appear after the next market cycle. Candidates are research labels, not trade recommendations or automatic orders.",
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [{"asDropdown":false,"icon":"external link alt","includeVars":false,"keepTime":false,"targetBlank":true,"title":"Manage tracked stocks","tooltip":"Add stocks to the collector and discovery profile","type":"link","url":"http://127.0.0.1:8090"}],
   "panels": [
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Latest complete cross-sectional rank. The score combines 3/6/12-month momentum, low one-month volatility, and shallow one-month drawdown.",
+      "description": "Use the Ticker filter above to focus the rank table and charts. New stocks are ranked after the next market cycle.",
       "fieldConfig": {"defaults": {}, "overrides": []},
       "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0},
       "id": 1,
       "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": true, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "rank"}]},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT market_session, rank, ticker, sector, candidate, score::double precision AS score, (return_3m * 100)::double precision AS return_3m_pct, (return_6m * 100)::double precision AS return_6m_pct, (return_12m * 100)::double precision AS return_12m_pct, realized_volatility_1m::double precision AS volatility_1m, (max_drawdown_1m * 100)::double precision AS drawdown_1m_pct, eligibility_status FROM discovery_latest_rankings ORDER BY rank NULLS LAST, ticker", "refId": "A"}],
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT market_session, rank, ticker, sector, candidate, score::double precision AS score, (return_3m * 100)::double precision AS return_3m_pct, (return_6m * 100)::double precision AS return_6m_pct, (return_12m * 100)::double precision AS return_12m_pct, realized_volatility_1m::double precision AS volatility_1m, (max_drawdown_1m * 100)::double precision AS drawdown_1m_pct, eligibility_status FROM discovery_latest_rankings WHERE ticker ~ '${ticker:regex}' ORDER BY rank NULLS LAST, ticker", "refId": "A"}],
       "title": "Latest discovery index",
       "type": "table"
     },
@@ -25,7 +25,7 @@
       "gridPos": {"h": 9, "w": 16, "x": 0, "y": 12},
       "id": 2,
       "options": {"legend": {"calcs": [], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "time_series", "rawQuery": true, "rawSql": "SELECT index.decision_at AS time, ranking.ticker AS metric, ranking.score::double precision AS value FROM discovery_indexes index JOIN discovery_rankings ranking USING (discovery_id) WHERE ranking.eligibility_status = 'eligible' AND $__timeFilter(index.decision_at) ORDER BY time, metric", "refId": "A"}],
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "time_series", "rawQuery": true, "rawSql": "SELECT index.decision_at AS time, ranking.ticker AS metric, ranking.score::double precision AS value FROM discovery_indexes index JOIN discovery_rankings ranking USING (discovery_id) WHERE ranking.eligibility_status = 'eligible' AND ranking.ticker ~ '${ticker:regex}' AND $__timeFilter(index.decision_at) ORDER BY time, metric", "refId": "A"}],
       "title": "Discovery score history",
       "type": "timeseries"
     },
@@ -36,17 +36,17 @@
       "gridPos": {"h": 9, "w": 8, "x": 16, "y": 12},
       "id": 3,
       "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": true, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": true, "displayName": "decision_at"}]},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT index.market_session, index.decision_at, ranking.rank, ranking.ticker, ranking.score::double precision AS score FROM discovery_indexes index JOIN discovery_rankings ranking USING (discovery_id) WHERE ranking.candidate ORDER BY index.market_session DESC, ranking.rank", "refId": "A"}],
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT index.market_session, index.decision_at, ranking.rank, ranking.ticker, ranking.score::double precision AS score FROM discovery_indexes index JOIN discovery_rankings ranking USING (discovery_id) WHERE ranking.candidate AND ranking.ticker ~ '${ticker:regex}' ORDER BY index.market_session DESC, ranking.rank", "refId": "A"}],
       "title": "Candidate history",
       "type": "table"
     },
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
-      "description": "Hindsight reconstruction from the current Yahoo vintage and the universe admitted on 2026-09-06. Original conservative receipt timestamps are preserved; these are not point-in-time ranks or trade recommendations.",
+      "description": "Current-vintage historical reconstruction using a captured universe snapshot. Earlier dates can predate the snapshot admission.",
       "fieldConfig": {"defaults": {}, "overrides": []},
       "gridPos": {"h": 3, "w": 16, "x": 8, "y": 21},
       "id": 4,
-      "options": {"content": "**Retrospective reconstruction — hindsight.** Prices use the current Yahoo vintage; original conservative receipt timestamps are retained. The same 20-security universe admitted on 2026-09-06 is applied across the reconstructed sessions, including dates before that admission. These rows do not represent what was knowable at each past close, and candidates are research labels only.", "mode": "markdown"},
+      "options": {"content": "**Retrospective reconstruction — hindsight.** Prices use the current Yahoo vintage; original conservative receipt timestamps are retained. Each run applies its captured universe membership snapshot across the reconstructed dates, including dates before that snapshot’s admission. These rows do not represent what was knowable at each past close, and candidates are research labels only.", "mode": "markdown"},
       "title": "Retrospective data note",
       "type": "text"
     },
@@ -98,7 +98,7 @@
   "refresh": "5m",
   "schemaVersion": 41,
   "tags": ["research", "discovery", "ranking", "watchlist"],
-  "templating": {"list": []},
+  "templating": {"list":[{"allValue":".*","current":{"selected":true,"text":"All","value":".*"},"datasource":{"type":"postgres","uid":"research-postgres"},"definition":"SELECT ticker AS __text, ticker AS __value FROM (SELECT ticker FROM discovery_latest_rankings UNION SELECT ticker FROM discovery_backfill_latest_rankings WHERE observation_mode = 'retrospective_current_universe') AS tracked ORDER BY ticker","hide":0,"includeAll":true,"label":"Ticker","multi":true,"name":"ticker","options":[],"query":"SELECT ticker AS __text, ticker AS __value FROM (SELECT ticker FROM discovery_latest_rankings UNION SELECT ticker FROM discovery_backfill_latest_rankings WHERE observation_mode = 'retrospective_current_universe') AS tracked ORDER BY ticker","refresh":1,"regex":"","sort":1,"type":"query"}]},
   "time": {"from": "now-90d", "to": "now"},
   "timepicker": {},
   "timezone": "browser",

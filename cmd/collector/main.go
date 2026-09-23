@@ -602,7 +602,18 @@ func (a *app) collectPrices(ctx context.Context) error {
 			m.Rejected++
 			continue
 		}
-		r, err := c.Collect(ctx, model.HistoricalPriceRequest{SecurityID: s.SecurityID, VendorSymbol: s.YahooSymbol, Currency: s.Currency, Start: start, End: end})
+		securityStart, startErr := securityPriceStart(s, start)
+		if startErr != nil {
+			m.Rejected++
+			errs = append(errs, fmt.Errorf("%s: identifier_valid_from: %w", s.SecurityID, startErr))
+			continue
+		}
+		if securityStart.After(end) {
+			m.Rejected++
+			errs = append(errs, fmt.Errorf("%s: identifier_valid_from is after the requested price end", s.SecurityID))
+			continue
+		}
+		r, err := c.Collect(ctx, model.HistoricalPriceRequest{SecurityID: s.SecurityID, VendorSymbol: s.YahooSymbol, Currency: s.Currency, Start: securityStart, End: end})
 		if err != nil {
 			for _, resource := range r.Resources {
 				key := rawKey("marketdata", "yahoo", s.SecurityID, resource.Bytes, resourceFetchedAt(resource, m.StartedAt), "json")
@@ -2779,11 +2790,15 @@ func secEligibleUniverse(universe []config.Security) []config.Security {
 func pricesRunInputs(universe []config.Security, start, end time.Time) metadata.RunInputs {
 	requests := make([]metadata.SecurityRequest, 0, len(universe))
 	for _, security := range universe {
+		securityStart, err := securityPriceStart(security, start)
+		if err != nil {
+			securityStart = start
+		}
 		requests = append(requests, metadata.SecurityRequest{
 			SecurityID:   security.SecurityID,
 			VendorSymbol: security.YahooSymbol,
 			Currency:     security.Currency,
-			Start:        start.UTC().Format("2006-01-02"),
+			Start:        securityStart.UTC().Format("2006-01-02"),
 			End:          end.UTC().Format("2006-01-02"),
 			Interval:     "1d",
 			Events:       "history",
@@ -2799,6 +2814,20 @@ func pricesRunInputs(universe []config.Security, start, end time.Time) metadata.
 			SecurityRequests:        requests,
 		},
 	}
+}
+
+func securityPriceStart(security config.Security, providerStart time.Time) (time.Time, error) {
+	if strings.TrimSpace(security.IdentifierValidFrom) == "" {
+		return providerStart, nil
+	}
+	validFrom, err := time.Parse("2006-01-02", security.IdentifierValidFrom)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if validFrom.After(providerStart) {
+		return validFrom, nil
+	}
+	return providerStart, nil
 }
 
 func b3HistoricalPriceSecurities(provider config.B3HistoricalPriceProvider, universe []config.Security) []config.Security {

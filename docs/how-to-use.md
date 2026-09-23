@@ -1499,7 +1499,7 @@ its limitations are in the [resilience acceptance report](acceptance/2026-08-30-
 For the first unattended real-market path, the repository includes a curated
 20-security Nasdaq-100 starter profile at
 `config/universes/nasdaq-100-starter.yaml`. The local collector configuration is
-the source of ticker/identifier mappings; the profile adds paper-risk metadata and
+the source of ticker/identifier mappings; the profile adds research metadata and
 the explicit 2026-09-06 membership-admission boundary.
 
 Run one complete operator pass:
@@ -1548,7 +1548,43 @@ regular close in both daylight-saving regimes. Runtime state is under
 `data/features/`, and operator snapshots plus the paper ledger are under
 `data/research/forward/nasdaq-100-starter/`. Each snapshot directory includes a
 human-readable `market-snapshot.json` with ticker, close, currency, basis,
-availability, and source-record locator for all 20 securities.
+availability, and source-record locator for every configured security.
+
+### Add and visualize a tracked stock
+
+The local stock manager edits the collector universe and discovery profile
+together. Start it with the rest of the app using `make up`, or on its own with:
+
+```sh
+make stock-ui
+```
+
+Open `http://127.0.0.1:8090`. Add the ticker, its Yahoo symbol, company name,
+sector, optional themes, ticker-valid-from date, and universe membership date.
+The valid-from date should reflect when that ticker mapping became valid. For a
+new mapping the manager creates stable security and issuer IDs, validates the
+updated collector config and profile, and saves protected backups under
+`data/research/stock-manager/backups/`. If the security already exists in the
+collector config, the manager reuses its IDs and adds it to the discovery profile.
+
+Price collection starts each ticker at the later of `providers.prices.start` and
+that security's `identifier_valid_from`. This lets a recently listed stock join
+without requesting prices before the mapping was valid or changing the history
+start for other names. The profile membership date cannot move backwards or into
+the future. A newly added ticker enters the next eligible `make market-cycle`
+index; already published market sessions remain immutable. The installed weekday
+timer picks it up automatically after a new close.
+
+In Grafana, use the **Ticker** filter to focus the forward rank table, candidate
+history, score history, and retrospective views. The **Manage tracked stocks**
+dashboard link opens the stock manager. Historical views remain explicitly
+retrospective and use the captured profile snapshot. The scheduled cycle ranks
+the configured profile; it does not search every listed stock on an exchange.
+Automatic new-name discovery is not active yet. The safest first scout is the
+full Nasdaq-100, backed by retained official constituent snapshots; unknown or
+ambiguous ticker mappings should go to review and should only enter history from
+their evidenced admission date. Scanning all XNAS listings needs a separate
+exchange-wide security directory and lifecycle policy.
 
 The discovery index ranks every eligible starter-universe security using
 cross-sectional percentiles: 3-month return (25%), 6-month return (30%), 12-month

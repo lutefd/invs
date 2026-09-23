@@ -869,6 +869,25 @@ func TestCollectorStoresRawBeforeCanonicalPublication(t *testing.T) {
 	}
 }
 
+func TestPricesRunInputsUsesPerSecurityValidFromDate(t *testing.T) {
+	globalStart := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
+	universe := []config.Security{
+		{SecurityID: testSecurityID, Ticker: "AAPL", YahooSymbol: "AAPL", Currency: "USD", IdentifierValidFrom: "1980-12-12"},
+		{SecurityID: "50000000-0000-4000-8000-000000000001", Ticker: "NEWCO", YahooSymbol: "NEWCO", Currency: "USD", IdentifierValidFrom: "2024-03-15"},
+	}
+	inputs := pricesRunInputs(universe, globalStart, end)
+	if len(inputs.Provider.SecurityRequests) != 2 {
+		t.Fatalf("price security requests = %+v", inputs.Provider.SecurityRequests)
+	}
+	if got := inputs.Provider.SecurityRequests[0].Start; got != "2020-01-01" {
+		t.Fatalf("older listing start = %s, want global start", got)
+	}
+	if got := inputs.Provider.SecurityRequests[1].Start; got != "2024-03-15" {
+		t.Fatalf("newer listing start = %s, want ticker valid-from", got)
+	}
+}
+
 func TestCollectorB3StoresRawBeforeHistoricalPublication(t *testing.T) {
 	body, err := os.ReadFile("../../internal/providers/b3/testdata/instruments-2026-08-21.csv")
 	if err != nil {
