@@ -82,7 +82,7 @@ func envOr(name, fallback string) string {
 }
 
 func printText(report reconcile.Report) {
-	fmt.Printf("reconciliation report generated_at=%s issues=%d data_root=%s\n", report.GeneratedAt.Format(time.RFC3339), report.Summary.TotalIssues, report.Roots.DataRoot)
+	fmt.Printf("reconciliation report generated_at=%s status=%s issues=%d data_root=%s\n", report.GeneratedAt.Format(time.RFC3339), report.Summary.Status, report.Summary.TotalIssues, report.Roots.DataRoot)
 	printCount("queued_or_running", report.Summary.QueuedOrRunning)
 	printCount("raw_manifests_without_terminal_run", report.Summary.RawManifestsWithoutTerminalRun)
 	printCount("raw_manifest_errors", report.Summary.RawManifestErrors)
@@ -93,6 +93,7 @@ func printText(report reconcile.Report) {
 	printCount("normalized_part_hash_mismatches", report.Summary.NormalizedPartHashMismatches)
 	printCount("feature_artifact_errors", report.Summary.FeatureArtifactErrors)
 	printCount("feature_artifacts_with_unavailable_inputs", report.Summary.FeatureArtifactsWithUnavailableInputs)
+	printCount("feature_artifact_lineage_advisories", report.Summary.FeatureArtifactLineageAdvisories)
 	for _, finding := range report.QueuedOrRunning {
 		fmt.Printf("  active run: %s %s %s status=%s\n", finding.Source, finding.RunKey, finding.ID, finding.Status)
 	}
