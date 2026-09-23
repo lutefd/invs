@@ -41,13 +41,13 @@ func TestChartURLDoesNotDoubleEscapeSymbols(t *testing.T) {
 }
 
 func TestParseNormalizesExchangeCloseAndRejectsMissing(t *testing.T) {
-	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600,1719927000],"indicators":{"quote":[{"open":[10,null],"high":[12,null],"low":[9,null],"close":[11,null],"volume":[100,null]}]}}],"error":null}}`)
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600,1719927000,1720013400],"indicators":{"quote":[{"open":[10,null,10],"high":[12,null,12],"low":[9,null,9],"close":[11,null,11],"volume":[100,null,100]}]}}],"error":null}}`)
 	ingested := time.Date(2024, 7, 3, 22, 0, 0, 0, time.UTC)
 	bars, received, rejected, err := parse(b, "security-1", "USD", ingested)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(bars) != 1 || received != 2 || rejected != 1 {
+	if len(bars) != 2 || received != 3 || rejected != 1 {
 		t.Fatalf("bars=%v received=%d rejected=%d", bars, received, rejected)
 	}
 	want := time.Date(2024, 7, 1, 20, 0, 0, 0, time.UTC)
@@ -116,6 +116,27 @@ func TestParseSkipsIncompleteFutureSessionAfterUTCDateRoll(t *testing.T) {
 	}
 	if !bars[0].Temporal.ObservedAt.Equal(time.Date(2024, 7, 1, 20, 0, 0, 0, time.UTC)) {
 		t.Fatalf("observed_at=%s, want previous session close", bars[0].Temporal.ObservedAt)
+	}
+}
+
+func TestParseDefersIncompleteLatestClosedSession(t *testing.T) {
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719927000,1719840600],"indicators":{"quote":[{"open":[null,10],"high":[null,12],"low":[null,9],"close":[null,11],"volume":[null,100]}]}}],"error":null}}`)
+	// Yahoo can temporarily withdraw the latest close after the session has
+	// closed. Leave that newest row pending even when the response is unsorted.
+	bars, received, rejected, err := parse(b, "security-1", "USD", time.Date(2024, 7, 3, 0, 30, 0, 0, time.UTC))
+	if err != nil || len(bars) != 1 || received != 2 || rejected != 0 {
+		t.Fatalf("bars=%v received=%d rejected=%d err=%v", bars, received, rejected, err)
+	}
+}
+
+func TestParseRejectsMalformedHistoricalRowLastInUnsortedResponse(t *testing.T) {
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1720013400,1719927000],"indicators":{"quote":[{"open":[10,null],"high":[12,null],"low":[9,null],"close":[11,null],"volume":[100,null]}]}}],"error":null}}`)
+	bars, received, rejected, err := parse(b, "security-1", "USD", time.Date(2024, 7, 3, 22, 0, 0, 0, time.UTC))
+	if err != nil || len(bars) != 1 || received != 2 || rejected != 1 {
+		t.Fatalf("bars=%v received=%d rejected=%d err=%v", bars, received, rejected, err)
+	}
+	if !bars[0].Temporal.ObservedAt.Equal(time.Date(2024, 7, 3, 20, 0, 0, 0, time.UTC)) {
+		t.Fatalf("observed_at=%s, want newest session close", bars[0].Temporal.ObservedAt)
 	}
 }
 

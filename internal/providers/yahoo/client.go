@@ -142,6 +142,15 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 	}
 	q := r.Indicators.Quote[0]
 	received, rejected := len(r.Timestamp), 0
+	var latestTimestamp int64
+	if len(r.Timestamp) > 0 {
+		latestTimestamp = r.Timestamp[0]
+		for _, ts := range r.Timestamp[1:] {
+			if ts > latestTimestamp {
+				latestTimestamp = ts
+			}
+		}
+	}
 	unique := map[string]model.PriceBar{}
 	hash := digest(b)
 	for i, ts := range r.Timestamp {
@@ -151,6 +160,9 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 			continue
 		}
 		if i >= len(q.Open) || i >= len(q.High) || i >= len(q.Low) || i >= len(q.Close) || i >= len(q.Volume) || q.Open[i] == nil || q.High[i] == nil || q.Low[i] == nil || q.Close[i] == nil || q.Volume[i] == nil {
+			if ts == latestTimestamp {
+				continue
+			}
 			rejected++
 			continue
 		}
