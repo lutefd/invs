@@ -117,6 +117,10 @@ test -s "$timer_path"
 grep -Fq -- "ExecStart=$sg_path docker -c \"$make_path market-cycle\"" "$service_path"
 grep -Fq -- "Environment=\"INVS_MAKE_PATH=$make_path\"" "$service_path"
 grep -Fq -- "Environment=\"PATH=$make_root:" "$service_path"
+grep -Fxq -- 'Restart=on-failure' "$service_path"
+grep -Fxq -- 'RestartSec=5min' "$service_path"
+grep -Fxq -- 'StartLimitIntervalSec=7h' "$service_path"
+grep -Fxq -- 'StartLimitBurst=3' "$service_path"
 grep -Fq -- 'enable --now invs-market-cycle.timer' "$systemctl_log"
 if command -v systemd-analyze >/dev/null 2>&1; then
 	systemd-analyze verify "$service_path" "$timer_path" >/dev/null 2>&1

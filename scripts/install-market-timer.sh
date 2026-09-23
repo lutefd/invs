@@ -54,6 +54,8 @@ cat >"$temporary_service" <<EOF
 Description=INVS Nasdaq starter market collection, features, and paper cycle
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=7h
+StartLimitBurst=3
 
 [Service]
 Type=oneshot
@@ -65,6 +67,8 @@ ExecStart=$sg_path $docker_group -c "$make_path market-cycle"
 Environment="INVS_MAKE_PATH=$make_path_unit"
 Environment="PATH=$service_path_unit"
 TimeoutStartSec=2h
+Restart=on-failure
+RestartSec=5min
 EOF
 
 cat >"$temporary_timer" <<'EOF'
