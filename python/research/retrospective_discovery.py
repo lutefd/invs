@@ -666,6 +666,10 @@ def publish_retrospective_backfill(
             local_dates.add(local_date)
 
     source_refs = _refs_for_prices(prices, data_root=root)
+    canonical_profile = dict(profile)
+    canonical_profile["membership_as_of"] = _date(
+        profile["membership_as_of"], field="profile.membership_as_of"
+    ).isoformat()
     price_rows_fingerprint = [
         {
             "security_id": row["security_id"],
@@ -684,7 +688,7 @@ def publish_retrospective_backfill(
         "universe_id": str(profile["universe_id"]),
         "name": profile["name"],
         "membership_as_of": str(profile["membership_as_of"]),
-        "fingerprint": hashlib.sha256(canonical_json(profile)).hexdigest(),
+        "fingerprint": hashlib.sha256(canonical_json(canonical_profile)).hexdigest(),
         "profile_sha256": profile_sha256,
         "size": len(members),
     }

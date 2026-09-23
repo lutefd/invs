@@ -44,7 +44,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path, list[dict[str, Any]]]:
         "schema_version": "1.0.0",
         "universe_id": "30000000-0000-4000-8000-000000000001",
         "name": "test-current-universe",
-        "membership_as_of": "2026-09-06",
+        "membership_as_of": date(2026, 9, 6),
         "members": _MEMBERS,
     }
     profile_path = tmp_path / "profile.yaml"
