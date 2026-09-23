@@ -13,8 +13,8 @@
       "fieldConfig": {"defaults": {}, "overrides": []},
       "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0},
       "id": 9,
-      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": true, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "last_available_rank"}]},
-      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "WITH roster AS (SELECT reconstruction_run_id, membership_as_of, ticker, sector, eligibility_status, rejection_reasons FROM discovery_backfill_latest_rankings WHERE observation_mode = 'retrospective_current_universe'), coverage AS (SELECT roster.membership_as_of, roster.ticker, roster.sector, latest_score.market_session AS last_scored_session, latest_score.rank AS last_available_rank, latest_score.score::double precision AS last_available_score, roster.eligibility_status AS latest_session_status, roster.rejection_reasons::text AS latest_session_issue FROM roster LEFT JOIN LATERAL (SELECT history.market_session, history.rank, history.score FROM discovery_backfill_rankings_history AS history WHERE history.reconstruction_run_id = roster.reconstruction_run_id AND history.ticker = roster.ticker AND history.eligibility_status = 'eligible' ORDER BY history.market_session DESC LIMIT 1) AS latest_score ON TRUE WHERE roster.ticker ~ '${ticker:regex}') SELECT * FROM coverage ORDER BY last_available_rank NULLS LAST, ticker", "refId": "A"}],
+      "options": {"cellHeight": "sm", "footer": {"countRows": true, "enablePagination": true, "fields": "", "reducer": ["sum"], "show": true}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "ticker"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "WITH roster AS (SELECT reconstruction_run_id, membership_as_of, ticker, sector, eligibility_status, rejection_reasons FROM discovery_backfill_latest_rankings WHERE observation_mode = 'retrospective_current_universe'), coverage AS (SELECT roster.membership_as_of, roster.ticker, roster.sector, latest_score.market_session AS last_scored_session, latest_score.rank AS last_available_rank, latest_score.score::double precision AS last_available_score, roster.eligibility_status AS latest_session_status, roster.rejection_reasons::text AS latest_session_issue FROM roster LEFT JOIN LATERAL (SELECT history.market_session, history.rank, history.score FROM discovery_backfill_rankings_history AS history WHERE history.reconstruction_run_id = roster.reconstruction_run_id AND history.ticker = roster.ticker AND history.eligibility_status = 'eligible' ORDER BY history.market_session DESC LIMIT 1) AS latest_score ON TRUE WHERE roster.ticker ~ '${ticker:regex}') SELECT * FROM coverage ORDER BY ticker", "refId": "A"}],
       "title": "Nasdaq-100 roster and price coverage — hindsight",
       "type": "table"
     },
@@ -115,5 +115,5 @@
   "timezone": "browser",
   "title": "Stock discovery",
   "uid": "stock-discovery",
-  "version": 2
+  "version": 3
 }
