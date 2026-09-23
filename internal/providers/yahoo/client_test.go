@@ -106,6 +106,19 @@ func TestParseRejectsIncompleteTradingDay(t *testing.T) {
 	}
 }
 
+func TestParseSkipsIncompleteFutureSessionAfterUTCDateRoll(t *testing.T) {
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600,1719927000],"indicators":{"quote":[{"open":[10,null],"high":[12,null],"low":[9,null],"close":[11,null],"volume":[100,null]}]}}],"error":null}}`)
+	// The previous session closed at 20:00 UTC; the following session has not
+	// closed at 00:30 UTC after the UTC date has rolled over.
+	bars, received, rejected, err := parse(b, "security-1", "USD", time.Date(2024, 7, 2, 0, 30, 0, 0, time.UTC))
+	if err != nil || len(bars) != 1 || received != 2 || rejected != 0 {
+		t.Fatalf("bars=%v received=%d rejected=%d err=%v", bars, received, rejected, err)
+	}
+	if !bars[0].Temporal.ObservedAt.Equal(time.Date(2024, 7, 1, 20, 0, 0, 0, time.UTC)) {
+		t.Fatalf("observed_at=%s, want previous session close", bars[0].Temporal.ObservedAt)
+	}
+}
+
 func TestCollectRetainsRawOnParseError(t *testing.T) {
 	cases := map[string][]byte{
 		"malformed JSON":       []byte(`{"chart":`),

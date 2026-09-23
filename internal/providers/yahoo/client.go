@@ -145,6 +145,11 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 	unique := map[string]model.PriceBar{}
 	hash := digest(b)
 	for i, ts := range r.Timestamp {
+		day := time.Unix(ts, 0).In(loc)
+		closeAt := time.Date(day.Year(), day.Month(), day.Day(), 16, 0, 0, 0, loc).UTC()
+		if closeAt.After(ingested) {
+			continue
+		}
 		if i >= len(q.Open) || i >= len(q.High) || i >= len(q.Low) || i >= len(q.Close) || i >= len(q.Volume) || q.Open[i] == nil || q.High[i] == nil || q.Low[i] == nil || q.Close[i] == nil || q.Volume[i] == nil {
 			rejected++
 			continue
@@ -156,11 +161,6 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 		volume, e4 := model.CanonicalDecimal(q.Volume[i].String(), true)
 		if e0 != nil || e1 != nil || e2 != nil || e3 != nil || e4 != nil || compareDecimal(low, high) > 0 || compareDecimal(open, low) < 0 || compareDecimal(open, high) > 0 || compareDecimal(closeValue, low) < 0 || compareDecimal(closeValue, high) > 0 {
 			rejected++
-			continue
-		}
-		day := time.Unix(ts, 0).In(loc)
-		closeAt := time.Date(day.Year(), day.Month(), day.Day(), 16, 0, 0, 0, loc).UTC()
-		if closeAt.After(ingested) {
 			continue
 		}
 		key := closeAt.Format("2006-01-02")
