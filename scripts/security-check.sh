@@ -15,37 +15,60 @@ issue() {
 if [[ ! -f docker-compose.yml ]]; then
 	issue 'docker-compose.yml is missing'
 else
-	bind_defaults=$(grep -Fc '${INVS_BIND_ADDRESS:-127.0.0.1}' docker-compose.yml || true)
-	if (( bind_defaults < 3 )); then
-		issue 'docker-compose.yml does not keep all host services loopback by default'
+	if ! grep -Fq '127.0.0.1:${POSTGRES_PORT:-5432}:5432' docker-compose.yml || \
+	   ! grep -Fq '127.0.0.1:${JUPYTER_PORT:-8888}:8888' docker-compose.yml || \
+	   ! grep -Fq '127.0.0.1:${GRAFANA_PORT:-3000}:3000' docker-compose.yml || \
+	   ! grep -Fq '127.0.0.1:${STOCK_MANAGER_PORT:-8090}:8080' docker-compose.yml; then
+		issue 'local service port bindings are not explicitly loopback-only'
 	fi
 	if grep -Eq '^[[:space:]]*-[[:space:]]*"?0\.0\.0\.0:' docker-compose.yml; then
 		issue 'docker-compose.yml contains an explicit public host binding'
+	fi
+	if ! grep -Fq '${INVS_TAILSCALE_IPV4:-127.0.0.2}' docker-compose.yml; then
+		issue 'Tailnet port bindings do not fail safe to loopback'
 	fi
 fi
 
 compose_json=
 if compose_json=$(docker compose config --format json 2>/dev/null); then
-	declare -A seen_services=()
-	while IFS=$'\t' read -r service host_ip; do
+	while IFS= read -r service; do
 		[[ -n "$service" ]] || continue
-		seen_services["$service"]=1
-		if [[ "$host_ip" != '127.0.0.1' ]]; then
-			issue "effective_${service}_bind_is_${host_ip:-unset}"
-		fi
+		issue "unexpected_service_publishes_host_ports:${service}"
+	done < <(jq -r '.services | to_entries[] | select((.value.ports // []) | length > 0) | select(.key != "postgres" and .key != "jupyter" and .key != "grafana" and .key != "stock-manager") | .key' <<<"$compose_json")
+	tailnet_ip=$(jq -r '.services.grafana.environment.INVS_TAILSCALE_IPV4 // ""' <<<"$compose_json")
+	if [[ -n "$tailnet_ip" ]] && ! python3 -c 'import ipaddress,sys; ip=ipaddress.ip_address(sys.argv[1]); sys.exit(0 if ip in ipaddress.ip_network("100.64.0.0/10") else 1)' "$tailnet_ip"; then
+		issue 'configured_tailnet_address_is_not_in_100.64.0.0/10'
+		tailnet_ip=''
+	fi
+	while IFS=$'\t' read -r service host_ip target published; do
+		[[ -n "$service" ]] || continue
+		case "$service" in
+			postgres|jupyter)
+				if [[ "$host_ip" != '127.0.0.1' ]]; then
+					issue "effective_${service}_bind_is_${host_ip:-unset}"
+				fi
+				;;
+			grafana|stock-manager)
+				if [[ "$host_ip" != '127.0.0.1' && "$host_ip" != '127.0.0.2' && ( -z "$tailnet_ip" || "$host_ip" != "$tailnet_ip" ) ]]; then
+					issue "effective_${service}_bind_is_not_loopback_or_configured_tailnet:${host_ip:-unset}"
+				fi
+				;;
+		esac
 	done < <(
 		jq -r '
 			.services
 			| to_entries[]
-			| select(.key == "postgres" or .key == "jupyter" or .key == "grafana")
+			| select(.key == "postgres" or .key == "jupyter" or .key == "grafana" or .key == "stock-manager")
 			| .key as $service
 			| (.value.ports // [])[]
-			| [$service, (.host_ip // "")] | @tsv
+			| [$service, (.host_ip // ""), (.target // ""), (.published // "")] | @tsv
 		' <<<"$compose_json"
 	)
-	for service in postgres jupyter grafana; do
-		if [[ -z "${seen_services[$service]+present}" ]]; then
-			issue "${service}_has_no_host_port_contract"
+	for service in postgres jupyter grafana stock-manager; do
+		count=$(jq -r --arg service "$service" '.services[$service].ports // [] | length' <<<"$compose_json")
+		if [[ "$service" == 'postgres' || "$service" == 'jupyter' ]]; then expected=1; else expected=2; fi
+		if [[ "$count" != "$expected" ]]; then
+			issue "${service}_has_${count}_host_ports_expected_${expected}"
 		fi
 	done
 	grafana_anonymous=$(jq -r '.services.grafana.environment.GF_AUTH_ANONYMOUS_ENABLED // ""' <<<"$compose_json")
@@ -122,4 +145,4 @@ if (( issues != 0 )); then
 fi
 
 printf 'security_status=passed\n'
-printf 'security_scope=loopback,authentication,local-secret-permissions,tracked-artifact-scan\n'
+printf 'security_scope=loopback-and-explicit-tailnet-ui-bindings,authentication,local-secret-permissions,tracked-artifact-scan\n'

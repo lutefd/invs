@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +10,6 @@ import pytest
 import yaml
 
 import research.retrospective_discovery as backfill
-
 
 _DATA_SOURCE_ID = "60000000-0000-4000-8000-000000000001"
 _INGESTION_RUN_ID = "70000000-0000-4000-8000-000000000001"
@@ -141,8 +140,8 @@ def _install_fake_catalog(monkeypatch: pytest.MonkeyPatch, prices: list[dict[str
             dict(row)
             for row in prices
             if row["security_id"] in security_ids
-            and datetime.fromisoformat(row["observed_at"].replace("Z", "+00:00")) <= observed_through
-            and datetime.fromisoformat(row["available_at"].replace("Z", "+00:00")) <= available_through
+            and datetime.fromisoformat(row["observed_at"]) <= observed_through
+            and datetime.fromisoformat(row["available_at"]) <= available_through
         ]
 
     monkeypatch.setattr(backfill, "ResearchCatalog", FakeCatalog)
@@ -223,13 +222,87 @@ def test_retrospective_backfill_rejects_truncated_calendar_export(tmp_path: Path
         backfill._load_calendar_snapshot(calendar_path)
 
 
+def test_retrospective_backfill_keeps_members_without_price_history_as_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    profile_path, calendar_path, data_root, prices = _fixture(tmp_path)
+    unavailable_security_id = _MEMBERS[-1]["security_id"]
+    available_prices = [row for row in prices if row["security_id"] != unavailable_security_id]
+    _install_fake_catalog(monkeypatch, available_prices)
+
+    manifest_path = backfill.publish_retrospective_backfill(
+        profile_path=profile_path,
+        calendar_snapshot_path=calendar_path,
+        data_root=data_root,
+        output_root=tmp_path / "published",
+        start_date="2026-09-04",
+        end_date="2026-09-22",
+        candidate_count=2,
+        reconstructed_at="2026-09-23T18:00:00Z",
+        git_commit="a" * 40,
+    )
+    document = backfill.validate_retrospective_backfill(manifest_path)
+
+    assert document["generator_version"] == "python-retrospective-discovery-1.0.1"
+    for session in document["sessions"]:
+        assert len(session["rankings"]) == len(_MEMBERS)
+        assert len(session["price_bars"]) == len(_MEMBERS) - 1
+        unavailable = next(
+            row for row in session["rankings"] if row["security_id"] == unavailable_security_id
+        )
+        assert unavailable["eligibility"] == {
+            "status": "rejected",
+            "reasons": ["missing_price_bar_for_market_session"],
+        }
+        assert unavailable["rank"] is None
+        assert session["rejected_count"] == 1
+        assert session["eligible_count"] == len(_MEMBERS) - 1
+
+
+def test_retrospective_backfill_keeps_session_with_no_exact_price_bars(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    profile_path, calendar_path, data_root, prices = _fixture(tmp_path)
+    calendar = json.loads(calendar_path.read_text(encoding="utf-8"))
+    calendar["sessions"].append(_session(date(2026, 9, 23)))
+    calendar["manifest"]["session_count"] = len(calendar["sessions"])
+    calendar["manifest"]["session_fingerprint"] = backfill._calendar_session_fingerprint(
+        calendar["sessions"]
+    )
+    calendar_path.write_text(json.dumps(calendar), encoding="utf-8")
+    _install_fake_catalog(monkeypatch, prices)
+
+    manifest_path = backfill.publish_retrospective_backfill(
+        profile_path=profile_path,
+        calendar_snapshot_path=calendar_path,
+        data_root=data_root,
+        output_root=tmp_path / "published",
+        start_date="2026-09-04",
+        end_date="2026-09-23",
+        candidate_count=2,
+        reconstructed_at="2026-09-23T21:00:00Z",
+        git_commit="a" * 40,
+    )
+    document = backfill.validate_retrospective_backfill(manifest_path)
+    latest = document["sessions"][-1]
+
+    assert latest["market_session"] == "2026-09-23"
+    assert latest["eligible_count"] == 0
+    assert latest["rejected_count"] == len(_MEMBERS)
+    assert latest["candidate_count"] == 0
+    assert latest["price_bars"] == []
+    assert {
+        tuple(row["eligibility"]["reasons"]) for row in latest["rankings"]
+    } == {("missing_price_bar_for_market_session",)}
+
+
 def test_retrospective_backfill_requires_calendar_window_boundaries(tmp_path: Path) -> None:
     sessions = [_session(date(2026, 9, 4)), _session(date(2026, 9, 22))]
     selected = []
     for item in sessions:
         normalized = dict(item)
         normalized["_session_date"] = date.fromisoformat(item["session_date"])
-        normalized["_close_at"] = datetime.fromisoformat(item["close_at"].replace("Z", "+00:00"))
+        normalized["_close_at"] = datetime.fromisoformat(item["close_at"])
         selected.append(normalized)
 
     with pytest.raises(backfill.RetrospectiveBackfillError, match="does not cover both"):
@@ -237,5 +310,5 @@ def test_retrospective_backfill_requires_calendar_window_boundaries(tmp_path: Pa
             selected,
             start=date(2026, 9, 3),
             end=date(2026, 9, 22),
-            cutoff=datetime(2026, 9, 23, 18, tzinfo=timezone.utc),
+            cutoff=datetime(2026, 9, 23, 18, tzinfo=UTC),
         )

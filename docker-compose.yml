@@ -15,7 +15,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-market_research}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market_research_local}
     ports:
-      - "${INVS_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -68,7 +68,7 @@ services:
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     working_dir: /workspace
     ports:
-      - "${INVS_BIND_ADDRESS:-127.0.0.1}:${JUPYTER_PORT:-8888}:8888"
+      - "127.0.0.1:${JUPYTER_PORT:-8888}:8888"
     volumes:
       - ./python:/workspace
       - *data-mount
@@ -98,6 +98,7 @@ services:
       INVS_USER_AGENT: ${SEC_USER_AGENT:-personal-quant-research/0.1 contact@example.com}
     ports:
       - "127.0.0.1:${STOCK_MANAGER_PORT:-8090}:8080"
+      - "${INVS_TAILSCALE_IPV4:-127.0.0.2}:${STOCK_MANAGER_PORT:-8090}:8080"
     volumes:
       - ${INVS_CONFIG_FILE:-./config/config.local.yaml}:/config/collector-config.yaml
       - ./config/universes:/config/universes
@@ -119,15 +120,18 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      INVS_TAILSCALE_IPV4: ${INVS_TAILSCALE_IPV4:-}
+      STOCK_MANAGER_TAILNET_PORT: ${STOCK_MANAGER_PORT:-8090}
       POSTGRES_DB: ${POSTGRES_DB:-market_research}
       POSTGRES_USER: ${POSTGRES_USER:-market_research}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market_research_local}
     ports:
-      - "${INVS_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+      - "${INVS_TAILSCALE_IPV4:-127.0.0.2}:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./docker/grafana/dashboards:/opt/invs-dashboards:ro
       - type: bind
         source: ./data
         target: /data
@@ -143,6 +147,27 @@ services:
       start_period: 20s
     restart: unless-stopped
     networks: [research]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        manager_host="$${INVS_TAILSCALE_IPV4:-127.0.0.1}"
+        case "$$manager_host" in
+          100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*) ;;
+          *) if [ "$$manager_host" != 127.0.0.1 ]; then echo 'INVS_TAILSCALE_IPV4 must be a Tailscale CGNAT IPv4 address (100.64.0.0/10)' >&2; exit 2; fi ;;
+        esac
+        mkdir -p /tmp/invs-grafana-provisioning/dashboards /tmp/invs-grafana-provisioning/datasources /tmp/invs-grafana-provisioning/plugins /tmp/invs-grafana-provisioning/alerting /tmp/invs-grafana-dashboards
+        cp /etc/grafana/provisioning/datasources/*.yaml /tmp/invs-grafana-provisioning/datasources/
+        sed 's|/var/lib/grafana/dashboards|/tmp/invs-grafana-dashboards|' /etc/grafana/provisioning/dashboards/research.yaml > /tmp/invs-grafana-provisioning/dashboards/research.yaml
+        for dashboard in /opt/invs-dashboards/*.json; do
+          name="$${dashboard##*/}"
+          if [ "$$name" = stock-discovery.json ]; then
+            sed "s|__STOCK_MANAGER_URL__|http://$$manager_host:$${STOCK_MANAGER_TAILNET_PORT:-18090}|g" "$$dashboard" > "/tmp/invs-grafana-dashboards/$$name"
+          else
+            cp "$$dashboard" "/tmp/invs-grafana-dashboards/$$name"
+          fi
+        done
+        export GF_PATHS_PROVISIONING=/tmp/invs-grafana-provisioning
+        exec /run.sh
 
 volumes:
   postgres-data:

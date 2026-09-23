@@ -176,6 +176,7 @@ PATH="$runtime_bin" \
 
 grep -Fq -- 'market_cycle_status=ok' "$test_root/market-cycle.log"
 grep -Fq -- 'ingest' "$make_log"
+grep -Fq -- 'nasdaq100-sync' "$make_log"
 grep -Fq -- 'reconcile' "$make_log"
 grep -Fq -- 'feature-batch' "$make_log"
 grep -Fq -- 'discovery-run' "$make_log"

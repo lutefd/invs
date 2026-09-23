@@ -27,10 +27,10 @@
     input:focus,select:focus { outline:2px solid #4fa992; outline-offset:1px; }
     .full { grid-column:1/-1; }
     .hint { margin-top:5px; font-size:12px; color:var(--muted); font-weight:400; }
-    .actions { display:flex; align-items:center; gap:14px; margin-top:18px; }
+    .actions { display:flex; align-items:center; flex-wrap:wrap; gap:14px; margin-top:18px; }
     .message { min-height:24px; margin-top:12px; color:var(--accent); }
     .message.error { color:var(--danger); }
-    .stats { display:flex; align-items:center; gap:12px; margin:17px 0 20px; }
+    .stats { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin:17px 0 14px; }
     .stat { padding:10px 13px; border:1px solid var(--line); border-radius:10px; min-width:92px; }
     .stat strong { display:block; font-size:20px; }
     .stat span { color:var(--muted); font-size:12px; }
@@ -45,6 +45,9 @@
     .empty { padding:20px 0; color:var(--muted); }
     .notice { margin-top:20px; padding:14px 16px; background:#152630; border-left:3px solid #70c5ad; border-radius:4px 9px 9px 4px; color:#d1e1ea; }
     .notice code { color:white; }
+    .source-status { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+    .source-status p { font-size:13px; }
+    .source-pill { display:block; margin-top:5px; color:var(--muted); font-size:11px; }
     @media(max-width:850px) { .layout { grid-template-columns:1fr; } }
     @media(max-width:560px) { main { padding:25px 14px 45px; } header { flex-direction:column; } .form-grid { grid-template-columns:1fr; } .full { grid-column:auto; } }
   </style>
@@ -116,7 +119,7 @@
       </div>
 
       <div class="notice">
-        New stocks appear after a cycle publishes the next eligible market session. Re-running a session that is already published does not change its index. The scheduled daily cycle collects and ranks the tracked profile; historical charts are separate retrospective reconstructions.
+        The daily cycle refreshes the current Nasdaq-100 snapshot before collecting prices. Refresh here to add or remove current index constituents now. Raw source snapshots are retained; this public website feed does not provide historical membership events. Your manually tracked stocks stay tracked.
       </div>
     </section>
 
@@ -126,6 +129,11 @@
         <div class="stats">
           <div class="stat"><strong id="tracked-count">—</strong><span>tracked</span></div>
           <div class="stat"><strong id="membership-date">—</strong><span>profile as of</span></div>
+          <div class="stat"><strong id="nasdaq-count">—</strong><span>Nasdaq-100 snapshot</span></div>
+        </div>
+        <div class="source-status">
+          <button id="sync-nasdaq100" class="secondary" type="button">Refresh Nasdaq-100</button>
+          <p id="nasdaq-status" role="status" aria-live="polite">Loading constituent snapshot…</p>
         </div>
         <div id="tracked-table" class="table-wrap"><p class="empty">Loading tracked stocks…</p></div>
       </div>
@@ -195,6 +203,11 @@
         if (stock.themes && stock.themes.length) {
           const note = document.createElement('small'); note.textContent = stock.themes.join(', '); details.append(note);
         }
+        if (stock.sources && stock.sources.length) {
+          const source = document.createElement('small'); source.className = 'source-pill';
+          source.textContent = stock.sources.map((value) => value === 'nasdaq_100' ? 'Nasdaq-100' : value === 'manual' ? 'Manual' : value).join(' · ');
+          details.append(source);
+        }
       }
       row.append(details); body.append(row);
     });
@@ -208,11 +221,19 @@
     state = data;
     $('tracked-count').textContent = data.tracked.length;
     $('membership-date').textContent = data.membership_as_of;
+    $('nasdaq-count').textContent = data.nasdaq_100.count || '—';
+    if (data.nasdaq_100.status === 'current_snapshot') {
+      $('nasdaq-status').textContent = `Current snapshot as of ${data.nasdaq_100.source_as_of}; retrieved ${data.nasdaq_100.retrieved_at}.`;
+    } else if (data.nasdaq_100.status === 'ready_to_sync') {
+      $('nasdaq-status').textContent = 'No Nasdaq-100 snapshot loaded yet.';
+    } else {
+      $('nasdaq-status').textContent = 'Nasdaq snapshot status unavailable. Your tracked stocks are still available.';
+    }
     $('membership-as-of').min = data.membership_as_of;
     $('membership-as-of').max = dateToday();
     $('membership-as-of').value = dateToday();
     $('identifier-valid-from').value = data.prices_start || dateToday();
-    $('dashboard-link').href = `http://${location.hostname}:${data.grafana_port}/d/stock-discovery/stock-discovery?var-ticker=.*`;
+    $('dashboard-link').href = `${location.protocol}//${location.hostname}:${data.grafana_port}/d/stock-discovery/stock-discovery?var-ticker=.*`;
     renderTable($('tracked-table'), data.tracked, false);
     $('available-card').hidden = data.available.length === 0;
     renderTable($('available-table'), data.available, true);
@@ -223,6 +244,28 @@
     if (!$('yahoo-symbol').dataset.manual) $('yahoo-symbol').value = $('ticker').value;
   });
   $('yahoo-symbol').addEventListener('input', () => { $('yahoo-symbol').dataset.manual = 'true'; });
+
+  $('sync-nasdaq100').addEventListener('click', async () => {
+    const button = $('sync-nasdaq100');
+    const status = $('nasdaq-status');
+    button.disabled = true;
+    status.textContent = 'Fetching and validating Nasdaq constituents and new ticker history. This may take a minute.';
+    try {
+      const response = await fetch('/api/nasdaq-100/sync', { method:'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not refresh Nasdaq constituents. The last complete snapshot is still active.');
+      const added = data.added.length ? ` Added ${data.added.length}.` : '';
+      const removed = data.removed.length ? ` Removed ${data.removed.length}.` : '';
+      const unavailable = data.history_unavailable.length ? ` Price history needs review for ${data.history_unavailable.join(', ')}.` : '';
+      const summary = `${data.constituents} Nasdaq-100 securities loaded as of ${data.source_as_of}.${added}${removed}${unavailable}`;
+      await loadStocks();
+      status.textContent = summary;
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   $('stock-form').addEventListener('submit', async (event) => {
     event.preventDefault();

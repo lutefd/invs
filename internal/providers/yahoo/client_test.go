@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"testing"
 	"time"
 
@@ -37,6 +38,28 @@ func TestChartURLDoesNotDoubleEscapeSymbols(t *testing.T) {
 		if got := u.EscapedPath(); got != "/v8/finance/chart/"+want {
 			t.Errorf("%s: %s", symbol, got)
 		}
+	}
+}
+
+func TestFirstTradeDateUsesExchangeTimezoneAndRejectsMissingMetadata(t *testing.T) {
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tradeTime := time.Date(2010, 2, 4, 9, 30, 0, 0, newYork)
+	body := []byte(`{"chart":{"result":[{"meta":{"exchangeTimezoneName":"America/New_York","firstTradeDate":` + fmt.Sprint(tradeTime.Unix()) + `},"timestamp":[],"indicators":{}}],"error":null}}`)
+	c := NewClient(fakeGetter{body: body})
+	c.now = func() time.Time { return time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC) }
+	got, err := c.FirstTradeDate(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := time.Date(2010, 2, 4, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
+		t.Fatalf("first trade date = %s, want %s", got, want)
+	}
+	c.http = fakeGetter{body: []byte(`{"chart":{"result":[{"meta":{"exchangeTimezoneName":"America/New_York"}}],"error":null}}`)}
+	if _, err := c.FirstTradeDate(context.Background(), "AAPL"); err == nil {
+		t.Fatal("missing vendor first-trade metadata was accepted")
 	}
 }
 

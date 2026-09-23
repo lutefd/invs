@@ -20,7 +20,7 @@ import (
 
 const (
 	DiscoveryBackfillSchemaVersion      = "1.0.0"
-	DiscoveryBackfillGeneratorVersion   = "python-retrospective-discovery-1.0.0"
+	DiscoveryBackfillGeneratorVersion   = "python-retrospective-discovery-1.0.1"
 	discoveryBackfillObservationMode    = "retrospective_current_universe"
 	discoveryBackfillUniverseBasis      = "current_profile_membership_snapshot"
 	discoveryBackfillInputFitness       = "installation_replay_only"

@@ -21,6 +21,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/luisdourado/invs/config"
+	"github.com/luisdourado/invs/internal/providers/nasdaq"
+	"github.com/luisdourado/invs/internal/providers/yahoo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,6 +45,8 @@ type manager struct {
 	backupDir   string
 	grafanaPort string
 	timezone    string
+	nasdaqHTTP  nasdaq.HTTPDoer
+	yahooHTTP   yahoo.Getter
 	mu          sync.Mutex
 	now         func() time.Time
 }
@@ -52,6 +56,7 @@ type universeProfile struct {
 	UniverseID     string          `yaml:"universe_id"`
 	Name           string          `yaml:"name"`
 	MembershipAsOf string          `yaml:"membership_as_of"`
+	SourceURL      string          `yaml:"source_url"`
 	Members        []profileMember `yaml:"members"`
 }
 
@@ -61,6 +66,7 @@ type profileMember struct {
 	IssuerID   string   `yaml:"issuer_id" json:"issuer_id"`
 	Sector     string   `yaml:"sector" json:"sector"`
 	Themes     []string `yaml:"themes" json:"themes"`
+	Sources    []string `yaml:"sources,omitempty" json:"sources,omitempty"`
 }
 
 type stockView struct {
@@ -70,15 +76,17 @@ type stockView struct {
 	SecurityID  string   `json:"security_id"`
 	Sector      string   `json:"sector"`
 	Themes      []string `json:"themes"`
+	Sources     []string `json:"sources,omitempty"`
 }
 
 type stockList struct {
-	MembershipAsOf string      `json:"membership_as_of"`
-	PricesEnabled  bool        `json:"prices_enabled"`
-	PricesStart    string      `json:"prices_start"`
-	GrafanaPort    string      `json:"grafana_port"`
-	Tracked        []stockView `json:"tracked"`
-	Available      []stockView `json:"available"`
+	MembershipAsOf string           `json:"membership_as_of"`
+	PricesEnabled  bool             `json:"prices_enabled"`
+	PricesStart    string           `json:"prices_start"`
+	GrafanaPort    string           `json:"grafana_port"`
+	Nasdaq100      nasdaqStatusView `json:"nasdaq_100"`
+	Tracked        []stockView      `json:"tracked"`
+	Available      []stockView      `json:"available"`
 }
 
 type addStockRequest struct {
@@ -144,6 +152,7 @@ func (m *manager) routes() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("/api/stocks", m.stocksHandler)
+	mux.HandleFunc("/api/nasdaq-100/sync", m.nasdaqSyncHandler)
 	mux.HandleFunc("/", m.indexHandler)
 	return securityHeaders(mux)
 }
@@ -202,6 +211,7 @@ func (m *manager) listStocks(w http.ResponseWriter) {
 		PricesEnabled:  cfg.Providers.Prices.Enabled,
 		PricesStart:    cfg.Providers.Prices.Start,
 		GrafanaPort:    m.grafanaPort,
+		Nasdaq100:      m.nasdaqStatus(),
 		Tracked:        []stockView{},
 		Available:      []stockView{},
 	}
@@ -213,7 +223,7 @@ func (m *manager) listStocks(w http.ResponseWriter) {
 	for _, member := range profile.Members {
 		ticker := strings.ToUpper(strings.TrimSpace(member.Ticker))
 		tracked[ticker] = true
-		view := stockView{Ticker: ticker, SecurityID: member.SecurityID, Sector: member.Sector, Themes: member.Themes}
+		view := stockView{Ticker: ticker, SecurityID: member.SecurityID, Sector: member.Sector, Themes: member.Themes, Sources: member.Sources}
 		if securities := configByTicker[ticker]; len(securities) == 1 && securities[0].SecurityID == member.SecurityID {
 			view.LegalName = securities[0].LegalName
 			view.YahooSymbol = securities[0].YahooSymbol
@@ -232,6 +242,7 @@ func (m *manager) listStocks(w http.ResponseWriter) {
 		response.Available = append(response.Available, stockView{
 			Ticker: ticker, LegalName: security.LegalName, YahooSymbol: security.YahooSymbol,
 			SecurityID: security.SecurityID,
+			Sources:    []string{"collector_config"},
 		})
 	}
 	sort.Slice(response.Tracked, func(i, j int) bool { return response.Tracked[i].Ticker < response.Tracked[j].Ticker })
@@ -334,7 +345,7 @@ func (m *manager) add(request addStockRequest) (map[string]any, int, error) {
 	}
 	newMember := profileMember{
 		Ticker: ticker, SecurityID: security.SecurityID, IssuerID: security.IssuerID,
-		Sector: sector, Themes: themes,
+		Sector: sector, Themes: themes, Sources: []string{"manual"},
 	}
 	profileNode, err = appendProfileMember(profileNode, memberDate.Format("2006-01-02"), newMember)
 	if err != nil {
@@ -457,6 +468,13 @@ func validateProfile(profile universeProfile) error {
 		}
 		if !slugPattern.MatchString(member.Sector) {
 			return fmt.Errorf("profile has invalid sector for %s", ticker)
+		}
+		seenSources := make(map[string]bool, len(member.Sources))
+		for _, source := range member.Sources {
+			if (source != "manual" && source != nasdaqSourceLabel) || seenSources[source] {
+				return fmt.Errorf("profile has invalid source metadata for %s", ticker)
+			}
+			seenSources[source] = true
 		}
 		seenTickers[ticker], seenIDs[member.SecurityID] = true, true
 	}
@@ -597,6 +615,11 @@ func appendProfileMember(root *yaml.Node, membershipAsOf string, member profileM
 		stringNode("sector"), stringNode(member.Sector),
 		stringNode("themes"), stringSequence(member.Themes),
 	)
+	if len(member.Sources) > 0 {
+		values := append([]string(nil), member.Sources...)
+		sort.Strings(values)
+		item.Content = append(item.Content, stringNode("sources"), stringSequence(values))
+	}
 	sequence.Content = append(sequence.Content, item)
 	return root, nil
 }

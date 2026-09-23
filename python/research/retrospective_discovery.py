@@ -24,10 +24,10 @@ from .backfill_artifacts import (
 )
 from .catalog import ResearchCatalog
 from .discovery import (
-    MODEL_NAME,
-    MODEL_VERSION,
     _REQUIRED_FEATURES,
     _WEIGHTS,
+    MODEL_NAME,
+    MODEL_VERSION,
     _fmt,
     _load_profile,
     _percentiles,
@@ -40,7 +40,7 @@ OBSERVATION_MODE = "retrospective_current_universe"
 UNIVERSE_BASIS = "current_profile_membership_snapshot"
 INPUT_FITNESS = "installation_replay_only"
 AVAILABILITY_POLICY = "current_vintage_with_preserved_receipt_times"
-GENERATOR_VERSION = "python-retrospective-discovery-1.0.0"
+GENERATOR_VERSION = "python-retrospective-discovery-1.0.1"
 _NAMESPACE = UUID("dfd74827-a6cb-5a1a-821d-22bbd8a06d5e")
 _NEW_YORK = ZoneInfo("America/New_York")
 
@@ -374,10 +374,6 @@ def _rank_session(
             reasons[security_id] = [f"null_feature:{name}" for name in missing]
             continue
         values[security_id] = {name: Decimal(str(features[name])) for name in _REQUIRED_FEATURES}
-    if not values:
-        raise RetrospectiveBackfillError(
-            f"no securities have complete features on {session_date.isoformat()}"
-        )
     components = {
         "return_3m": _percentiles({key: row["return_3m"] for key, row in values.items()}),
         "return_6m": _percentiles({key: row["return_6m"] for key, row in values.items()}),
@@ -649,10 +645,10 @@ def publish_retrospective_backfill(
     by_security: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in prices:
         by_security[row["security_id"]].append(row)
-    if set(by_security) != set(members):
-        missing = sorted(set(members) - set(by_security))
+    unexpected = sorted(set(by_security) - set(members))
+    if unexpected:
         raise RetrospectiveBackfillError(
-            "current price catalog is missing profile securities: " + ", ".join(missing)
+            "current price catalog contains securities outside the profile: " + ", ".join(unexpected)
         )
     for security_id, rows in by_security.items():
         rows.sort(key=lambda row: _timestamp(row["observed_at"], field="price.observed_at"))
@@ -766,10 +762,10 @@ def publish_retrospective_backfill(
             ]
             if matching:
                 exact_bars[security_id] = matching[-1]
-        if set(exact_bars) != set(members):
-            missing = sorted(members[key]["ticker"] for key in set(members) - set(exact_bars))
+        unexpected_bars = sorted(set(exact_bars) - set(members))
+        if unexpected_bars:
             raise RetrospectiveBackfillError(
-                f"{market_session.isoformat()} lacks exact close bars for: {', '.join(missing)}"
+                f"{market_session.isoformat()} contains bars outside the profile: {', '.join(unexpected_bars)}"
             )
         ranking_rows, eligible_count, rejected_count = _rank_session(
             members=members,

@@ -104,12 +104,55 @@ type chartResult struct {
 	Meta struct {
 		Currency             string `json:"currency"`
 		ExchangeTimezoneName string `json:"exchangeTimezoneName"`
+		FirstTradeDate       int64  `json:"firstTradeDate"`
 	} `json:"meta"`
 	Timestamp  []int64 `json:"timestamp"`
 	Indicators struct {
 		Quote []quote `json:"quote"`
 	} `json:"indicators"`
 }
+
+// FirstTradeDate returns Yahoo's earliest available observation date for a
+// symbol, normalized to its exchange timezone. It is vendor-history metadata,
+// not an official listing-date assertion.
+func (c *Client) FirstTradeDate(ctx context.Context, symbol string) (time.Time, error) {
+	if c == nil || c.http == nil {
+		return time.Time{}, fmt.Errorf("Yahoo HTTP client is required")
+	}
+	u, err := chartURL(c.baseURL, symbol)
+	if err != nil {
+		return time.Time{}, err
+	}
+	now := c.now().UTC()
+	query := u.Query()
+	query.Set("period1", strconv.FormatInt(now.AddDate(0, 0, -30).Unix(), 10))
+	query.Set("period2", strconv.FormatInt(now.AddDate(0, 0, 1).Unix(), 10))
+	query.Set("interval", "1d")
+	query.Set("events", "history")
+	u.RawQuery = query.Encode()
+	body, err := c.http.Get(ctx, u.String())
+	if err != nil {
+		return time.Time{}, fmt.Errorf("Yahoo history metadata %s: %w", symbol, err)
+	}
+	var raw response
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return time.Time{}, fmt.Errorf("decode Yahoo history metadata %s: %w", symbol, err)
+	}
+	if raw.Chart.Error != nil {
+		return time.Time{}, fmt.Errorf("Yahoo API %s: %s", raw.Chart.Error.Code, raw.Chart.Error.Description)
+	}
+	if len(raw.Chart.Result) != 1 || raw.Chart.Result[0].Meta.FirstTradeDate <= 0 {
+		return time.Time{}, fmt.Errorf("Yahoo did not provide a first-trade date for %s", symbol)
+	}
+	meta := raw.Chart.Result[0].Meta
+	location, err := time.LoadLocation(meta.ExchangeTimezoneName)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("Yahoo exchange timezone %q: %w", meta.ExchangeTimezoneName, err)
+	}
+	day := time.Unix(meta.FirstTradeDate, 0).In(location)
+	return time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC), nil
+}
+
 type quote struct {
 	Open   []*json.Number `json:"open"`
 	High   []*json.Number `json:"high"`

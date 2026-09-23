@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up stock-ui migrate historical-truth-db-test health urls ingest rerun daily daily-cycle market-cycle install-market-timer market-cycle-scheduler-test discovery-run discovery-validate discovery-backfill ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-release-guard-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance paper-make-target-acceptance v1-pre-release-acceptance v1-release-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-validate-inputs paper-create-account paper-run paper-reconcile paper-acceptance paper-acceptance-report paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up stock-ui nasdaq100-sync migrate historical-truth-db-test health urls ingest rerun daily daily-cycle market-cycle install-market-timer market-cycle-scheduler-test discovery-run discovery-validate discovery-backfill ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-release-guard-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance paper-make-target-acceptance v1-pre-release-acceptance v1-release-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-validate-inputs paper-create-account paper-run paper-reconcile paper-acceptance paper-acceptance-report paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -25,8 +25,7 @@ up: setup config
 
 stock-ui: setup config
 	@$(COMPOSE) up -d --build stock-manager
-	@published="$$($(COMPOSE) port stock-manager 8080 2>/dev/null || true)"; \
-		if test -n "$$published"; then echo "Stock manager: http://$$published"; fi
+	@$(COMPOSE) config --format json | jq -r '.services["stock-manager"].ports[] | "Stock manager (\(if (.host_ip | startswith("127.")) then "local" else "Tailnet" end)): http://\(.host_ip):\(.published)"'
 
 migrate: setup config
 	@$(COMPOSE) up -d --wait --build postgres
@@ -111,15 +110,9 @@ health:
 	@$(COMPOSE) exec -T grafana wget -q -O /dev/null http://0.0.0.0:3000/api/health
 
 urls:
-	@$(COMPOSE) exec -T jupyter jupyter server list
-	@published="$$($(COMPOSE) port stock-manager 8080 2>/dev/null || true)"; \
-		if test -n "$$published"; then echo "Stock manager: http://$$published"; fi
-	@published="$$($(COMPOSE) port grafana 3000 2>/dev/null || true)"; \
-		if test -n "$$published"; then \
-			echo "Grafana: http://$$published"; \
-		else \
-			echo "Grafana: http://$${INVS_BIND_ADDRESS:-127.0.0.1}:$${GRAFANA_PORT:-3000}"; \
-		fi
+	@$(COMPOSE) config --format json | jq -r '.services.jupyter.ports[] | "Jupyter (local): http://\(.host_ip):\(.published)"'
+	@echo "Jupyter access token, if enabled, is in the Jupyter container logs."
+	@$(COMPOSE) config --format json | jq -r '.services | to_entries[] | select(.key == "stock-manager" or .key == "grafana") | .key as $$service | .value.ports[] | "\($$service) (\(if (.host_ip | startswith("127.")) then "local" else "Tailnet" end)): http://\(.host_ip):\(.published)"'
 
 ingest: setup config
 	@$(COMPOSE) --profile collect run --rm collector --source $(SOURCE) $(RUN_KEY_ARG)
@@ -136,6 +129,10 @@ daily-cycle: setup config
 	@test -n "$(CYCLE_SPEC)" || (echo "CYCLE_SPEC is required" >&2; exit 2)
 	@test -f "$(CYCLE_SPEC)" || (echo "CYCLE_SPEC does not exist: $(CYCLE_SPEC)" >&2; exit 2)
 	@scripts/daily-cycle.sh --spec "$(CYCLE_SPEC)"
+
+nasdaq100-sync: setup config
+	@$(COMPOSE) up -d --build stock-manager
+	@$(COMPOSE) exec -T stock-manager wget -q -O - --post-data='' http://localhost:8080/api/nasdaq-100/sync
 
 market-cycle: setup config
 	@scripts/market-cycle.sh

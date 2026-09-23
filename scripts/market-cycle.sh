@@ -44,6 +44,14 @@ log_path="$log_root/market-cycle-${invocation}.log"
 exec > >(tee -a "$log_path") 2>&1
 
 echo "market_cycle_start=$invocation activation=$activation source=$source"
+if [[ "${INVS_MARKET_SKIP_COLLECTION:-0}" != 1 && "${INVS_NASDAQ100_REFRESH:-1}" == 1 ]]; then
+  echo "nasdaq100_refresh=starting"
+  if snapshot_result=$("$make_command" --no-print-directory nasdaq100-sync); then
+    printf 'nasdaq100_refresh_result=%s\n' "$snapshot_result"
+  else
+    echo "nasdaq100_refresh=degraded action=keep_last_complete_snapshot"
+  fi
+fi
 if [[ "${INVS_MARKET_SKIP_COLLECTION:-0}" != 1 ]]; then
   "$make_command" ingest SOURCE="$source" RUN_KEY="market-${source}-${invocation}"
 fi

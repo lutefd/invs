@@ -85,11 +85,22 @@ make health
 make urls
 ```
 
-`make up` starts PostgreSQL, JupyterLab, and Grafana. The collector is a batch
-job and is intentionally not a long-running health-checked service; run it
-with `make ingest` below. `make urls` prints the Jupyter URL and the configured
-Grafana URL. Ports default to PostgreSQL `5432`, Jupyter `8888`, and Grafana
-`3000`; `.env` can override them.
+`make up` starts PostgreSQL, JupyterLab, Grafana, and the stock manager. The
+collector is a batch job and is intentionally not a long-running health-checked
+service; run it with `make ingest` below. `make urls` prints local UI URLs and,
+when configured, Tailnet URLs for Grafana and the stock manager. PostgreSQL and
+Jupyter remain bound only to `127.0.0.1`. Grafana and the stock manager use the
+same configured port for their local and explicit Tailnet bindings; without a
+Tailnet address, both remain loopback-only.
+
+To open the two UIs from another device on your Tailnet, add the machine's
+Tailscale IPv4 address to `.env` as `INVS_TAILSCALE_IPV4=100.x.y.z`, then run
+`make up`. The stock manager is reachable at `http://<tailscale-ip>:8090` and
+Grafana at `http://<tailscale-ip>:<GRAFANA_PORT>` (default port `3000`). The
+address must be in Tailscale's `100.64.0.0/10` range. The Grafana link to the
+manager uses this address, and the manager's dashboard link uses the host from
+the browser URL. Keep Tailnet ACLs limited to trusted users: Grafana requires
+sign-in, and the stock manager can change the tracked universe.
 
 To verify the v0.2 historical metadata boundary against PostgreSQL, run
 `make historical-truth-db-test`. It uses isolated fixtures and a disposable fresh
@@ -1559,8 +1570,9 @@ together. Start it with the rest of the app using `make up`, or on its own with:
 make stock-ui
 ```
 
-Open `http://127.0.0.1:8090`. Add the ticker, its Yahoo symbol, company name,
-sector, optional themes, ticker-valid-from date, and universe membership date.
+Open the Stock manager URL printed by `make urls` (local by default). Add the
+ticker, its Yahoo symbol, company name, sector, optional themes, ticker-valid-from
+date, and universe membership date.
 The valid-from date should reflect when that ticker mapping became valid. For a
 new mapping the manager creates stable security and issuer IDs, validates the
 updated collector config and profile, and saves protected backups under
@@ -1579,15 +1591,34 @@ In Grafana, use the **Ticker** filter to focus the forward rank table, candidate
 history, score history, and retrospective views. The **Manage tracked stocks**
 dashboard link opens the stock manager. Historical views remain explicitly
 retrospective and use the captured profile snapshot. The scheduled cycle ranks
-the configured profile; it does not search every listed stock on an exchange.
-Automatic new-name discovery is not active yet. The safest first scout is the
-full Nasdaq-100, backed by retained official constituent snapshots; unknown or
-ambiguous ticker mappings should go to review and should only enter history from
-their evidenced admission date. Scanning all XNAS listings needs a separate
-exchange-wide security directory and lifecycle policy.
+the current full Nasdaq-100 snapshot together with stocks you track manually;
+it does not search every listed stock on an exchange.
 
-The discovery index ranks every eligible starter-universe security using
-cross-sectional percentiles: 3-month return (25%), 6-month return (30%), 12-month
+### Full Nasdaq-100 constituent refresh
+
+The stock manager's **Refresh Nasdaq-100** button and `make nasdaq100-sync` use
+Nasdaq's current website constituent feed to sync the full current index. The
+daily `make market-cycle` refreshes the same source before collecting prices.
+Complete responses are validated, retained under
+`data/research/stock-manager/nasdaq-100-snapshots/`, and merged with manually
+tracked names. Stable ticker-based IDs are reused on later refreshes. Newly
+added tickers use Yahoo's reported earliest history date when available; if that
+lookup fails, the mapping starts on the snapshot date and the manager reports
+that history needs review. A failed or partial source response leaves the last
+complete universe active.
+
+This is Nasdaq's public but undocumented current website feed. It supplies a
+current snapshot, not official historical membership events. The daily index is
+current research, and the retrospective backfill remains labeled hindsight; the
+current list must not be projected into earlier point-in-time universes.
+
+The retrospective backfill includes every member in the captured current
+profile. A name with no installed prices remains in each session as a rejected
+row with `missing_price_bar_for_market_session`; it no longer aborts the whole
+backfill. Missing bars are not synthesized.
+
+The discovery index ranks every eligible Nasdaq-100 and manually tracked security
+using cross-sectional percentiles: 3-month return (25%), 6-month return (30%), 12-month
 return (30%), lower 1-month realized volatility (10%), and shallower 1-month maximum
 drawdown (5%). The top five are labeled `candidate`; that label means
 `research_watchlist_only` and never creates or changes a paper order. Missing or null

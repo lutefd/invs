@@ -5,7 +5,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [{"asDropdown":false,"icon":"external link alt","includeVars":false,"keepTime":false,"targetBlank":true,"title":"Manage tracked stocks","tooltip":"Add stocks to the collector and discovery profile","type":"link","url":"http://127.0.0.1:8090"}],
+  "links": [{"asDropdown":false,"icon":"external link alt","includeVars":false,"keepTime":false,"targetBlank":true,"title":"Manage tracked stocks","tooltip":"Add stocks to the collector and discovery profile","type":"link","url":"__STOCK_MANAGER_URL__"}],
   "panels": [
     {
       "datasource": {"type": "postgres", "uid": "research-postgres"},
