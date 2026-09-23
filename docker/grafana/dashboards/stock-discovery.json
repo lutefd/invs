@@ -1,6 +1,6 @@
 {
   "annotations": {"list": []},
-  "description": "Daily, point-in-time stock discovery ranks. Candidates are a research watchlist, not trade recommendations or automatic orders.",
+  "description": "Forward daily stock-discovery ranks are shown separately from explicitly labeled retrospective hindsight reconstructions. Candidates are research labels, not trade recommendations or automatic orders.",
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -39,6 +39,60 @@
       "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT index.market_session, index.decision_at, ranking.rank, ranking.ticker, ranking.score::double precision AS score FROM discovery_indexes index JOIN discovery_rankings ranking USING (discovery_id) WHERE ranking.candidate ORDER BY index.market_session DESC, ranking.rank", "refId": "A"}],
       "title": "Candidate history",
       "type": "table"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Hindsight reconstruction from the current Yahoo vintage and the universe admitted on 2026-09-06. Original conservative receipt timestamps are preserved; these are not point-in-time ranks or trade recommendations.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 3, "w": 16, "x": 8, "y": 21},
+      "id": 4,
+      "options": {"content": "**Retrospective reconstruction — hindsight.** Prices use the current Yahoo vintage; original conservative receipt timestamps are retained. The same 20-security universe admitted on 2026-09-06 is applied across the reconstructed sessions, including dates before that admission. These rows do not represent what was knowable at each past close, and candidates are research labels only.", "mode": "markdown"},
+      "title": "Retrospective data note",
+      "type": "text"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "The most recent operational market session that was successfully registered. This shows the actual published date without assuming a daily run is expected on weekends or exchange holidays.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 3, "w": 8, "x": 0, "y": 21},
+      "id": 8,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT market_session AS latest_forward_market_session, decision_at AS decision_clock FROM discovery_indexes WHERE model_name = 'momentum-risk-rank' AND model_version = '1.0.0' AND universe_id = '51efed8d-2106-5ac7-b12a-a66cfe0eb097'::uuid ORDER BY market_session DESC, decision_at DESC LIMIT 1", "refId": "A"}],
+      "title": "Latest operational session published",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Explicitly separate hindsight rankings reconstructed from the current Yahoo vintage and the current universe snapshot. Original conservative receipt timestamps are retained; these are not contemporaneous point-in-time ranks.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 24},
+      "id": 5,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "enablePagination": true, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true, "sortBy": [{"desc": false, "displayName": "rank"}]},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT observation_mode, universe_basis, membership_as_of, reconstructed_at, input_fitness, market_session, rank, ticker, sector, candidate, score::double precision AS score, (return_3m * 100)::double precision AS return_3m_pct, (return_6m * 100)::double precision AS return_6m_pct, (return_12m * 100)::double precision AS return_12m_pct, realized_volatility_1m::double precision AS volatility_1m, (max_drawdown_1m * 100)::double precision AS drawdown_1m_pct, eligibility_status FROM discovery_backfill_latest_rankings WHERE observation_mode = 'retrospective_current_universe' ORDER BY rank NULLS LAST, ticker", "refId": "A"}],
+      "title": "Retrospective latest ranks — hindsight",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Score history by historical market session from the separate retrospective store. The series is explicitly hindsight and uses current universe membership.",
+      "fieldConfig": {"defaults": {"min": 0, "max": 100}, "overrides": []},
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 36},
+      "id": 6,
+      "options": {"legend": {"calcs": [], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "time_series", "rawQuery": true, "rawSql": "SELECT market_session::timestamp AS time, ticker || ' · hindsight' AS metric, score::double precision AS value FROM discovery_backfill_rankings_history WHERE observation_mode = 'retrospective_current_universe' AND eligibility_status = 'eligible' AND $__timeFilter(market_session) ORDER BY time, metric", "refId": "A"}],
+      "title": "Retrospective score history — hindsight",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "postgres", "uid": "research-postgres"},
+      "description": "Historical closes from the current Yahoo vintage, plotted by market session. Original conservative receipt timestamps remain in the source data; this chart is hindsight, not a point-in-time record.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 45},
+      "id": 7,
+      "options": {"legend": {"calcs": [], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "postgres", "uid": "research-postgres"}, "editorMode": "code", "format": "time_series", "rawQuery": true, "rawSql": "SELECT market_session::timestamp AS time, ticker || ' · current vintage · hindsight' AS metric, close_value::double precision AS value FROM discovery_backfill_prices_history WHERE $__timeFilter(market_session) ORDER BY time, metric", "refId": "A"}],
+      "title": "Retrospective Yahoo closes — current vintage, hindsight",
+      "type": "timeseries"
     }
   ],
   "refresh": "5m",
