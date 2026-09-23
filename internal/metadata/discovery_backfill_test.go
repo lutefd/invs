@@ -131,7 +131,7 @@ func TestDiscoveryBackfillRegistrationRejectsUnsafePathsAndIncompleteCoverage(t 
 			t.Fatalf("got %v", err)
 		}
 	})
-	t.Run("missing profile member bar", func(t *testing.T) {
+	t.Run("eligible member missing bar", func(t *testing.T) {
 		registration := testDiscoveryBackfillRegistration()
 		registration.Manifest.Profile.Size = 2
 		registration.Manifest.Sessions[0].EligibleCount = 2
@@ -142,8 +142,44 @@ func TestDiscoveryBackfillRegistrationRejectsUnsafePathsAndIncompleteCoverage(t 
 			Features:    registration.Manifest.Sessions[0].Rankings[0].Features,
 			Eligibility: DiscoveryBackfillEligibility{Status: "eligible", Reasons: []string{}},
 		})
-		if _, err := ValidateDiscoveryBackfillRegistration(registration); err == nil || !strings.Contains(err.Error(), "exact price-bar coverage") {
+		if _, err := ValidateDiscoveryBackfillRegistration(registration); err == nil || !strings.Contains(err.Error(), "no price bar but is not rejected") {
 			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("explicitly rejected member may have no bar", func(t *testing.T) {
+		registration := testDiscoveryBackfillRegistration()
+		registration.Manifest.Profile.Size = 2
+		registration.Manifest.Sessions[0].RejectedCount = 1
+		missing := registration.Manifest.Sessions[0].Rankings[0]
+		missing.SecurityID = "50000000-0000-4000-8000-000000000002"
+		missing.Ticker = "BBB"
+		missing.Rank = nil
+		missing.Score = nil
+		missing.Candidate = false
+		missing.Features = DiscoveryBackfillFeatures{}
+		missing.Eligibility = DiscoveryBackfillEligibility{
+			Status: "rejected", Reasons: []string{discoveryBackfillMissingBarReason},
+		}
+		registration.Manifest.Sessions[0].Rankings = append(
+			registration.Manifest.Sessions[0].Rankings, missing,
+		)
+		if _, err := ValidateDiscoveryBackfillRegistration(registration); err != nil {
+			t.Fatalf("explicitly rejected member without a bar was rejected: %v", err)
+		}
+	})
+	t.Run("all-missing session is retained", func(t *testing.T) {
+		registration := testDiscoveryBackfillRegistration()
+		session := &registration.Manifest.Sessions[0]
+		session.CandidateCount, session.EligibleCount, session.RejectedCount = 0, 0, 1
+		session.PriceBars = nil
+		row := &session.Rankings[0]
+		row.Rank, row.Score, row.Candidate = nil, nil, false
+		row.Features = DiscoveryBackfillFeatures{}
+		row.Eligibility = DiscoveryBackfillEligibility{
+			Status: "rejected", Reasons: []string{discoveryBackfillMissingBarReason},
+		}
+		if _, err := ValidateDiscoveryBackfillRegistration(registration); err != nil {
+			t.Fatalf("all-missing session was rejected: %v", err)
 		}
 	})
 	t.Run("invalid timestamp", func(t *testing.T) {

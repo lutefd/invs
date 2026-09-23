@@ -25,6 +25,7 @@ const (
 	discoveryBackfillUniverseBasis      = "current_profile_membership_snapshot"
 	discoveryBackfillInputFitness       = "installation_replay_only"
 	discoveryBackfillAvailabilityPolicy = "current_vintage_with_preserved_receipt_times"
+	discoveryBackfillMissingBarReason   = "missing_price_bar_for_market_session"
 )
 
 var (
@@ -499,8 +500,8 @@ func (r DiscoveryBackfillRegistration) normalized() (DiscoveryBackfillRegistrati
 			return r, fmt.Errorf("session %s summary counts differ from ranking rows", session.MarketSession)
 		}
 		sort.Slice(session.Rankings, func(a, b int) bool { return session.Rankings[a].SecurityID < session.Rankings[b].SecurityID })
-		if len(session.PriceBars) != m.Profile.Size {
-			return r, fmt.Errorf("session %s does not have exact price-bar coverage for the profile", session.MarketSession)
+		if len(session.PriceBars) > m.Profile.Size {
+			return r, fmt.Errorf("session %s has more price bars than profile securities", session.MarketSession)
 		}
 		seenPrice, rankedPrice := map[string]bool{}, map[string]string{}
 		for _, row := range session.Rankings {
@@ -602,6 +603,22 @@ func (r DiscoveryBackfillRegistration) normalized() (DiscoveryBackfillRegistrati
 			}
 			if !partFound {
 				return r, fmt.Errorf("price bar %s does not reference a selected manifest part", bar.SecurityID)
+			}
+		}
+		for _, row := range session.Rankings {
+			hasMissingBarReason := false
+			for _, reason := range row.Eligibility.Reasons {
+				if reason == discoveryBackfillMissingBarReason {
+					hasMissingBarReason = true
+					break
+				}
+			}
+			hasPriceBar := seenPrice[row.SecurityID]
+			if !hasPriceBar && (row.Eligibility.Status != "rejected" || !hasMissingBarReason) {
+				return r, fmt.Errorf("ranking %s has no price bar but is not rejected for a missing session bar", row.SecurityID)
+			}
+			if hasPriceBar && hasMissingBarReason {
+				return r, fmt.Errorf("ranking %s reports a missing session bar that is present", row.SecurityID)
 			}
 		}
 		sort.Slice(session.PriceBars, func(a, b int) bool { return session.PriceBars[a].SecurityID < session.PriceBars[b].SecurityID })
