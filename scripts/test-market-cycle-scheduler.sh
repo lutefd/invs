@@ -46,7 +46,7 @@ printf '%s\n' \
 'set -euo pipefail' \
 'printf "%s\\n" "$*" >> "${INVS_SCHEDULER_TEST_DOCKER_LOG:?}"' \
 'if [[ " $* " == *" exec "* ]]; then' \
-'    printf "%s\\n" '\''{"manifest":{"data_source_id":"test-source","mic":"XNAS","calendar_version":"test-calendar","session_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","available_at":"2026-09-18T00:00:00Z"},"sessions":[]}'\''' \
+'    printf "%s\\n" '\''{"manifest":{"data_source_id":"test-source","mic":"XNAS","calendar_version":"test-calendar","session_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","available_at":"2026-09-18T00:00:00Z"},"sessions":[{"session_date":"2026-09-18","session_status":"open","close_at":"2026-09-18T20:00:00Z"}]}'\''' \
 'elif [[ " $* " == *" run "* ]]; then' \
 '    if [[ "${INVS_SCHEDULER_TEST_PAPER_READY:-0}" == 1 ]]; then' \
 '        paper_output="${INVS_SCHEDULER_TEST_PAPER_OUTPUT_CONTAINER:?}"' \

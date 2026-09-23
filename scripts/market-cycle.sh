@@ -105,6 +105,15 @@ docker compose run --rm --no-deps \
     --not-before "$activation" \
     --git-commit "$git_commit" | tee "$result_path"
 
+expected_session=$(jq -r --arg decision "$decision_at" \
+  '[.sessions[] | select(.session_status == "open" and .close_at != null and .close_at <= $decision) | .session_date] | max // empty' \
+  "$calendar_path")
+actual_session=$(jq -r '.session_date // empty' "$result_path")
+if [[ -z "$expected_session" || "$actual_session" != "$expected_session" ]]; then
+  echo "market_cycle=failed reason=latest_completed_session_unavailable expected=$expected_session actual=$actual_session" >&2
+  exit 1
+fi
+
 container_to_host() {
   local path=$1
   case "$path" in
