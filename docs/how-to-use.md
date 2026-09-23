@@ -1570,6 +1570,63 @@ docker compose exec -T postgres sh -c \
    FROM discovery_latest_rankings ORDER BY rank NULLS LAST"'
 ```
 
+### Retrospective three-month price and ranking backfill
+
+To reconstruct daily prices and discovery ranks for the latest three calendar
+months, run:
+
+```sh
+START_DATE=2026-06-22 \
+END_DATE=2026-09-22 \
+EXPECTED_SESSION_COUNT=65 \
+EXPECTED_START_DATE=2026-06-22 \
+EXPECTED_END_DATE=2026-09-22 \
+make discovery-backfill MONTHS=3
+```
+
+The explicit start and end dates retain the 2026-06-22 through 2026-09-22
+window when this example is rerun later. The expected count and dates make the
+operator command stop before database registration if calendar coverage differs.
+For a later window, update both date bounds and the expected values after checking
+the XNAS calendar snapshot, or omit the three `EXPECTED_*` values.
+
+This creates a separate immutable run under
+`data/research/discovery/retrospective-current-universe/backfills/` and registers
+it in the `discovery_backfill_*` tables. The Grafana page shows these records in
+separate panels. `discovery_backfill_rankings_all_runs` and
+`discovery_backfill_prices_all_runs` retain every reconstruction; the `*_history`
+views select the latest run per model, version, and universe so reruns do not
+duplicate dates in the charts.
+
+The labels are intentional: these are `retrospective_current_universe` rankings
+over the profile's current membership snapshot, with Yahoo's currently installed
+split-adjusted price vintage (`installation_replay_only`). They are hindsight
+reconstructions, not rankings that were actually available on those dates. The
+profile's `membership_as_of` boundary remains attached, and the reconstruction
+does not claim that all current members belonged to the universe before that
+date. Each price keeps its original `observed_at`, `available_at`, and
+`ingested_at`; receipt times are never moved back to the historical close.
+The `current_vintage_with_preserved_receipt_times` availability policy means the
+calculation uses the installed current price vintage while carrying the original
+receipt timestamps through as lineage; it does not treat those prices as known at
+each reconstructed close.
+
+The run pins the exact profile, XNAS calendar snapshot, normalized manifests,
+and content-addressed Parquet parts under its own `inputs/` directory. This
+makes its lineage recoverable after current normalized manifests change. To
+check a retained run:
+
+```sh
+docker compose run --rm --no-deps jupyter python -m research.retrospective_discovery_cli validate \
+  --manifest /data/research/discovery/retrospective-current-universe/backfills/<run-id>/manifest.json
+```
+
+`make market-cycle` now archives normalized manifest bytes in
+`data/normalized/.manifest-history/` as new revisions are published. Reconcile
+can still report `status=degraded` for 200 legacy artifacts created before that
+archive existed while reporting `issue_count=0`; the latest-session freshness
+gate is separate and continues to require a current successful market cycle.
+
 To validate a retained artifact independently:
 
 ```sh
