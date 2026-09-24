@@ -16,9 +16,9 @@ updated.
   [Nasdaq-100 constituent list](https://en.wikipedia.org/wiki/List_of_NASDAQ-100_companies),
   which identifies the classification as of 2026-07-01. This is a secondary
   reference and should be checked when the index roster changes.
-- Nasdaq's [official product guide](https://www.nasdaq.com/docs/nasdaq-100-index-product-guide)
-  confirms that Nasdaq-100 companies use the Industry Classification Benchmark
-  (ICB).
+- Nasdaq's [official ICB sector overview](https://www.nasdaq.com/articles/assets-and-liquidity-nasdaq-100-ecosystem)
+  confirms that the Nasdaq-100 uses Industry Classification Benchmark (ICB)
+  sector classifications.
 
 These are Nasdaq ICB labels, which can differ from GICS or other familiar sector
 labels. For example, this ICB table places Netflix and Walmart in Consumer
