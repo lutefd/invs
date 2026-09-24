@@ -25,8 +25,9 @@ import (
 )
 
 const (
-	nasdaqSyncStateVersion = 1
-	nasdaqSourceLabel      = "nasdaq_100"
+	nasdaqSyncStateVersion        = 1
+	nasdaqSourceLabel             = "nasdaq_100"
+	nasdaqSectorLookupSourceLabel = "nasdaq_sector_lookup"
 )
 
 type nasdaqSyncState struct {
@@ -218,17 +219,35 @@ func (m *manager) syncNasdaq100(ctx context.Context) (nasdaqSyncResult, error) {
 			additions = append(additions, ticker)
 		}
 		if !memberExists {
+			sector, inferred, err := resolveNasdaqSector(constituent)
+			if err != nil {
+				return nasdaqSyncResult{}, err
+			}
 			member = profileMember{
 				Ticker: ticker, SecurityID: security.SecurityID, IssuerID: security.IssuerID,
-				Sector: currentSector(constituent.Sector), Sources: []string{nasdaqSourceLabel},
+				Sector: sector, Sources: []string{nasdaqSourceLabel},
+			}
+			if inferred {
+				member.Sources = addSource(member.Sources, nasdaqSectorLookupSourceLabel)
 			}
 		} else {
 			if member.SecurityID != security.SecurityID || member.IssuerID != security.IssuerID {
 				return nasdaqSyncResult{}, fmt.Errorf("Nasdaq constituent %s has conflicting profile and collector IDs", ticker)
 			}
 			member.Sources = addSource(member.Sources, nasdaqSourceLabel)
-			if member.Sector == "" {
-				member.Sector = currentSector(constituent.Sector)
+			if member.Sector == "" || member.Sector == "unclassified" {
+				if !containsSource(member.Sources, "manual") {
+					sector, inferred, err := resolveNasdaqSector(constituent)
+					if err != nil {
+						return nasdaqSyncResult{}, err
+					}
+					if sector != "unclassified" {
+						member.Sector = sector
+						if inferred {
+							member.Sources = addSource(member.Sources, nasdaqSectorLookupSourceLabel)
+						}
+					}
+				}
 			}
 		}
 		profileByTicker[ticker] = member
@@ -425,7 +444,7 @@ func currentSector(value string) string {
 	key = strings.ReplaceAll(key, "&", "and")
 	key = strings.Join(strings.Fields(key), " ")
 	switch key {
-	case "communication services", "communications":
+	case "communication services", "communications", "telecommunications":
 		return "communication_services"
 	case "consumer discretionary", "consumer cyclical":
 		return "consumer_discretionary"
@@ -450,6 +469,20 @@ func currentSector(value string) string {
 	default:
 		return "unclassified"
 	}
+}
+
+func resolveNasdaqSector(member nasdaq.CurrentConstituent) (sector string, inferred bool, err error) {
+	if sector = currentSector(member.Sector); sector != "unclassified" {
+		return sector, false, nil
+	}
+	entry, matched, err := nasdaq.LookupCurrentSector(member.Ticker, member.Company)
+	if err != nil {
+		return "unclassified", false, fmt.Errorf("load Nasdaq sector lookup: %w", err)
+	}
+	if matched {
+		return entry.Sector, true, nil
+	}
+	return "unclassified", false, nil
 }
 
 func (m *manager) archiveNasdaqResponse(body []byte, retrieved time.Time) error {

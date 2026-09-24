@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/luisdourado/invs/config"
+	"github.com/luisdourado/invs/internal/providers/nasdaq"
 	"gopkg.in/yaml.v3"
 )
 
@@ -131,6 +132,27 @@ func TestSyncNasdaq100LeavesLastCompleteProfileOnInvalidSnapshot(t *testing.T) {
 	}
 	if string(profileAfter) != string(profileBefore) || string(configAfter) != string(configBefore) {
 		t.Fatal("invalid source snapshot changed the active profile or collector config")
+	}
+}
+
+func TestResolveNasdaqSectorFallsBackToTickerAndCompanyLookup(t *testing.T) {
+	sector, inferred, err := resolveNasdaqSector(nasdaq.CurrentConstituent{
+		Ticker: "ABNB", Company: "Airbnb, Inc. Class A Common Stock",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sector != "consumer_discretionary" || !inferred {
+		t.Fatalf("lookup result sector=%q inferred=%t, want consumer_discretionary inferred", sector, inferred)
+	}
+	sector, inferred, err = resolveNasdaqSector(nasdaq.CurrentConstituent{
+		Ticker: "ABNB", Company: "Different Company Inc.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sector != "unclassified" || inferred {
+		t.Fatalf("mismatched company result sector=%q inferred=%t, want unclassified without inference", sector, inferred)
 	}
 }
 

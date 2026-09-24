@@ -1,0 +1,102 @@
+ticker,company_name,icb_industry,app_sector
+AAPL,Apple Inc. Common Stock,Technology,technology
+ABNB,"Airbnb, Inc. Class A Common Stock",Consumer Discretionary,consumer_discretionary
+ADBE,Adobe Inc. Common Stock,Technology,technology
+ADI,"Analog Devices, Inc. Common Stock",Technology,technology
+ADP,"Automatic Data Processing, Inc. Common Stock",Industrials,industrials
+ADSK,"Autodesk, Inc. Common Stock",Technology,technology
+AEP,"American Electric Power Company, Inc. Common Stock",Utilities,utilities
+ALAB,"Astera Labs, Inc. Common Stock",Technology,technology
+ALNY,"Alnylam Pharmaceuticals, Inc. Common Stock",Health Care,health_care
+AMAT,"Applied Materials, Inc. Common Stock",Technology,technology
+AMD,"Advanced Micro Devices, Inc. Common Stock",Technology,technology
+AMGN,Amgen Inc. Common Stock,Health Care,health_care
+AMZN,"Amazon.com, Inc. Common Stock",Consumer Discretionary,consumer_discretionary
+APP,Applovin Corporation Class A Common Stock,Technology,technology
+ARM,Arm Holdings plc American Depositary Shares,Technology,technology
+ASML,ASML Holding N.V. New York Registry Shares,Technology,technology
+AVGO,Broadcom Inc. Common Stock,Technology,technology
+AXON,"Axon Enterprise, Inc. Common Stock",Industrials,industrials
+BKNG,Booking Holdings Inc. Common Stock,Consumer Discretionary,consumer_discretionary
+BKR,Baker Hughes Company Class A Common Stock,Energy,energy
+CCEP,Coca-Cola Europacific Partners plc Ordinary Shares,Consumer Staples,consumer_staples
+CDNS,"Cadence Design Systems, Inc. Common Stock",Technology,technology
+CEG,Constellation Energy Corporation Common Stock,Utilities,utilities
+CMCSA,Comcast Corporation Class A Common Stock,Telecommunications,communication_services
+COST,Costco Wholesale Corporation Common Stock,Consumer Discretionary,consumer_discretionary
+CPRT,"Copart, Inc. (DE) Common Stock",Consumer Discretionary,consumer_discretionary
+CRWD,"CrowdStrike Holdings, Inc. Class A Common Stock",Technology,technology
+CRWV,"CoreWeave, Inc. Class A Common Stock",Technology,technology
+CSCO,"Cisco Systems, Inc. Common Stock (DE)",Telecommunications,communication_services
+CSX,CSX Corporation Common Stock,Industrials,industrials
+CTAS,Cintas Corporation Common Stock,Industrials,industrials
+DASH,"DoorDash, Inc. Class A Common Stock",Technology,technology
+DDOG,"Datadog, Inc. Class A Common Stock",Technology,technology
+DXCM,"DexCom, Inc. Common Stock",Health Care,health_care
+EXC,Exelon Corporation Common Stock,Utilities,utilities
+FANG,"Diamondback Energy, Inc. Common Stock",Energy,energy
+FAST,Fastenal Company Common Stock,Industrials,industrials
+FER,Ferrovial N.V. Ordinary Shares,Industrials,industrials
+FTNT,"Fortinet, Inc. Common Stock",Technology,technology
+GEHC,GE HealthCare Technologies Inc. Common Stock,Health Care,health_care
+GILD,"Gilead Sciences, Inc. Common Stock",Health Care,health_care
+GOOG,Alphabet Inc. Class C Capital Stock,Technology,technology
+GOOGL,Alphabet Inc. Class A Common Stock,Technology,technology
+HON,Honeywell International Inc. Common Stock,Industrials,industrials
+HONA,Honeywell Aerospace Inc. Common Stock,Industrials,industrials
+IDXX,"IDEXX Laboratories, Inc. Common Stock",Health Care,health_care
+INTC,Intel Corporation Common Stock,Technology,technology
+INTU,Intuit Inc. Common Stock,Technology,technology
+ISRG,"Intuitive Surgical, Inc. Common Stock",Health Care,health_care
+KDP,Keurig Dr Pepper Inc. Common Stock,Consumer Staples,consumer_staples
+KLAC,KLA Corporation Common Stock,Technology,technology
+LIN,Linde plc Ordinary Shares,Basic Materials,materials
+LITE,Lumentum Holdings Inc. Common Stock,Technology,technology
+LRCX,Lam Research Corporation Common Stock,Technology,technology
+MAR,Marriott International Class A Common Stock,Consumer Discretionary,consumer_discretionary
+MCHP,Microchip Technology Incorporated Common Stock,Technology,technology
+MDLZ,"Mondelez International, Inc. Class A Common Stock",Consumer Staples,consumer_staples
+MELI,"MercadoLibre, Inc. Common Stock",Consumer Discretionary,consumer_discretionary
+META,"Meta Platforms, Inc. Class A Common Stock",Technology,technology
+MNST,Monster Beverage Corporation,Consumer Staples,consumer_staples
+MPWR,"Monolithic Power Systems, Inc. Common Stock",Technology,technology
+MRVL,"Marvell Technology, Inc. Common Stock",Technology,technology
+MSFT,Microsoft Corporation Common Stock,Technology,technology
+MSTR,Strategy Inc Common Stock Class A,Technology,technology
+MU,"Micron Technology, Inc. Common Stock",Technology,technology
+NBIS,Nebius Group N.V. Class A Ordinary Shares,Technology,technology
+NFLX,"Netflix, Inc. Common Stock",Consumer Discretionary,consumer_discretionary
+NVDA,NVIDIA Corporation Common Stock,Technology,technology
+NXPI,NXP Semiconductors N.V. Common Stock,Technology,technology
+ODFL,"Old Dominion Freight Line, Inc. Common Stock",Industrials,industrials
+ORLY,"O'Reilly Automotive, Inc. Common Stock",Consumer Discretionary,consumer_discretionary
+PANW,"Palo Alto Networks, Inc. Common Stock",Technology,technology
+PAYX,"Paychex, Inc. Common Stock",Industrials,industrials
+PCAR,PACCAR Inc. Common Stock,Consumer Discretionary,consumer_discretionary
+PDD,PDD Holdings Inc. American Depositary Shares,Technology,technology
+PEP,"PepsiCo, Inc. Common Stock",Consumer Staples,consumer_staples
+PLTR,Palantir Technologies Inc. Class A Common Stock,Technology,technology
+PYPL,"PayPal Holdings, Inc. Common Stock",Industrials,industrials
+QCOM,QUALCOMM Incorporated Common Stock,Technology,technology
+REGN,"Regeneron Pharmaceuticals, Inc. Common Stock",Health Care,health_care
+RKLB,Rocket Lab Corporation Common Stock,Industrials,industrials
+ROP,"Roper Technologies, Inc. Common Stock",Technology,technology
+ROST,"Ross Stores, Inc. Common Stock",Consumer Discretionary,consumer_discretionary
+SBUX,Starbucks Corporation Common Stock,Consumer Discretionary,consumer_discretionary
+SHOP,Shopify Inc. Class A Subordinate Voting Shares,Technology,technology
+SNDK,Sandisk Corporation Common Stock,Technology,technology
+SNPS,"Synopsys, Inc. Common Stock",Technology,technology
+SPCX,Space Exploration Technologies Corp. Class A Common Stock,Telecommunications,communication_services
+STX,Seagate Technology Holdings PLC Ordinary Shares (Ireland),Technology,technology
+TER,"Teradyne, Inc. Common Stock",Technology,technology
+TMUS,"T-Mobile US, Inc. Common Stock",Telecommunications,communication_services
+TRI,Thomson Reuters Corporation Common Shares,Technology,technology
+TSLA,"Tesla, Inc. Common Stock",Consumer Discretionary,consumer_discretionary
+TTWO,"Take-Two Interactive Software, Inc. Common Stock",Consumer Discretionary,consumer_discretionary
+TXN,Texas Instruments Incorporated Common Stock,Technology,technology
+VRTX,Vertex Pharmaceuticals Incorporated Common Stock,Health Care,health_care
+WBD,"Warner Bros. Discovery, Inc. Series A Common Stock",Consumer Discretionary,consumer_discretionary
+WDAY,"Workday, Inc. Class A Common Stock",Technology,technology
+WDC,Western Digital Corporation Common Stock,Technology,technology
+WMT,Walmart Inc. Common Stock,Consumer Discretionary,consumer_discretionary
+XEL,Xcel Energy Inc. Common Stock,Utilities,utilities

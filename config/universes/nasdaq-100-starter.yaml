@@ -1,26 +1,845 @@
 schema_version: 1.0.0
 universe_id: 51efed8d-2106-5ac7-b12a-a66cfe0eb097
 name: nasdaq-100-starter
-membership_as_of: 2026-09-06
-source_url: https://indexes.nasdaq.com/docs/FS_NDX.pdf
+membership_as_of: "2026-09-23"
+source_url: https://api.nasdaq.com/api/quote/list-type/nasdaq100?limit=200&offset=0
 members:
-  - { ticker: NVDA, security_id: 87d51474-47b1-544f-aed7-91ef2683adf6, issuer_id: cd4a182b-8f52-5bc7-a8f6-707c2009fcae, sector: technology, themes: [ai, semiconductors] }
-  - { ticker: AAPL, security_id: 469fc20f-7d4b-45bb-b827-05f8410e71aa, issuer_id: 1b3d88f5-55b8-4dc5-a6be-2f77e9e99201, sector: technology, themes: [consumer_technology] }
-  - { ticker: MU, security_id: 2bd2c9e5-bab6-596c-afe2-e021c93409a9, issuer_id: 6b240f2b-280c-568d-b3fa-813f844831e2, sector: technology, themes: [semiconductors] }
-  - { ticker: MSFT, security_id: b40636a9-cc8e-5e0d-8760-98163e63f4e5, issuer_id: 5f7f9bec-8908-56b4-a0e5-7ab4e1ed71c1, sector: technology, themes: [ai, cloud] }
-  - { ticker: AMD, security_id: 75241642-b216-5655-9db2-a387a96f7d25, issuer_id: 9d0ceb4b-98ed-51af-b420-3fbfda90ed61, sector: technology, themes: [ai, semiconductors] }
-  - { ticker: AMZN, security_id: 8020b83e-14bc-5b2b-9501-d72e4177997b, issuer_id: 8e78475b-3d81-571d-977f-c666d1dbab24, sector: consumer_discretionary, themes: [cloud, ecommerce] }
-  - { ticker: TSLA, security_id: 58a09b99-99e8-5d37-8dcb-911b4736c653, issuer_id: 1f3a18dc-12ef-5c45-b617-0ad0f9d34e67, sector: consumer_discretionary, themes: [electric_vehicles] }
-  - { ticker: GOOGL, security_id: 9297739e-0c80-50f2-bdf8-57bec8ead48b, issuer_id: d63877a5-47f3-54ec-8860-cd1411d50a9f, sector: communication_services, themes: [advertising, ai, cloud] }
-  - { ticker: INTC, security_id: 77edb43b-1528-59d2-8d61-205b1b7723bf, issuer_id: 0e2c0b62-2f52-5bda-ba5f-dacc0fb25303, sector: technology, themes: [semiconductors] }
-  - { ticker: TMUS, security_id: 514bd0b2-c484-5732-a6c2-5c8346b915a0, issuer_id: 8d1af602-900d-5723-ae9d-9aa7b68eac26, sector: communication_services, themes: [telecommunications, wireless] }
-  - { ticker: META, security_id: 263e0a2c-94e6-57e5-af2b-c7b7db98c945, issuer_id: 5814c20d-2579-546f-999e-0482fbd7a252, sector: communication_services, themes: [advertising, ai] }
-  - { ticker: AVGO, security_id: 5826a37b-99fb-54ef-b120-9eeca41cede5, issuer_id: 4c2b3b3a-15b5-5985-bc09-d8507a5c65cc, sector: technology, themes: [semiconductors] }
-  - { ticker: COST, security_id: dece459f-ecb8-5dbb-a987-b723fc9a52a3, issuer_id: 304828c8-6e12-52e0-ba08-211854c11195, sector: consumer_staples, themes: [retail] }
-  - { ticker: WMT, security_id: 82b4fd04-8043-591a-8e29-9f8d09a2fa1e, issuer_id: c0f194be-be0d-5849-9c9d-d3251e9ccc96, sector: consumer_staples, themes: [retail] }
-  - { ticker: NFLX, security_id: b4a2ced1-a795-5b21-9aed-7caf71a53fdc, issuer_id: 6f628652-0f72-5981-89c7-8bf00cbc7fee, sector: communication_services, themes: [streaming] }
-  - { ticker: PLTR, security_id: 905861a5-fb65-5132-a995-2df150398cf6, issuer_id: 5b99a840-1598-50ea-add7-8403c4b4d310, sector: technology, themes: [ai, analytics] }
-  - { ticker: QCOM, security_id: 98b58f59-e0cc-59f9-8379-4635dedc525f, issuer_id: 9cf901f6-90cd-5998-90a4-04899b475baa, sector: technology, themes: [semiconductors, wireless] }
-  - { ticker: CSCO, security_id: 4f17f3bb-f9e2-5096-8822-241d4ded2313, issuer_id: a6be7aea-5ce9-5978-b6c9-7703b79d5119, sector: technology, themes: [networking] }
-  - { ticker: AMAT, security_id: df40c617-0266-5103-af15-69a369412bc9, issuer_id: 0b8bc315-7dd3-5bf2-a358-50d802ea5669, sector: technology, themes: [semiconductors] }
-  - { ticker: LRCX, security_id: adc0d36c-a95c-5c43-b39e-3a48ef3adbc6, issuer_id: 95af67c1-c65b-5589-8fe5-af3dafa4b7c2, sector: technology, themes: [semiconductors] }
+  - ticker: AAPL
+    security_id: 469fc20f-7d4b-45bb-b827-05f8410e71aa
+    issuer_id: 1b3d88f5-55b8-4dc5-a6be-2f77e9e99201
+    sector: technology
+    themes:
+      - consumer_technology
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: ABNB
+    security_id: 83ea8403-f3d8-5620-b8c6-9e6831f8eb00
+    issuer_id: b48a52d1-89b5-5ae0-a1f5-9e5afe2e3e58
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ADBE
+    security_id: 0d48e6c5-dc56-5367-9b09-e1c11cd203c2
+    issuer_id: 572ecce6-b5e1-5ccd-90aa-ce189614e489
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ADI
+    security_id: 72a0a09f-60f0-5ba1-857e-ccb43acb8ac7
+    issuer_id: 4ca27978-9a5b-5970-85d3-d82bced69b85
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ADP
+    security_id: c13ed0fe-c554-5c87-b957-83651c399717
+    issuer_id: d162c42c-69b7-583a-8451-e93f3d0abc98
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ADSK
+    security_id: a1ba4142-17ce-59da-99da-0a81483efade
+    issuer_id: af5ceca7-5e3e-5533-9d02-d4292b616bc4
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: AEP
+    security_id: 26847a68-c16a-5c24-b018-ac52938fab48
+    issuer_id: 1292cfda-f20d-5f11-8b6b-931f5cfdc058
+    sector: utilities
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ALAB
+    security_id: 43491e51-f3e8-5753-8c2e-46c2e7154f3e
+    issuer_id: 24fc1da3-c21c-5e3d-841c-165bdc551527
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ALNY
+    security_id: 7b8c52e7-b69d-5858-ac5a-df9d0a92c761
+    issuer_id: acd5f094-11a7-537c-84e5-f4a293df2348
+    sector: health_care
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: AMAT
+    security_id: df40c617-0266-5103-af15-69a369412bc9
+    issuer_id: 0b8bc315-7dd3-5bf2-a358-50d802ea5669
+    sector: technology
+    themes:
+      - semiconductors
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: AMD
+    security_id: 75241642-b216-5655-9db2-a387a96f7d25
+    issuer_id: 9d0ceb4b-98ed-51af-b420-3fbfda90ed61
+    sector: technology
+    themes:
+      - ai
+      - semiconductors
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: AMGN
+    security_id: 27a037b2-8288-5b5f-8181-fff38f2846d9
+    issuer_id: 386d32ab-e8ab-5af2-a414-21fb623508c3
+    sector: health_care
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: AMZN
+    security_id: 8020b83e-14bc-5b2b-9501-d72e4177997b
+    issuer_id: 8e78475b-3d81-571d-977f-c666d1dbab24
+    sector: consumer_discretionary
+    themes:
+      - cloud
+      - ecommerce
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: APP
+    security_id: f4fbe389-97a5-5d34-9c7d-6d460680a870
+    issuer_id: 6c41a49a-384a-5760-a0a8-2fd07b6bbadf
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ARM
+    security_id: e76dc140-4c1c-5e2f-aeef-035aeb6e2c42
+    issuer_id: f7cfaf24-b073-5625-a8d6-cf8d31d543be
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ASML
+    security_id: f3ec822b-0559-5950-a2bd-56354bc4f6df
+    issuer_id: 4224859b-de22-5bcb-be49-e66a4e36066f
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: AVGO
+    security_id: 5826a37b-99fb-54ef-b120-9eeca41cede5
+    issuer_id: 4c2b3b3a-15b5-5985-bc09-d8507a5c65cc
+    sector: technology
+    themes:
+      - semiconductors
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: AXON
+    security_id: e805b915-1d8b-5fe2-a9d2-42e05df682b5
+    issuer_id: f557e072-4879-5766-b1e6-edd1917f9e27
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: BKNG
+    security_id: 124d2881-f461-5983-bcde-d58d55304082
+    issuer_id: ce0aea14-2da3-5aa8-b351-be5ecf454d17
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: BKR
+    security_id: faafdca4-aa91-5d5c-9570-111efc390896
+    issuer_id: deeec109-18ba-5727-9979-bf04bed0d051
+    sector: energy
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: CCEP
+    security_id: fbe4297d-f244-5c2f-8203-598b018000c4
+    issuer_id: 8d187de8-ed3c-526f-99ca-c8478836148d
+    sector: consumer_staples
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: CDNS
+    security_id: 009c0ffb-4a4f-5025-beff-0475fae62c9d
+    issuer_id: b8217b34-e388-5a41-9ed9-e4bbd2016280
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: CEG
+    security_id: f7129a61-29c9-57d4-8d2b-78de27b78aa4
+    issuer_id: c0fb0c00-69c4-5fb3-b3f5-73d1fc7549f4
+    sector: utilities
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: CMCSA
+    security_id: 6d33f4ff-d9ba-53e5-a8bc-faf0ce7c0c0d
+    issuer_id: f5d93cab-1e32-56da-9ab4-6f2657f9bcba
+    sector: communication_services
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: COST
+    security_id: dece459f-ecb8-5dbb-a987-b723fc9a52a3
+    issuer_id: 304828c8-6e12-52e0-ba08-211854c11195
+    sector: consumer_staples
+    themes:
+      - retail
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: CPRT
+    security_id: 8d1b5f4f-421b-5fc1-b7b0-35eb1d643e9a
+    issuer_id: df04285a-4188-5a6b-a1a9-d855318b118c
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: CRWD
+    security_id: 56cf0354-98b1-5e1b-a4eb-300190889c71
+    issuer_id: 331281d9-02eb-503a-a1e4-64a36852da0f
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: CRWV
+    security_id: 0326c8e3-23ea-5dbb-b037-68a86fa33c28
+    issuer_id: 0ea4ad0f-2daf-552c-a83c-c3a6293ea745
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: CSCO
+    security_id: 4f17f3bb-f9e2-5096-8822-241d4ded2313
+    issuer_id: a6be7aea-5ce9-5978-b6c9-7703b79d5119
+    sector: technology
+    themes:
+      - networking
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: CSX
+    security_id: 0811eb8b-46af-5813-9ca7-339727430bd6
+    issuer_id: 79a699d3-1715-5e2f-89bc-68489e37699a
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: CTAS
+    security_id: f6be8a50-3494-50cf-a4f9-f8094c3c2b9f
+    issuer_id: 5de95610-e3a3-56c3-94df-0c7ae0574416
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: DASH
+    security_id: 04c61ada-94c1-5a11-9104-96e35e90fb80
+    issuer_id: 2ca017bf-ad5a-526d-92f5-c6790b7b1b2a
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: DDOG
+    security_id: 2c2229cb-04a2-57b1-a2be-4c60b8fc10fe
+    issuer_id: 37327ce7-ec6b-5309-95f0-52249d16421b
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: DXCM
+    security_id: 7f7bd13c-ee22-523b-873c-c88073f6a2ed
+    issuer_id: 073c0073-0876-57ae-908b-bdef6c875fc5
+    sector: health_care
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: EXC
+    security_id: 61602d3d-ad80-56c2-a2fb-a3005f630ce2
+    issuer_id: 0f86c18a-ef74-527f-8dea-3d90f7ea255a
+    sector: utilities
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: FANG
+    security_id: d85db842-99b3-5b0e-ba12-2e0d15a05d90
+    issuer_id: 3299179c-ed43-52ac-ac06-eaa65ff8b7ee
+    sector: energy
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: FAST
+    security_id: 05ed5ffc-afd4-5d67-be13-bee1b84cf064
+    issuer_id: 9c759f46-ce8c-57e2-abcf-c779c6b25045
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: FER
+    security_id: 7a4597de-036b-57ca-8c0e-350a17ced109
+    issuer_id: 9fde451a-6836-5878-8d6f-5a098778b021
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: FTNT
+    security_id: e20d22e2-3625-511f-8791-deb11ffdb52a
+    issuer_id: 127ab37f-a2b1-5e11-91a7-226e52ae3244
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: GEHC
+    security_id: f37fba26-0ea6-5aca-957f-8b6f10b9b745
+    issuer_id: a2c718bc-8458-5840-bb06-be69cfff7e8b
+    sector: health_care
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: GILD
+    security_id: 320313b5-d81d-56f2-a540-b662eb17c9f8
+    issuer_id: a52efaa3-dd6c-581b-812f-c3e966bfe488
+    sector: health_care
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: GOOG
+    security_id: a8129602-d430-5424-b8ec-c3a5359b4477
+    issuer_id: 442e69e2-3229-50bd-b681-986af1c97f3d
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: GOOGL
+    security_id: 9297739e-0c80-50f2-bdf8-57bec8ead48b
+    issuer_id: d63877a5-47f3-54ec-8860-cd1411d50a9f
+    sector: communication_services
+    themes:
+      - advertising
+      - ai
+      - cloud
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: HON
+    security_id: d5040bad-32fa-5875-8faf-5e1819e8bd45
+    issuer_id: 7811874e-db26-51e5-9e69-1c8cb9976cca
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: HONA
+    security_id: 8acfeca9-2e89-55db-b47f-956414b8912d
+    issuer_id: e5e605b5-0a76-545c-9b4a-71f22942ef0d
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: IDXX
+    security_id: f1b2d711-549b-5ddd-925c-8d3ea123ac7f
+    issuer_id: 4493195a-2c1e-5b9e-9689-4a32bfc45487
+    sector: health_care
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: INTC
+    security_id: 77edb43b-1528-59d2-8d61-205b1b7723bf
+    issuer_id: 0e2c0b62-2f52-5bda-ba5f-dacc0fb25303
+    sector: technology
+    themes:
+      - semiconductors
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: INTU
+    security_id: c853ccec-7c72-5055-b38a-0df9dd4e34cf
+    issuer_id: c7dd5f1f-269c-5c35-9872-d8dc2af5041d
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ISRG
+    security_id: e7160415-8b95-5bcc-a43c-b7a513bcb92f
+    issuer_id: 2d40e0c1-3fde-544e-bf06-bd159c9cbf2e
+    sector: health_care
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: KDP
+    security_id: eb97a968-99d1-5a84-8d25-c851a661bb0f
+    issuer_id: e822e4b4-aad5-5511-b957-70faa73efa97
+    sector: consumer_staples
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: KLAC
+    security_id: d6f256a8-0816-5904-b9d8-99a3ea46f240
+    issuer_id: 6ef0b6ce-1501-5283-8a30-ad24abd7513f
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: LIN
+    security_id: 33f4a297-51c2-596f-8eeb-e971e6d63ad7
+    issuer_id: bade3652-ae00-5f17-84a0-03c543966f8b
+    sector: materials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: LITE
+    security_id: 975c3680-bb4f-57c0-ba0d-51a0779058fd
+    issuer_id: 8f5fbc94-8342-5184-9845-f1f24f2cebe5
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: LRCX
+    security_id: adc0d36c-a95c-5c43-b39e-3a48ef3adbc6
+    issuer_id: 95af67c1-c65b-5589-8fe5-af3dafa4b7c2
+    sector: technology
+    themes:
+      - semiconductors
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: MAR
+    security_id: 01072f5f-a4de-593c-8219-3a7bf324ce44
+    issuer_id: 5e5f5dc8-974f-5850-b784-2061d17dda76
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: MCHP
+    security_id: c90a13b6-1d0b-5f27-8e0b-0feeef5b0bd0
+    issuer_id: 2136ac40-8607-5ca6-b013-28940c8765ed
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: MDLZ
+    security_id: 9b7c44cb-20f9-5dff-a786-c5be48560750
+    issuer_id: bee902fb-598c-5109-bcc6-d1a5643fb701
+    sector: consumer_staples
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: MELI
+    security_id: eeab8a7f-2af6-41ab-b8d6-48b32c24e3bf
+    issuer_id: 99425c4e-3ae6-49f0-a1f9-d7820dbc667a
+    sector: technology
+    themes:
+      - marketplace
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: META
+    security_id: 263e0a2c-94e6-57e5-af2b-c7b7db98c945
+    issuer_id: 5814c20d-2579-546f-999e-0482fbd7a252
+    sector: communication_services
+    themes:
+      - advertising
+      - ai
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: MNST
+    security_id: 0e96aa34-4acf-50ca-b1f7-130498985f01
+    issuer_id: 718be668-d7a4-5206-af22-669cd9eaead0
+    sector: consumer_staples
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: MPWR
+    security_id: 2f57594b-49c1-56a4-b7e1-c7ee30428765
+    issuer_id: c8999203-2645-59cf-86c5-05bbb7f121c4
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: MRVL
+    security_id: 0fa35a6c-82c2-51fc-b50c-722f6a90365b
+    issuer_id: c11c534b-2ba4-535c-905f-84c62481cb35
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: MSFT
+    security_id: b40636a9-cc8e-5e0d-8760-98163e63f4e5
+    issuer_id: 5f7f9bec-8908-56b4-a0e5-7ab4e1ed71c1
+    sector: technology
+    themes:
+      - ai
+      - cloud
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: MSTR
+    security_id: 9bd233c1-2b52-577d-814a-342f9ab18c03
+    issuer_id: a41536a1-f0c8-5deb-8f9d-a886230996f1
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: MU
+    security_id: 2bd2c9e5-bab6-596c-afe2-e021c93409a9
+    issuer_id: 6b240f2b-280c-568d-b3fa-813f844831e2
+    sector: technology
+    themes:
+      - semiconductors
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: NBIS
+    security_id: 2f14a3bb-efc9-5f1a-abe9-f58edc60cbcf
+    issuer_id: 45d263e7-57fa-5e2f-bda0-487ee5222cd6
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: NFLX
+    security_id: b4a2ced1-a795-5b21-9aed-7caf71a53fdc
+    issuer_id: 6f628652-0f72-5981-89c7-8bf00cbc7fee
+    sector: communication_services
+    themes:
+      - streaming
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: NVDA
+    security_id: 87d51474-47b1-544f-aed7-91ef2683adf6
+    issuer_id: cd4a182b-8f52-5bc7-a8f6-707c2009fcae
+    sector: technology
+    themes:
+      - ai
+      - semiconductors
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: NXPI
+    security_id: 5b3fbdb1-8218-5432-bda1-504b707d9181
+    issuer_id: 0447e69c-1e0e-54dd-80dd-ee64378f6b60
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ODFL
+    security_id: 139615bb-68df-5dd4-bbe2-d3961f5ae7c9
+    issuer_id: 14832d4a-3d7f-5977-b797-620098d0b5b5
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ORLY
+    security_id: 5cfc3106-c418-530e-86d3-9ee0ce635e5b
+    issuer_id: af5746df-d760-5b91-a2f6-94d73c650997
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: PANW
+    security_id: f533d321-a4e1-55b9-ba67-adc8e2d3ac78
+    issuer_id: 27e16b2a-136c-5aeb-bce7-557c0cfa98b9
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: PAYX
+    security_id: f160c9da-f0ce-5db0-b7dd-05460d0eecb0
+    issuer_id: f4d170a0-aefd-5a96-bb16-f1ff7d2b6d1b
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: PCAR
+    security_id: dd94d60b-3622-5281-848e-31002ba81936
+    issuer_id: 2da56c0e-5af3-54a7-89cc-5e0c97b92b2a
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: PDD
+    security_id: cfdc8a4a-4209-55f7-855c-3b28f5150f1a
+    issuer_id: 9150d50f-491b-5cb1-909a-3df3bc04c5b7
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: PEP
+    security_id: 8a432d49-4871-5c3d-9e16-8af840afc088
+    issuer_id: 8e2a5643-1bf9-5f68-b49c-cead94f81f4d
+    sector: consumer_staples
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: PLTR
+    security_id: 905861a5-fb65-5132-a995-2df150398cf6
+    issuer_id: 5b99a840-1598-50ea-add7-8403c4b4d310
+    sector: technology
+    themes:
+      - ai
+      - analytics
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: PYPL
+    security_id: 409b919e-a18e-5472-8068-bcc169f30e57
+    issuer_id: 77ce7c4a-0808-5d95-9626-d67a7fab5301
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: QCOM
+    security_id: 98b58f59-e0cc-59f9-8379-4635dedc525f
+    issuer_id: 9cf901f6-90cd-5998-90a4-04899b475baa
+    sector: technology
+    themes:
+      - semiconductors
+      - wireless
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: REGN
+    security_id: da3ae09b-f431-55d3-a41e-96b04113ffc3
+    issuer_id: 6382a203-54a2-52c9-a6db-366acbd39eb3
+    sector: health_care
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: RKLB
+    security_id: 74d34677-c880-5733-9f82-d646f30e5b99
+    issuer_id: 38cdb08d-3236-5271-96f4-1df0ca1616e2
+    sector: industrials
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ROP
+    security_id: 474da6e5-d23e-57ed-9350-a5751fc27b01
+    issuer_id: c648a8dd-b387-5c68-b776-e0359113b414
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: ROST
+    security_id: 70d4b340-3a90-5a04-bd13-c58f5920b2ff
+    issuer_id: 3d09f4ca-4e4d-5dd9-b9f6-a5bdc63036e4
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: SBUX
+    security_id: 51a5400b-72ed-5949-8852-c23dd2c24c81
+    issuer_id: d60951c8-ebe0-5115-8c0f-d5a33189ac27
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: SHOP
+    security_id: 81dc5f4d-4a8b-5421-9ca4-bb8556e9dc74
+    issuer_id: 7ebdaeb4-cbd5-5a6d-8731-52365e3dda7a
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: SNDK
+    security_id: 3367f650-24e5-56d2-b74c-878524086558
+    issuer_id: 86673cd0-d996-57c4-a784-57be55d2aab9
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: SNPS
+    security_id: e3d0d1d8-9ef9-535a-9c53-007500a65ba1
+    issuer_id: 745da651-ff75-518c-80d6-ff23df785fd6
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: SPCX
+    security_id: 36450e72-2ac5-5712-a4e3-615730161bd0
+    issuer_id: ee188373-92fe-5754-b29c-e92cfeb25c77
+    sector: communication_services
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: STX
+    security_id: c209db81-73e7-5590-82d9-5adbf3f75df6
+    issuer_id: a5792961-2fb0-5fcd-bc78-d23e231e2280
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: TER
+    security_id: 112dfcd3-cd5d-5743-9766-093764dabca6
+    issuer_id: 69a8e8c4-a526-55cc-821a-0a2ec04a8de7
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: TMUS
+    security_id: 514bd0b2-c484-5732-a6c2-5c8346b915a0
+    issuer_id: 8d1af602-900d-5723-ae9d-9aa7b68eac26
+    sector: communication_services
+    themes:
+      - telecommunications
+      - wireless
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: TRI
+    security_id: ad3b7a5c-d27e-571a-813c-2a9454ec5793
+    issuer_id: cfdc88bd-38a7-5463-acd3-252f512c6ed6
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: TSLA
+    security_id: 58a09b99-99e8-5d37-8dcb-911b4736c653
+    issuer_id: 1f3a18dc-12ef-5c45-b617-0ad0f9d34e67
+    sector: consumer_discretionary
+    themes:
+      - electric_vehicles
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: TTWO
+    security_id: 96741d32-079a-547a-9865-ca9b914880a2
+    issuer_id: b2a8d91b-6f61-5e34-a52a-d6f45c753400
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: TXN
+    security_id: 4cadffbf-10c0-501e-b510-4082ae45d71e
+    issuer_id: d6a3307c-a7fe-5f82-9177-c786156cbe5d
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: VRTX
+    security_id: 286a5958-8a4f-561d-8db1-53e1dd38a4a1
+    issuer_id: a943f80a-eeac-53db-99db-a27f6dfab476
+    sector: health_care
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: WBD
+    security_id: 71fbfe87-bc5a-5d4b-b186-ca12b5b91951
+    issuer_id: 83fe7837-95a1-5b7d-9724-4b9f3ce84621
+    sector: consumer_discretionary
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: WDAY
+    security_id: 892ff56c-00ca-59b6-bf00-4ff4578c47c7
+    issuer_id: 9d556bb1-d425-52c6-a2f0-94e2759828c2
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: WDC
+    security_id: fa9c28fe-096a-5798-9018-a1a6173c5628
+    issuer_id: d5b9413d-5dad-5d57-86ec-0729a0ea4b48
+    sector: technology
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup
+  - ticker: WMT
+    security_id: 82b4fd04-8043-591a-8e29-9f8d09a2fa1e
+    issuer_id: c0f194be-be0d-5849-9c9d-d3251e9ccc96
+    sector: consumer_staples
+    themes:
+      - retail
+    sources:
+      - manual
+      - nasdaq_100
+  - ticker: XEL
+    security_id: 755e1e04-337a-5306-9950-12c45c7cfb7e
+    issuer_id: 260e9c5a-6fbe-58ff-844f-98170aac4e4e
+    sector: utilities
+    themes: []
+    sources:
+      - nasdaq_100
+      - nasdaq_sector_lookup

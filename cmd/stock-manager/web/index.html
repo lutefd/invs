@@ -133,6 +133,7 @@
         </div>
         <div class="source-status">
           <button id="sync-nasdaq100" class="secondary" type="button">Refresh Nasdaq-100</button>
+          <button id="classify-sectors" class="secondary" type="button">Classify missing sectors</button>
           <p id="nasdaq-status" role="status" aria-live="polite">Loading constituent snapshot…</p>
         </div>
         <div id="tracked-table" class="table-wrap"><p class="empty">Loading tracked stocks…</p></div>
@@ -205,7 +206,7 @@
         }
         if (stock.sources && stock.sources.length) {
           const source = document.createElement('small'); source.className = 'source-pill';
-          source.textContent = stock.sources.map((value) => value === 'nasdaq_100' ? 'Nasdaq-100' : value === 'manual' ? 'Manual' : value).join(' · ');
+          source.textContent = stock.sources.map((value) => value === 'nasdaq_100' ? 'Nasdaq-100' : value === 'manual' ? 'Manual' : value === 'nasdaq_sector_lookup' ? 'ICB lookup' : value).join(' · ');
           details.append(source);
         }
       }
@@ -260,6 +261,25 @@
       const summary = `${data.constituents} Nasdaq-100 securities loaded as of ${data.source_as_of}.${added}${removed}${unavailable}`;
       await loadStocks();
       status.textContent = summary;
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('classify-sectors').addEventListener('click', async () => {
+    const button = $('classify-sectors');
+    const status = $('nasdaq-status');
+    button.disabled = true;
+    status.textContent = 'Matching ticker and company names against the bundled ICB sector lookup…';
+    try {
+      const response = await fetch('/api/nasdaq-100/classify-sectors', { method:'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not classify the missing sectors.');
+      await loadStocks();
+      const unmatched = data.unmatched.length ? ` ${data.unmatched.length} entries need a lookup review.` : '';
+      status.textContent = `Classified ${data.classified} stocks. ${data.remaining_unclassified} Nasdaq-100 stocks remain unclassified.${unmatched}`;
     } catch (error) {
       status.textContent = error.message;
     } finally {

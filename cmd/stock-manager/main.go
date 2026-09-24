@@ -153,6 +153,7 @@ func (m *manager) routes() http.Handler {
 	})
 	mux.HandleFunc("/api/stocks", m.stocksHandler)
 	mux.HandleFunc("/api/nasdaq-100/sync", m.nasdaqSyncHandler)
+	mux.HandleFunc("/api/nasdaq-100/classify-sectors", m.nasdaqSectorEnrichmentHandler)
 	mux.HandleFunc("/", m.indexHandler)
 	return securityHeaders(mux)
 }
@@ -471,7 +472,7 @@ func validateProfile(profile universeProfile) error {
 		}
 		seenSources := make(map[string]bool, len(member.Sources))
 		for _, source := range member.Sources {
-			if (source != "manual" && source != nasdaqSourceLabel) || seenSources[source] {
+			if (source != "manual" && source != nasdaqSourceLabel && source != nasdaqSectorLookupSourceLabel) || seenSources[source] {
 				return fmt.Errorf("profile has invalid source metadata for %s", ticker)
 			}
 			seenSources[source] = true
