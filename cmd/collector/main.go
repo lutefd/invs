@@ -101,6 +101,7 @@ type metrics struct {
 	StartedAt                      time.Time
 	Duration                       time.Duration
 	Received, OutputRows, Rejected int
+	RecordsMissing                 int
 	RawObjects                     int
 	RawBytes                       int64
 	Manifest                       storage.RawManifest
@@ -597,6 +598,7 @@ func (a *app) collectPrices(ctx context.Context) error {
 	}
 	var errs []error
 	var snapshots []model.PriceBar
+	missingPriceObservations := make([]map[string]string, 0)
 	for _, s := range a.cfg.Universe {
 		if s.YahooSymbol == "" {
 			m.Rejected++
@@ -626,6 +628,19 @@ func (a *app) collectPrices(ctx context.Context) error {
 		}
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
+		for _, missing := range r.MissingBars {
+			m.RecordsMissing++
+			observation := map[string]string{
+				"security_id":      s.SecurityID,
+				"ticker":           s.Ticker,
+				"vendor_symbol":    s.YahooSymbol,
+				"session_date":     missing.SessionDate,
+				"reason":           missing.Reason,
+				"raw_payload_hash": r.SHA256,
+			}
+			missingPriceObservations = append(missingPriceObservations, observation)
+			a.log.Warn("Yahoo historical price bar missing", "security_id", s.SecurityID, "ticker", s.Ticker, "vendor_symbol", s.YahooSymbol, "session_date", missing.SessionDate, "reason", missing.Reason, "raw_payload_hash", r.SHA256)
+		}
 		if len(r.Resources) != 1 {
 			errs = append(errs, fmt.Errorf("yahoo security %s returned %d downloaded resources, want 1", s.SecurityID, len(r.Resources)))
 			continue
@@ -672,8 +687,16 @@ func (a *app) collectPrices(ctx context.Context) error {
 	if m.Rejected > 0 {
 		errs = append(errs, fmt.Errorf("%d records rejected", m.Rejected))
 	}
+	if m.RecordsMissing > 0 {
+		m.Cursor["records_missing"] = m.RecordsMissing
+		m.Cursor["missing_price_observations"] = missingPriceObservations
+	}
 	collectErr := errors.Join(errs...)
-	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, snapshots, nil))
+	terminalErr := collectErr
+	if terminalErr == nil && m.RecordsMissing > 0 {
+		terminalErr = fmt.Errorf("%d Yahoo historical price bars missing", m.RecordsMissing)
+	}
+	return errors.Join(collectErr, a.finish(ctx, run, m, terminalErr, snapshots, nil))
 }
 
 func (a *app) collectB3HistoricalPrices(ctx context.Context) error {
@@ -3285,7 +3308,7 @@ func (a *app) finish(ctx context.Context, run metadata.Run, m metrics, err error
 		a.log.Error("persist collector run failed", "source", m.Source, "error", dbErr)
 		return dbErr
 	}
-	a.log.Info("collector run", "source", m.Source, "status", status, "started_at", m.StartedAt, "duration_seconds", m.Duration.Seconds(), "records_received", m.Received, "output_rows_changed", m.OutputRows, "records_rejected", m.Rejected, "raw_objects", m.RawObjects, "raw_manifest_key", manifestKey, "raw_manifest_hash", manifestHash)
+	a.log.Info("collector run", "source", m.Source, "status", status, "started_at", m.StartedAt, "duration_seconds", m.Duration.Seconds(), "records_received", m.Received, "output_rows_changed", m.OutputRows, "records_rejected", m.Rejected, "records_missing", m.RecordsMissing, "raw_objects", m.RawObjects, "raw_manifest_key", manifestKey, "raw_manifest_hash", manifestHash)
 	return nil
 }
 func rawKey(parts1, parts2, entity string, b []byte, at time.Time, ext string) string {

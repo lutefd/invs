@@ -40,6 +40,16 @@ type Result struct {
 	Raw                              []byte
 	SHA256                           string
 	RecordsReceived, RecordsRejected int
+	RecordsMissing                   int
+	MissingBars                      []MissingBarObservation
+}
+
+// MissingBarObservation identifies a historical Yahoo timestamp for which the
+// provider returned explicit nulls for every OHLCV field. The response itself
+// remains available in Resources and is retained by the collector.
+type MissingBarObservation struct {
+	SessionDate string
+	Reason      string
 }
 
 func (c *Client) HistoricalPrices(ctx context.Context, req model.HistoricalPriceRequest) ([]model.PriceBar, []byte, error) {
@@ -74,8 +84,10 @@ func (c *Client) Collect(ctx context.Context, req model.HistoricalPriceRequest) 
 		Raw:            resource.Bytes,
 		SHA256:         resource.SHA256,
 	}
-	bars, received, rejected, err := parse(resource.Bytes, req.SecurityID, req.Currency, fetchedAt)
+	bars, received, rejected, missing, err := parse(resource.Bytes, req.SecurityID, req.Currency, fetchedAt)
 	result.Bars, result.RecordsReceived, result.RecordsRejected = bars, received, rejected
+	result.MissingBars = missing
+	result.RecordsMissing = len(missing)
 	if err != nil {
 		return result, err
 	}
@@ -161,30 +173,31 @@ type quote struct {
 	Volume []*json.Number `json:"volume"`
 }
 
-func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.PriceBar, int, int, error) {
+func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.PriceBar, int, int, []MissingBarObservation, error) {
 	ingested = ingested.UTC().Truncate(time.Microsecond)
 	var raw response
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.UseNumber()
 	if err := dec.Decode(&raw); err != nil {
-		return nil, 0, 0, fmt.Errorf("decode Yahoo response: %w", err)
+		return nil, 0, 0, nil, fmt.Errorf("decode Yahoo response: %w", err)
 	}
 	if raw.Chart.Error != nil {
-		return nil, 0, 0, fmt.Errorf("Yahoo API %s: %s", raw.Chart.Error.Code, raw.Chart.Error.Description)
+		return nil, 0, 0, nil, fmt.Errorf("Yahoo API %s: %s", raw.Chart.Error.Code, raw.Chart.Error.Description)
 	}
 	if len(raw.Chart.Result) != 1 || len(raw.Chart.Result[0].Indicators.Quote) != 1 {
-		return nil, 0, 0, fmt.Errorf("unexpected Yahoo chart result")
+		return nil, 0, 0, nil, fmt.Errorf("unexpected Yahoo chart result")
 	}
 	r := raw.Chart.Result[0]
 	if r.Meta.Currency != "" && r.Meta.Currency != currency {
-		return nil, 0, 0, fmt.Errorf("Yahoo currency %q does not match configured %q", r.Meta.Currency, currency)
+		return nil, 0, 0, nil, fmt.Errorf("Yahoo currency %q does not match configured %q", r.Meta.Currency, currency)
 	}
 	loc, err := time.LoadLocation(r.Meta.ExchangeTimezoneName)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("Yahoo exchange timezone %q: %w", r.Meta.ExchangeTimezoneName, err)
+		return nil, 0, 0, nil, fmt.Errorf("Yahoo exchange timezone %q: %w", r.Meta.ExchangeTimezoneName, err)
 	}
 	q := r.Indicators.Quote[0]
 	received, rejected := len(r.Timestamp), 0
+	var missing []MissingBarObservation
 	var latestTimestamp int64
 	if len(r.Timestamp) > 0 {
 		latestTimestamp = r.Timestamp[0]
@@ -202,8 +215,13 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 		if closeAt.After(ingested) {
 			continue
 		}
-		if i >= len(q.Open) || i >= len(q.High) || i >= len(q.Low) || i >= len(q.Close) || i >= len(q.Volume) || q.Open[i] == nil || q.High[i] == nil || q.Low[i] == nil || q.Close[i] == nil || q.Volume[i] == nil {
+		arraysContainTimestamp := i < len(q.Open) && i < len(q.High) && i < len(q.Low) && i < len(q.Close) && i < len(q.Volume)
+		if !arraysContainTimestamp || q.Open[i] == nil || q.High[i] == nil || q.Low[i] == nil || q.Close[i] == nil || q.Volume[i] == nil {
 			if ts == latestTimestamp {
+				continue
+			}
+			if arraysContainTimestamp && q.Open[i] == nil && q.High[i] == nil && q.Low[i] == nil && q.Close[i] == nil && q.Volume[i] == nil {
+				missing = append(missing, MissingBarObservation{SessionDate: day.Format(time.DateOnly), Reason: "all_ohlcv_null"})
 				continue
 			}
 			rejected++
@@ -229,7 +247,7 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 		bars = append(bars, v)
 	}
 	sort.Slice(bars, func(i, j int) bool { return bars[i].Temporal.ObservedAt.Before(bars[j].Temporal.ObservedAt) })
-	return bars, received, rejected, nil
+	return bars, received, rejected, missing, nil
 }
 func digest(b []byte) string { return providers.SHA256(b) }
 func compareDecimal(a, b string) int {
