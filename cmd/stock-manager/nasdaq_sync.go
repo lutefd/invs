@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -421,7 +422,8 @@ func (m *manager) syncNasdaq100(ctx context.Context) (nasdaqSyncResult, error) {
 func newNasdaqHTTPClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	// The public Nasdaq endpoint resets HTTP/2 streams on this deployment.
-	// Keep the feed's request on HTTP/1.1 so refreshes do not fail with 502.
+	// Keep the feed's request on HTTP/1.1 and IPv4: the container's IPv6 route
+	// stalls while the public IPv4 endpoint responds normally.
 	transport.ForceAttemptHTTP2 = false
 	tlsConfig := &tls.Config{NextProtos: []string{"http/1.1"}}
 	if transport.TLSClientConfig != nil {
@@ -430,6 +432,10 @@ func newNasdaqHTTPClient() *http.Client {
 	}
 	transport.TLSClientConfig = tlsConfig
 	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	transport.DialContext = func(ctx context.Context, _ string, addr string) (net.Conn, error) {
+		return dialer.DialContext(ctx, "tcp4", addr)
+	}
 	return &http.Client{
 		Transport: transport,
 		Timeout:   40 * time.Second,
