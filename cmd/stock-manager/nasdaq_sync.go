@@ -427,10 +427,7 @@ func configuredNasdaqSource() string {
 	if source != "" {
 		return source
 	}
-	if strings.TrimSpace(os.Getenv("INVS_NASDAQ_GIW_USERNAME")) != "" || strings.TrimSpace(os.Getenv("INVS_NASDAQ_GIW_PASSWORD")) != "" {
-		return "giw"
-	}
-	return "website"
+	return "yahoo"
 }
 
 func fetchNasdaqCurrentUniverse(ctx context.Context, client nasdaq.HTTPDoer, userAgent string, retrievedAt time.Time) (nasdaq.CurrentUniverse, []byte, error) {
@@ -440,10 +437,12 @@ func fetchNasdaqCurrentUniverse(ctx context.Context, client nasdaq.HTTPDoer, use
 	switch source {
 	case "giw", nasdaq.CurrentUniverseSourceGIW:
 		return nasdaq.FetchGIWCurrentUniverse(ctx, client, username, password, userAgent, retrievedAt)
+	case "yahoo", nasdaq.CurrentUniverseSourceYahoo:
+		return nasdaq.FetchYahooNDXUniverse(ctx, client, userAgent, retrievedAt)
 	case "website", "nasdaq.com", nasdaq.CurrentUniverseSourceWebsite:
 		return nasdaq.FetchCurrentUniverse(ctx, client, userAgent, retrievedAt)
 	default:
-		return nasdaq.CurrentUniverse{}, nil, fmt.Errorf("unsupported INVS_NASDAQ_SOURCE %q; use giw or website", source)
+		return nasdaq.CurrentUniverse{}, nil, fmt.Errorf("unsupported INVS_NASDAQ_SOURCE %q; use yahoo, giw, or website", source)
 	}
 }
 
@@ -451,11 +450,16 @@ func currentUniverseSourceName(source, sourceURL string) string {
 	switch source {
 	case nasdaq.CurrentUniverseSourceGIW:
 		return "Nasdaq GIW Web Services (licensed EOD constituent file)"
+	case nasdaq.CurrentUniverseSourceYahoo:
+		return "Yahoo Finance NASDAQ-100 screen (current research snapshot)"
 	case nasdaq.CurrentUniverseSourceWebsite:
 		return "Nasdaq public website feed (temporary, undocumented)"
 	default:
 		if sourceURL == nasdaq.GIWWeightingURL {
 			return "Nasdaq GIW Web Services (licensed EOD constituent file)"
+		}
+		if sourceURL == nasdaq.YahooNDXScreenURL {
+			return "Yahoo Finance NASDAQ-100 screen (current research snapshot)"
 		}
 		return "Nasdaq public website feed (temporary, undocumented)"
 	}
@@ -565,6 +569,8 @@ func readNasdaqSyncState(path string) (nasdaqSyncState, bool, error) {
 	if state.Source == "" {
 		if state.SourceURL == nasdaq.GIWWeightingURL {
 			state.Source = nasdaq.CurrentUniverseSourceGIW
+		} else if state.SourceURL == nasdaq.YahooNDXScreenURL {
+			state.Source = nasdaq.CurrentUniverseSourceYahoo
 		} else {
 			state.Source = nasdaq.CurrentUniverseSourceWebsite
 		}
@@ -575,11 +581,13 @@ func readNasdaqSyncState(path string) (nasdaqSyncState, bool, error) {
 func isValidNasdaqStateSource(source, sourceURL string) bool {
 	switch source {
 	case "":
-		return sourceURL == nasdaq.CurrentUniverseURL || sourceURL == nasdaq.GIWWeightingURL
+		return sourceURL == nasdaq.CurrentUniverseURL || sourceURL == nasdaq.GIWWeightingURL || sourceURL == nasdaq.YahooNDXScreenURL
 	case nasdaq.CurrentUniverseSourceWebsite:
 		return sourceURL == nasdaq.CurrentUniverseURL
 	case nasdaq.CurrentUniverseSourceGIW:
 		return sourceURL == nasdaq.GIWWeightingURL
+	case nasdaq.CurrentUniverseSourceYahoo:
+		return sourceURL == nasdaq.YahooNDXScreenURL
 	default:
 		return false
 	}
