@@ -464,7 +464,7 @@ func fetchNasdaqCurrentUniverse(ctx context.Context, client nasdaq.HTTPDoer, use
 	case "giw", nasdaq.CurrentUniverseSourceGIW:
 		return nasdaq.FetchGIWCurrentUniverse(ctx, client, username, password, userAgent, retrievedAt)
 	case "website", "nasdaq.com", nasdaq.CurrentUniverseSourceWebsite:
-		return nasdaq.FetchCurrentUniverse(ctx, client, userAgent, retrievedAt)
+		return nasdaq.FetchCurrentUniverse(ctx, client, nasdaq.CurrentUniverseWebsiteUserAgent, retrievedAt)
 	default:
 		return nasdaq.CurrentUniverse{}, nil, fmt.Errorf("unsupported INVS_NASDAQ_SOURCE %q; use giw or website", source)
 	}

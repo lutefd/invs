@@ -20,6 +20,7 @@ import (
 
 const CurrentUniverseURL = "https://api.nasdaq.com/api/quote/list-type/nasdaq100?limit=200&offset=0"
 const GIWWeightingURL = "https://indexes.nasdaqomx.com/reports2/UFFWeighting.ashx"
+const CurrentUniverseWebsiteUserAgent = "Mozilla/5.0 invs stock manager"
 
 const (
 	CurrentUniverseSourceWebsite = "nasdaq_website"

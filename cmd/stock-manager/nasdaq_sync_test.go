@@ -18,9 +18,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type nasdaqFixtureDoer struct{ body []byte }
+type nasdaqFixtureDoer struct {
+	body  []byte
+	check func(*http.Request)
+}
 
 func (f nasdaqFixtureDoer) Do(request *http.Request) (*http.Response, error) {
+	if f.check != nil {
+		f.check(request)
+	}
 	return &http.Response{
 		StatusCode: http.StatusOK, Body: io.NopCloser(bytesReader(f.body)), Request: request,
 	}, nil
@@ -39,6 +45,22 @@ func TestGIWSourceSelectionFailsClosedWithoutCredentials(t *testing.T) {
 	_, _, err := fetchNasdaqCurrentUniverse(context.Background(), nasdaqFixtureDoer{}, "invs-test", time.Now())
 	if err == nil || !strings.Contains(err.Error(), "username and password are required") {
 		t.Fatalf("missing GIW credentials error=%v", err)
+	}
+}
+
+func TestPublicNasdaqSourceUsesBrowserUserAgent(t *testing.T) {
+	t.Setenv("INVS_NASDAQ_SOURCE", "website")
+	client := nasdaqFixtureDoer{
+		body: nasdaqFixtureBody(testNasdaqTickers(1, 99)),
+		check: func(request *http.Request) {
+			if got := request.Header.Get("User-Agent"); got != nasdaq.CurrentUniverseWebsiteUserAgent {
+				t.Errorf("Nasdaq User-Agent = %q, want browser-style source agent", got)
+			}
+		},
+	}
+	snapshot, _, err := fetchNasdaqCurrentUniverse(context.Background(), client, "sec-contact-user-agent", time.Now())
+	if err != nil || snapshot.Source != nasdaq.CurrentUniverseSourceWebsite {
+		t.Fatalf("public Nasdaq snapshot=%+v error=%v", snapshot, err)
 	}
 }
 
