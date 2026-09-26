@@ -69,57 +69,6 @@ func TestFetchCurrentUniverseUsesNasdaqBrowserHeadersAndRetainsInvalidBody(t *te
 	}
 }
 
-func TestFetchYahooNDXUniverseParsesCompleteCurrentScreen(t *testing.T) {
-	retrieved := time.Date(2026, 9, 26, 12, 0, 0, 987654321, time.FixedZone("BRT", -3*60*60))
-	body := yahooNDXScreenFixture(101)
-	client := currentUniverseDoer(func(request *http.Request) (*http.Response, error) {
-		if request.Method != http.MethodGet || request.URL.String() != YahooNDXScreenURL ||
-			request.Header.Get("Referer") != "https://finance.yahoo.com/" || request.Header.Get("User-Agent") != "invs-test" {
-			t.Fatalf("unexpected Yahoo request: %s headers=%v", request.URL, request.Header)
-		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(body))), Request: request}, nil
-	})
-	snapshot, raw, err := FetchYahooNDXUniverse(context.Background(), client, "invs-test", retrieved)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(raw) != string(body) || snapshot.Count != 101 || len(snapshot.Members) != 101 || snapshot.Source != CurrentUniverseSourceYahoo || snapshot.SourceURL != YahooNDXScreenURL {
-		t.Fatalf("unexpected Yahoo snapshot: count=%d source=%s url=%s raw=%d", snapshot.Count, snapshot.Source, snapshot.SourceURL, len(raw))
-	}
-	if snapshot.Members[0].Ticker != "S000" || snapshot.Members[0].Company != "Sample Company 000 Inc." || snapshot.Members[0].Sector != "Technology" {
-		t.Fatalf("unexpected first member: %+v", snapshot.Members[0])
-	}
-	if got := snapshot.AsOf.Format(time.DateOnly); got != "2026-09-26" {
-		t.Fatalf("retrieval snapshot date = %s", got)
-	}
-	if snapshot.Retrieved.Location() != time.UTC || snapshot.Retrieved.Nanosecond()%int(time.Microsecond) != 0 || len(snapshot.SHA256) != 64 {
-		t.Fatalf("snapshot receipt/hash not normalized: %+v", snapshot)
-	}
-}
-
-func TestParseYahooNDXUniverseRejectsPartialDuplicateAndMismatchedResults(t *testing.T) {
-	retrieved := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
-	if _, err := ParseYahooNDXUniverse(yahooNDXScreenFixture(89), retrieved); err == nil {
-		t.Fatal("partial Yahoo screen was accepted")
-	}
-	duplicate := strings.Replace(string(yahooNDXScreenFixture(100)), `"symbol":"S001"`, `"symbol":"S000"`, 1)
-	if _, err := ParseYahooNDXUniverse([]byte(duplicate), retrieved); err == nil {
-		t.Fatal("duplicate Yahoo symbols were accepted")
-	}
-	mismatched := strings.Replace(string(yahooNDXScreenFixture(100)), `"count":100`, `"count":99`, 1)
-	if _, err := ParseYahooNDXUniverse([]byte(mismatched), retrieved); err == nil {
-		t.Fatal("Yahoo screen count mismatch was accepted")
-	}
-}
-
-func yahooNDXScreenFixture(count int) []byte {
-	quotes := make([]string, count)
-	for i := range quotes {
-		quotes[i] = fmt.Sprintf(`{"symbol":"S%03d","longName":"Sample Company %03d Inc.","shortName":"Sample %03d","sector":"Technology"}`, i, i, i)
-	}
-	return []byte(fmt.Sprintf(`{"finance":{"result":[{"count":%d,"quotes":[%s]}],"error":null}}`, count, strings.Join(quotes, ",")))
-}
-
 func TestFetchGIWCurrentUniverseUsesAuthenticatedEODRequestAndParsesFullMembership(t *testing.T) {
 	eastern, err := time.LoadLocation("America/New_York")
 	if err != nil {

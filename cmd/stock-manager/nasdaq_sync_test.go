@@ -42,26 +42,11 @@ func TestGIWSourceSelectionFailsClosedWithoutCredentials(t *testing.T) {
 	}
 }
 
-func TestDefaultNasdaqSourceUsesYahooWithoutAccountCredentials(t *testing.T) {
-	t.Setenv("INVS_NASDAQ_SOURCE", "")
-	t.Setenv("INVS_NASDAQ_GIW_USERNAME", "")
-	t.Setenv("INVS_NASDAQ_GIW_PASSWORD", "")
-	if got := configuredNasdaqSource(); got != "yahoo" {
-		t.Fatalf("default Nasdaq source = %q, want yahoo", got)
-	}
-	body := yahooNDXFixture(100)
-	snapshot, raw, err := fetchNasdaqCurrentUniverse(context.Background(), nasdaqFixtureDoer{body: body}, "invs-test", time.Now())
-	if err != nil || snapshot.Source != nasdaq.CurrentUniverseSourceYahoo || snapshot.Count != 100 || len(raw) == 0 {
-		t.Fatalf("Yahoo default snapshot=%+v raw=%d error=%v", snapshot, len(raw), err)
-	}
-}
-
 func TestReadNasdaqSyncStateAcceptsGIWAndMigratesWebsiteSourceLabel(t *testing.T) {
 	for _, test := range []struct {
 		name, source, sourceURL, wantSource string
 	}{
 		{name: "licensed GIW", source: nasdaq.CurrentUniverseSourceGIW, sourceURL: nasdaq.GIWWeightingURL, wantSource: nasdaq.CurrentUniverseSourceGIW},
-		{name: "Yahoo screen", sourceURL: nasdaq.YahooNDXScreenURL, wantSource: nasdaq.CurrentUniverseSourceYahoo},
 		{name: "legacy website state", sourceURL: nasdaq.CurrentUniverseURL, wantSource: nasdaq.CurrentUniverseSourceWebsite},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -82,7 +67,6 @@ func TestReadNasdaqSyncStateAcceptsGIWAndMigratesWebsiteSourceLabel(t *testing.T
 }
 
 func TestSyncNasdaq100MergesCurrentMembersAndRemovesOnlyFormerSourceMembers(t *testing.T) {
-	t.Setenv("INVS_NASDAQ_SOURCE", "website")
 	m := fixtureManager(t)
 	now := time.Date(2026, 9, 23, 22, 0, 0, 0, time.UTC)
 	m.now = func() time.Time { return now }
@@ -160,7 +144,6 @@ func TestSyncNasdaq100MergesCurrentMembersAndRemovesOnlyFormerSourceMembers(t *t
 }
 
 func TestSyncNasdaq100LeavesLastCompleteProfileOnInvalidSnapshot(t *testing.T) {
-	t.Setenv("INVS_NASDAQ_SOURCE", "website")
 	m := fixtureManager(t)
 	profileBefore, err := os.ReadFile(m.profilePath)
 	if err != nil {
@@ -223,20 +206,6 @@ func nasdaqFixtureBody(tickers []string) []byte {
 		},
 	}
 	body, _ := json.Marshal(data)
-	return body
-}
-
-func yahooNDXFixture(count int) []byte {
-	quotes := make([]map[string]string, count)
-	for i := range quotes {
-		quotes[i] = map[string]string{
-			"symbol": fmt.Sprintf("S%03d", i), "longName": fmt.Sprintf("Sample Company %03d Inc.", i),
-			"shortName": fmt.Sprintf("Sample %03d", i), "sector": "Technology",
-		}
-	}
-	body, _ := json.Marshal(map[string]any{
-		"finance": map[string]any{"result": []any{map[string]any{"count": count, "quotes": quotes}}, "error": nil},
-	})
 	return body
 }
 

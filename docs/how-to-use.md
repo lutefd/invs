@@ -1597,20 +1597,17 @@ it does not search every listed stock on an exchange.
 ### Full Nasdaq-100 constituent refresh
 
 The stock manager's **Refresh Nasdaq-100** button and `make nasdaq100-sync` use
-Yahoo Finance's **Most Actives — NASDAQ 100** screen by default. This lets the
-tracker use Yahoo for prices and its current research roster without an
-additional account. The screen is not an official Nasdaq constituent file and
-does not provide historical membership truth. The snapshot records its Yahoo
-retrieval date and keeps the complete raw response under
-`data/research/stock-manager/nasdaq-100-snapshots/`. `INVS_NASDAQ_SOURCE=giw`
-can opt into Nasdaq GIW Web Services for accounts with index entitlement; add
+Nasdaq GIW Web Services when GIW credentials are configured. Add
 `INVS_NASDAQ_GIW_USERNAME` and `INVS_NASDAQ_GIW_PASSWORD` to the untracked
-`.env` file. GIW credentials are sent only in the HTTPS form body, and the
-manager searches the latest eight calendar days for the most recent complete
-trading-day file. `INVS_NASDAQ_SOURCE=website` explicitly selects the legacy
-Nasdaq website feed. The daily `make market-cycle` refreshes the selected
-source before collecting prices. Complete responses are validated, retained
-under
+`.env` file. The manager sends them only in the HTTPS form body, requests the
+NDX end-of-day weighting file, and searches the latest eight calendar days for
+the most recent complete trading-day file. `INVS_NASDAQ_SOURCE=giw` can force
+GIW mode; missing credentials or index entitlement keep the existing complete
+roster active and report the failure. With no GIW credentials configured, the
+manager still uses Nasdaq's current website feed as a temporary fallback.
+`INVS_NASDAQ_SOURCE=website` explicitly selects that fallback. The daily
+`make market-cycle` refreshes the selected source before collecting prices.
+Complete responses are validated, retained under
 `data/research/stock-manager/nasdaq-100-snapshots/`, and merged with manually
 tracked names. Stable ticker-based IDs are reused on later refreshes. Newly
 added tickers use Yahoo's reported earliest history date when available; if that
@@ -1618,11 +1615,12 @@ lookup fails, the mapping starts on the snapshot date and the manager reports
 that history needs review. A failed or partial source response leaves the last
 complete universe active.
 
-The Yahoo screen is a current membership proxy. Its results, fields, or access
-rules can change without notice, so the complete-list checks must pass before
-the tracker replaces its active roster. The index is current research, and the
-retrospective backfill remains labeled hindsight. Do not project the current
-list into earlier point-in-time universes.
+GIW is Nasdaq's authenticated REST API for current and historical constituent
+weighting files, so it is the supported automated source. The public website
+fallback is undocumented and may fail; it is retained only until GIW account
+access is configured. The index is current research, and the retrospective
+backfill remains labeled hindsight. Do not project the current list into earlier
+point-in-time universes.
 
 The retrospective backfill includes every member in the captured current
 profile. A name with no installed prices remains in each session as a rejected

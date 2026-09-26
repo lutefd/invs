@@ -20,12 +20,10 @@ import (
 
 const CurrentUniverseURL = "https://api.nasdaq.com/api/quote/list-type/nasdaq100?limit=200&offset=0"
 const GIWWeightingURL = "https://indexes.nasdaqomx.com/reports2/UFFWeighting.ashx"
-const YahooNDXScreenURL = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=250&scrIds=MOST_ACTIVES_NDX&formatted=false&lang=en-US&region=US"
 
 const (
 	CurrentUniverseSourceWebsite = "nasdaq_website"
 	CurrentUniverseSourceGIW     = "nasdaq_giw"
-	CurrentUniverseSourceYahoo   = "yahoo_ndx_screen"
 )
 
 var currentTickerPattern = regexp.MustCompile(`^[A-Z0-9][A-Z0-9.-]{0,15}$`)
@@ -63,24 +61,6 @@ type currentUniverseWire struct {
 			} `json:"rows"`
 		} `json:"data"`
 	} `json:"data"`
-}
-
-type yahooNDXScreenWire struct {
-	Finance struct {
-		Result []struct {
-			Count  int `json:"count"`
-			Quotes []struct {
-				Symbol    string `json:"symbol"`
-				LongName  string `json:"longName"`
-				ShortName string `json:"shortName"`
-				Sector    string `json:"sector"`
-			} `json:"quotes"`
-		} `json:"result"`
-		Error *struct {
-			Code        string `json:"code"`
-			Description string `json:"description"`
-		} `json:"error"`
-	} `json:"finance"`
 }
 
 type HTTPDoer interface {
@@ -128,106 +108,6 @@ func FetchCurrentUniverse(ctx context.Context, client HTTPDoer, userAgent string
 	snapshot.Source = CurrentUniverseSourceWebsite
 	snapshot.SourceURL = CurrentUniverseURL
 	return snapshot, body, err
-}
-
-// FetchYahooNDXUniverse reads Yahoo Finance's NASDAQ-100 predefined equity
-// screen. It is a current research roster, not an official index file or a
-// source of historical membership truth.
-func FetchYahooNDXUniverse(ctx context.Context, client HTTPDoer, userAgent string, retrievedAt time.Time) (CurrentUniverse, []byte, error) {
-	if client == nil {
-		return CurrentUniverse{}, nil, errors.New("Yahoo NASDAQ-100 HTTP client is required")
-	}
-	userAgent = strings.TrimSpace(userAgent)
-	if userAgent == "" {
-		return CurrentUniverse{}, nil, errors.New("Yahoo NASDAQ-100 user agent is required")
-	}
-	if retrievedAt.IsZero() {
-		return CurrentUniverse{}, nil, errors.New("Yahoo NASDAQ-100 snapshot retrieval time is required")
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, YahooNDXScreenURL, nil)
-	if err != nil {
-		return CurrentUniverse{}, nil, err
-	}
-	request.Header.Set("User-Agent", userAgent)
-	request.Header.Set("Accept", "application/json, text/plain, */*")
-	request.Header.Set("Referer", "https://finance.yahoo.com/")
-	response, err := client.Do(request)
-	if err != nil {
-		return CurrentUniverse{}, nil, fmt.Errorf("fetch Yahoo NASDAQ-100 screen: %w", err)
-	}
-	defer response.Body.Close()
-	if response.Request != nil && response.Request.URL.Host != "query1.finance.yahoo.com" {
-		return CurrentUniverse{}, nil, errors.New("Yahoo NASDAQ-100 request redirected away from query1.finance.yahoo.com")
-	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, (4<<20)+1))
-	if err != nil {
-		return CurrentUniverse{}, body, fmt.Errorf("read Yahoo NASDAQ-100 screen: %w", err)
-	}
-	if len(body) > 4<<20 {
-		return CurrentUniverse{}, body, errors.New("Yahoo NASDAQ-100 response exceeded 4 MiB")
-	}
-	if response.StatusCode != http.StatusOK {
-		return CurrentUniverse{}, body, fmt.Errorf("Yahoo NASDAQ-100 request returned HTTP %d", response.StatusCode)
-	}
-	snapshot, err := ParseYahooNDXUniverse(body, retrievedAt)
-	snapshot.Source = CurrentUniverseSourceYahoo
-	snapshot.SourceURL = YahooNDXScreenURL
-	return snapshot, body, err
-}
-
-// ParseYahooNDXUniverse validates the complete result from Yahoo's predefined
-// NASDAQ-100 screen and timestamps it as a retrieval-day snapshot.
-func ParseYahooNDXUniverse(body []byte, retrievedAt time.Time) (CurrentUniverse, error) {
-	if retrievedAt.IsZero() {
-		return CurrentUniverse{}, errors.New("Yahoo NASDAQ-100 snapshot retrieval time is required")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	var wire yahooNDXScreenWire
-	if err := decoder.Decode(&wire); err != nil {
-		return CurrentUniverse{}, fmt.Errorf("decode Yahoo NASDAQ-100 response: %w", err)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return CurrentUniverse{}, errors.New("Yahoo NASDAQ-100 response contains trailing data")
-	}
-	if wire.Finance.Error != nil {
-		return CurrentUniverse{}, fmt.Errorf("Yahoo Finance %s: %s", wire.Finance.Error.Code, wire.Finance.Error.Description)
-	}
-	if len(wire.Finance.Result) != 1 {
-		return CurrentUniverse{}, fmt.Errorf("Yahoo NASDAQ-100 response contains %d screen results, want 1", len(wire.Finance.Result))
-	}
-	result := wire.Finance.Result[0]
-	if result.Count != len(result.Quotes) || len(result.Quotes) < 90 || len(result.Quotes) > 110 {
-		return CurrentUniverse{}, fmt.Errorf("Yahoo NASDAQ-100 screen is incomplete or outside the expected 90–110 securities (count=%d rows=%d)", result.Count, len(result.Quotes))
-	}
-	seen := make(map[string]bool, len(result.Quotes))
-	members := make([]CurrentConstituent, 0, len(result.Quotes))
-	for _, quote := range result.Quotes {
-		ticker := strings.ToUpper(strings.TrimSpace(quote.Symbol))
-		if !currentTickerPattern.MatchString(ticker) || seen[ticker] {
-			return CurrentUniverse{}, fmt.Errorf("Yahoo NASDAQ-100 screen contains invalid or duplicate ticker %q", quote.Symbol)
-		}
-		company := strings.TrimSpace(quote.LongName)
-		if company == "" {
-			company = strings.TrimSpace(quote.ShortName)
-		}
-		if len([]rune(company)) < 2 || len([]rune(company)) > 160 {
-			return CurrentUniverse{}, fmt.Errorf("Yahoo NASDAQ-100 screen has no usable company name for %s", ticker)
-		}
-		seen[ticker] = true
-		members = append(members, CurrentConstituent{Ticker: ticker, Company: company, Sector: strings.TrimSpace(quote.Sector)})
-	}
-	eastern, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		return CurrentUniverse{}, fmt.Errorf("load Yahoo source timezone: %w", err)
-	}
-	localRetrieved := retrievedAt.In(eastern)
-	asOf := time.Date(localRetrieved.Year(), localRetrieved.Month(), localRetrieved.Day(), 0, 0, 0, 0, eastern).UTC().Truncate(time.Microsecond)
-	retrievedAt = retrievedAt.UTC().Truncate(time.Microsecond)
-	digest := sha256.Sum256(body)
-	return CurrentUniverse{
-		AsOf: asOf, Retrieved: retrievedAt, Count: len(members), SHA256: hex.EncodeToString(digest[:]), Members: members,
-	}, nil
 }
 
 // FetchGIWCurrentUniverse requests Nasdaq's authenticated daily constituent
