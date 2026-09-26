@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 universe_id: 51efed8d-2106-5ac7-b12a-a66cfe0eb097
 name: nasdaq-100-starter
-membership_as_of: "2026-09-23"
+membership_as_of: "2026-09-24"
 source_url: https://api.nasdaq.com/api/quote/list-type/nasdaq100?limit=200&offset=0
 members:
   - ticker: AAPL
