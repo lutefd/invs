@@ -1621,10 +1621,11 @@ fallback is undocumented and may fail; it is retained only until GIW account
 access is configured. Yahoo continues to supply price history, but its **Most
 Actives — NASDAQ 100** screen is not used to replace the member roster: a live
 check on 2026-09-26 returned AZN and omitted GOOG, while Nasdaq had already
-announced AZN's replacement by Walmart. Treat Yahoo's screen as a discovery
-view only. The index is current research, and the retrospective backfill remains
-labeled hindsight. Do not project the current list into earlier point-in-time
-universes.
+announced [AZN's replacement by Walmart](https://www.nasdaq.com/press-release/walmart-inc-join-nasdaq-100-indexr-beginning-january-20th-2026-2026-01-10).
+Nasdaq's [May 1 component factsheet](https://www.nasdaq.com/docs/2026/05/04/NDX.pdf)
+still lists GOOG. Treat Yahoo's screen as a discovery view only. The index is
+current research, and the retrospective backfill remains labeled hindsight. Do
+not project the current list into earlier point-in-time universes.
 
 The retrospective backfill includes every member in the captured current
 profile. A name with no installed prices remains in each session as a rejected
