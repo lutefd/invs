@@ -42,6 +42,17 @@ func TestGIWSourceSelectionFailsClosedWithoutCredentials(t *testing.T) {
 	}
 }
 
+func TestNasdaqHTTPClientDisablesHTTP2(t *testing.T) {
+	client := newNasdaqHTTPClient()
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Nasdaq HTTP transport type = %T", client.Transport)
+	}
+	if transport.ForceAttemptHTTP2 || transport.TLSNextProto == nil || len(transport.TLSNextProto) != 0 {
+		t.Fatalf("Nasdaq HTTP/2 remains enabled: force=%t protocols=%v", transport.ForceAttemptHTTP2, transport.TLSNextProto)
+	}
+}
+
 func TestReadNasdaqSyncStateAcceptsGIWAndMigratesWebsiteSourceLabel(t *testing.T) {
 	for _, test := range []struct {
 		name, source, sourceURL, wantSource string

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -120,12 +121,7 @@ func (m *manager) syncNasdaq100(ctx context.Context) (nasdaqSyncResult, error) {
 	defer cancel()
 	nasdaqHTTP := m.nasdaqHTTP
 	if nasdaqHTTP == nil {
-		nasdaqHTTP = &http.Client{
-			Timeout: 40 * time.Second,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
+		nasdaqHTTP = newNasdaqHTTPClient()
 	}
 	snapshot, raw, fetchErr := fetchNasdaqCurrentUniverse(fetchContext, nasdaqHTTP, userAgent, retrievedAt)
 	extension := ".json"
@@ -420,6 +416,21 @@ func (m *manager) syncNasdaq100(ctx context.Context) (nasdaqSyncResult, error) {
 		Added: sortedKeys(tickerSet(additions)), Removed: sortedKeys(tickerSet(removed)),
 		HistoryUnavailable: sortedKeys(tickerSet(historyUnavailable)), SHA256: snapshot.SHA256,
 	}, nil
+}
+
+func newNasdaqHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// The public Nasdaq endpoint resets HTTP/2 streams on this deployment.
+	// Keep the feed's request on HTTP/1.1 so refreshes do not fail with 502.
+	transport.ForceAttemptHTTP2 = false
+	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   40 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 func configuredNasdaqSource() string {

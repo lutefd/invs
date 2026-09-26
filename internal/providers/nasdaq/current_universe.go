@@ -348,7 +348,10 @@ func ParseCurrentUniverse(body []byte, retrievedAt time.Time) (CurrentUniverse, 
 	}
 	asOf, err := time.ParseInLocation("Jan 2, 2006 3:04 PM", strings.TrimSpace(wire.Data.Date), eastern)
 	if err != nil {
-		return CurrentUniverse{}, fmt.Errorf("parse Nasdaq source timestamp: %w", err)
+		asOf, err = time.ParseInLocation("Jan 2, 2006", strings.TrimSpace(wire.Data.Date), eastern)
+		if err != nil {
+			return CurrentUniverse{}, fmt.Errorf("parse Nasdaq source date: %w", err)
+		}
 	}
 	if retrievedAt.IsZero() {
 		return CurrentUniverse{}, errors.New("Nasdaq snapshot retrieval time is required")

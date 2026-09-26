@@ -1617,11 +1617,14 @@ complete universe active.
 
 GIW is Nasdaq's authenticated REST API for current and historical constituent
 weighting files, so it is the supported automated source. The public website
-fallback is undocumented and may fail; it is retained only until GIW account
-access is configured. Yahoo continues to supply price history, but its **Most
-Actives — NASDAQ 100** screen is not used to replace the member roster: a live
-check on 2026-09-26 returned AZN and omitted GOOG, while Nasdaq had already
-announced [AZN's replacement by Walmart](https://www.nasdaq.com/press-release/walmart-inc-join-nasdaq-100-indexr-beginning-january-20th-2026-2026-01-10).
+fallback needs no account and is now requested over HTTP/1.1 because Nasdaq's
+endpoint resets HTTP/2 streams in this environment. The feed can return a
+date-only snapshot, which the manager handles. It remains an undocumented UI
+feed that may change; a failed or partial response leaves the last complete
+roster active. Yahoo continues to supply price history, but its **Most Actives —
+NASDAQ 100** screen is not used to replace the member roster: a live check on
+2026-09-26 returned AZN and omitted GOOG, while Nasdaq had already announced
+[AZN's replacement by Walmart](https://www.nasdaq.com/press-release/walmart-inc-join-nasdaq-100-indexr-beginning-january-20th-2026-2026-01-10).
 Nasdaq's [May 1 component factsheet](https://www.nasdaq.com/docs/2026/05/04/NDX.pdf)
 still lists GOOG. Treat Yahoo's screen as a discovery view only. The index is
 current research, and the retrospective backfill remains labeled hindsight. Do

@@ -35,6 +35,15 @@ func TestParseCurrentUniverseValidatesCompleteCurrentSnapshot(t *testing.T) {
 	if snapshot.Retrieved.Location() != time.UTC || snapshot.Retrieved.Nanosecond()%int(time.Microsecond) != 0 || len(snapshot.SHA256) != 64 {
 		t.Fatalf("snapshot receipt/hash not normalized: %+v", snapshot)
 	}
+	dateOnlyBody := []byte(strings.Replace(string(body), "Sep 23, 2026 3:10 PM", "Sep 24, 2026", 1))
+	dateOnlyRetrieved := time.Date(2026, 9, 24, 20, 0, 0, 0, time.UTC)
+	dateOnlySnapshot, err := ParseCurrentUniverse(dateOnlyBody, dateOnlyRetrieved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dateOnlySnapshot.AsOf.Format(time.RFC3339); got != "2026-09-24T04:00:00Z" {
+		t.Fatalf("date-only source as-of = %s", got)
+	}
 }
 
 func TestParseCurrentUniverseFailsClosedOnPartialAndDuplicateRows(t *testing.T) {
