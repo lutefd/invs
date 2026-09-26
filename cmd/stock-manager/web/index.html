@@ -119,7 +119,7 @@
       </div>
 
       <div class="notice">
-        The daily cycle refreshes Yahoo's current NASDAQ-100 screen before collecting prices. Refresh here to add or remove names from the current list. Complete source snapshots are retained, but this list does not provide historical membership events. Your manually tracked stocks stay tracked.
+        The daily cycle refreshes the current Nasdaq-100 snapshot before collecting prices. Yahoo remains the price-history source. If the membership feed fails, the last complete list stays active. Your manually tracked stocks stay tracked.
       </div>
     </section>
 
@@ -250,7 +250,7 @@
     const button = $('sync-nasdaq100');
     const status = $('nasdaq-status');
     button.disabled = true;
-    status.textContent = 'Fetching and validating Yahoo’s NASDAQ-100 list and new ticker price history. This may take a minute.';
+    status.textContent = 'Fetching Nasdaq-100 constituents and checking Yahoo price history for new tickers. This may take a minute.';
     try {
       const response = await fetch('/api/nasdaq-100/sync', { method:'POST' });
       const data = await response.json();

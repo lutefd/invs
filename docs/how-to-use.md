@@ -1618,9 +1618,13 @@ complete universe active.
 GIW is Nasdaq's authenticated REST API for current and historical constituent
 weighting files, so it is the supported automated source. The public website
 fallback is undocumented and may fail; it is retained only until GIW account
-access is configured. The index is current research, and the retrospective
-backfill remains labeled hindsight. Do not project the current list into earlier
-point-in-time universes.
+access is configured. Yahoo continues to supply price history, but its **Most
+Actives — NASDAQ 100** screen is not used to replace the member roster: a live
+check on 2026-09-26 returned AZN and omitted GOOG, while Nasdaq had already
+announced AZN's replacement by Walmart. Treat Yahoo's screen as a discovery
+view only. The index is current research, and the retrospective backfill remains
+labeled hindsight. Do not project the current list into earlier point-in-time
+universes.
 
 The retrospective backfill includes every member in the captured current
 profile. A name with no installed prices remains in each session as a rejected
