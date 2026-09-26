@@ -1597,8 +1597,16 @@ it does not search every listed stock on an exchange.
 ### Full Nasdaq-100 constituent refresh
 
 The stock manager's **Refresh Nasdaq-100** button and `make nasdaq100-sync` use
-Nasdaq's current website constituent feed to sync the full current index. The
-daily `make market-cycle` refreshes the same source before collecting prices.
+Nasdaq GIW Web Services when GIW credentials are configured. Add
+`INVS_NASDAQ_GIW_USERNAME` and `INVS_NASDAQ_GIW_PASSWORD` to the untracked
+`.env` file. The manager sends them only in the HTTPS form body, requests the
+NDX end-of-day weighting file, and searches the latest eight calendar days for
+the most recent complete trading-day file. `INVS_NASDAQ_SOURCE=giw` can force
+GIW mode; missing credentials or index entitlement keep the existing complete
+roster active and report the failure. With no GIW credentials configured, the
+manager still uses Nasdaq's current website feed as a temporary fallback.
+`INVS_NASDAQ_SOURCE=website` explicitly selects that fallback. The daily
+`make market-cycle` refreshes the selected source before collecting prices.
 Complete responses are validated, retained under
 `data/research/stock-manager/nasdaq-100-snapshots/`, and merged with manually
 tracked names. Stable ticker-based IDs are reused on later refreshes. Newly
@@ -1607,10 +1615,12 @@ lookup fails, the mapping starts on the snapshot date and the manager reports
 that history needs review. A failed or partial source response leaves the last
 complete universe active.
 
-This is Nasdaq's public but undocumented current website feed. It supplies a
-current snapshot, not official historical membership events. The daily index is
-current research, and the retrospective backfill remains labeled hindsight; the
-current list must not be projected into earlier point-in-time universes.
+GIW is Nasdaq's authenticated REST API for current and historical constituent
+weighting files, so it is the supported automated source. The public website
+fallback is undocumented and may fail; it is retained only until GIW account
+access is configured. The index is current research, and the retrospective
+backfill remains labeled hindsight. Do not project the current list into earlier
+point-in-time universes.
 
 The retrospective backfill includes every member in the captured current
 profile. A name with no installed prices remains in each session as a rejected

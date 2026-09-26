@@ -2,8 +2,10 @@ package nasdaq
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -65,4 +67,112 @@ func TestFetchCurrentUniverseUsesNasdaqBrowserHeadersAndRetainsInvalidBody(t *te
 	if _, _, err := FetchCurrentUniverse(context.Background(), nil, "invs-test", time.Now()); err == nil {
 		t.Fatal("nil HTTP client was accepted")
 	}
+}
+
+func TestFetchGIWCurrentUniverseUsesAuthenticatedEODRequestAndParsesFullMembership(t *testing.T) {
+	eastern, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	retrieved := time.Date(2026, 9, 26, 12, 0, 0, 0, eastern)
+	body := giwFixtureBody(101)
+	client := currentUniverseDoer(func(request *http.Request) (*http.Response, error) {
+		form, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		values, err := url.ParseQuery(string(form))
+		if err != nil {
+			t.Fatal(err)
+		}
+		query := request.URL.Query()
+		if request.Method != http.MethodPost || request.URL.Host != "indexes.nasdaqomx.com" || request.URL.Path != "/reports2/UFFWeighting.ashx" ||
+			query.Get("IndexSymbol") != "NDX" || query.Get("Date") != "2026-09-25" || query.Get("Type") != "PIPE" || query.Get("FileType") != "EOD" ||
+			values.Get("username") != "giw-user" || values.Get("password") != "giw-pass" || request.URL.RawQuery == "" ||
+			request.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+			t.Fatalf("unexpected GIW request: method=%s url=%s headers=%v form=%s", request.Method, request.URL, request.Header, string(form))
+		}
+		if strings.Contains(request.URL.String(), "giw-pass") {
+			t.Fatal("GIW password was included in the request URL")
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(body))), Request: request}, nil
+	})
+	snapshot, raw, err := FetchGIWCurrentUniverse(context.Background(), client, "giw-user", "giw-pass", "invs-test", retrieved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Count != 101 || len(snapshot.Members) != 101 || snapshot.Source != CurrentUniverseSourceGIW || snapshot.SourceURL != GIWWeightingURL || len(raw) == 0 {
+		t.Fatalf("unexpected GIW snapshot: count=%d source=%s url=%s raw=%d", snapshot.Count, snapshot.Source, snapshot.SourceURL, len(raw))
+	}
+	if got := snapshot.AsOf.In(eastern).Format(time.DateOnly); got != "2026-09-25" {
+		t.Fatalf("GIW as-of date=%s", got)
+	}
+}
+
+func TestParseGIWCurrentUniverseRejectsPartialAndDuplicateFiles(t *testing.T) {
+	eastern, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	date := time.Date(2026, 9, 25, 0, 0, 0, 0, eastern)
+	if _, err := ParseGIWCurrentUniverse(giwFixtureBody(89), date, date.Add(time.Hour)); err == nil {
+		t.Fatal("partial GIW file was accepted")
+	}
+	duplicate := strings.Join([]string{
+		"NDX2026-09-25|EOD",
+		"AAPL|100|10|2|0.1|Apple Inc.",
+		"AAPL|100|10|2|0.1|Apple Inc.",
+	}, "\n")
+	if _, err := ParseGIWCurrentUniverse([]byte(duplicate), date, date.Add(time.Hour)); err == nil {
+		t.Fatal("duplicate GIW constituents were accepted")
+	}
+}
+
+func TestFetchGIWCurrentUniverseRejectsUnauthenticatedResponses(t *testing.T) {
+	eastern, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := currentUniverseDoer(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("<html>Log in to access this report</html>")), Request: request}, nil
+	})
+	_, _, err = FetchGIWCurrentUniverse(context.Background(), client, "giw-user", "giw-pass", "invs-test", time.Date(2026, 9, 23, 22, 0, 0, 0, eastern))
+	if err == nil || !strings.Contains(err.Error(), "authentication page") {
+		t.Fatalf("authentication response error=%v", err)
+	}
+}
+
+func TestFetchGIWCurrentUniverseRetriesTransientHTTPFailures(t *testing.T) {
+	eastern, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls int
+	body := giwFixtureBody(100)
+	client := currentUniverseDoer(func(request *http.Request) (*http.Response, error) {
+		calls++
+		status := http.StatusOK
+		responseBody := body
+		if calls == 1 {
+			status = http.StatusBadGateway
+			responseBody = []byte("temporary upstream error")
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(string(responseBody))), Request: request}, nil
+	})
+	snapshot, _, err := FetchGIWCurrentUniverse(context.Background(), client, "giw-user", "giw-pass", "invs-test", time.Date(2026, 9, 26, 12, 0, 0, 0, eastern))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || snapshot.Count != 100 {
+		t.Fatalf("GIW attempts/count=%d/%d, want 2/100", calls, snapshot.Count)
+	}
+}
+
+func giwFixtureBody(count int) []byte {
+	rows := make([]string, 0, count+1)
+	rows = append(rows, "NDX2026-09-25|EOD")
+	for i := 0; i < count; i++ {
+		rows = append(rows, fmt.Sprintf("S%03d|100|1000|10|0.01|Sample Company %03d Inc.", i, i))
+	}
+	return []byte(strings.Join(rows, "\n"))
 }

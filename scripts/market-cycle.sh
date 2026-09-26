@@ -49,6 +49,9 @@ if [[ "${INVS_MARKET_SKIP_COLLECTION:-0}" != 1 && "${INVS_NASDAQ100_REFRESH:-1}"
   if snapshot_result=$("$make_command" --no-print-directory nasdaq100-sync); then
     printf 'nasdaq100_refresh_result=%s\n' "$snapshot_result"
   else
+    snapshot_status=$?
+    printf 'nasdaq100_refresh_error=%s\n' "$snapshot_result"
+    printf 'nasdaq100_refresh_exit_status=%s\n' "$snapshot_status"
     echo "nasdaq100_refresh=degraded action=keep_last_complete_snapshot"
   fi
 fi

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,40 @@ type staticYahooGetter struct{ body []byte }
 
 func (f staticYahooGetter) Get(context.Context, string) ([]byte, error) {
 	return append([]byte(nil), f.body...), nil
+}
+
+func TestGIWSourceSelectionFailsClosedWithoutCredentials(t *testing.T) {
+	t.Setenv("INVS_NASDAQ_SOURCE", "giw")
+	t.Setenv("INVS_NASDAQ_GIW_USERNAME", "")
+	t.Setenv("INVS_NASDAQ_GIW_PASSWORD", "")
+	_, _, err := fetchNasdaqCurrentUniverse(context.Background(), nasdaqFixtureDoer{}, "invs-test", time.Now())
+	if err == nil || !strings.Contains(err.Error(), "username and password are required") {
+		t.Fatalf("missing GIW credentials error=%v", err)
+	}
+}
+
+func TestReadNasdaqSyncStateAcceptsGIWAndMigratesWebsiteSourceLabel(t *testing.T) {
+	for _, test := range []struct {
+		name, source, sourceURL, wantSource string
+	}{
+		{name: "licensed GIW", source: nasdaq.CurrentUniverseSourceGIW, sourceURL: nasdaq.GIWWeightingURL, wantSource: nasdaq.CurrentUniverseSourceGIW},
+		{name: "legacy website state", sourceURL: nasdaq.CurrentUniverseURL, wantSource: nasdaq.CurrentUniverseSourceWebsite},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "state.json")
+			body, err := json.Marshal(nasdaqSyncState{Version: nasdaqSyncStateVersion, Source: test.source, SourceURL: test.sourceURL})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, body, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			state, exists, err := readNasdaqSyncState(path)
+			if err != nil || !exists || state.Source != test.wantSource {
+				t.Fatalf("state/existence/error=%+v/%t/%v", state, exists, err)
+			}
+		})
+	}
 }
 
 func TestSyncNasdaq100MergesCurrentMembersAndRemovesOnlyFormerSourceMembers(t *testing.T) {

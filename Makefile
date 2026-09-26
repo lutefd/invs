@@ -132,7 +132,7 @@ daily-cycle: setup config
 
 nasdaq100-sync: setup config
 	@$(COMPOSE) up -d --build stock-manager
-	@$(COMPOSE) exec -T stock-manager wget -q -O - --post-data='' http://localhost:8080/api/nasdaq-100/sync
+	@$(COMPOSE) exec -T stock-manager wget -O - --post-data='' http://localhost:8080/api/nasdaq-100/sync
 
 market-cycle: setup config
 	@scripts/market-cycle.sh

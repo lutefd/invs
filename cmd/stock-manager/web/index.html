@@ -224,7 +224,7 @@
     $('membership-date').textContent = data.membership_as_of;
     $('nasdaq-count').textContent = data.nasdaq_100.count || '—';
     if (data.nasdaq_100.status === 'current_snapshot') {
-      $('nasdaq-status').textContent = `Current snapshot as of ${data.nasdaq_100.source_as_of}; retrieved ${data.nasdaq_100.retrieved_at}.`;
+      $('nasdaq-status').textContent = `Current snapshot from ${data.nasdaq_100.source} as of ${data.nasdaq_100.source_as_of}; retrieved ${data.nasdaq_100.retrieved_at}.`;
     } else if (data.nasdaq_100.status === 'ready_to_sync') {
       $('nasdaq-status').textContent = 'No Nasdaq-100 snapshot loaded yet.';
     } else {

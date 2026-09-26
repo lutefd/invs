@@ -32,6 +32,7 @@ const (
 
 type nasdaqSyncState struct {
 	Version       int      `json:"version"`
+	Source        string   `json:"source,omitempty"`
 	SourceURL     string   `json:"source_url"`
 	SourceAsOf    string   `json:"source_as_of"`
 	RetrievedAt   string   `json:"retrieved_at"`
@@ -43,6 +44,7 @@ type nasdaqSyncState struct {
 
 type nasdaqStatusView struct {
 	Status      string `json:"status"`
+	Source      string `json:"source,omitempty"`
 	SourceAsOf  string `json:"source_as_of,omitempty"`
 	RetrievedAt string `json:"retrieved_at,omitempty"`
 	Count       int    `json:"count"`
@@ -79,7 +81,7 @@ func (m *manager) nasdaqStatus() nasdaqStatusView {
 		return nasdaqStatusView{Status: "ready_to_sync"}
 	}
 	return nasdaqStatusView{
-		Status: "current_snapshot", SourceAsOf: state.SourceAsOf,
+		Status: "current_snapshot", Source: currentUniverseSourceName(state.Source, state.SourceURL), SourceAsOf: state.SourceAsOf,
 		RetrievedAt: state.RetrievedAt, Count: len(state.SourceTickers), SHA256: state.SHA256,
 	}
 }
@@ -118,11 +120,20 @@ func (m *manager) syncNasdaq100(ctx context.Context) (nasdaqSyncResult, error) {
 	defer cancel()
 	nasdaqHTTP := m.nasdaqHTTP
 	if nasdaqHTTP == nil {
-		nasdaqHTTP = &http.Client{Timeout: 40 * time.Second}
+		nasdaqHTTP = &http.Client{
+			Timeout: 40 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
 	}
-	snapshot, raw, fetchErr := nasdaq.FetchCurrentUniverse(fetchContext, nasdaqHTTP, userAgent, retrievedAt)
+	snapshot, raw, fetchErr := fetchNasdaqCurrentUniverse(fetchContext, nasdaqHTTP, userAgent, retrievedAt)
+	extension := ".json"
+	if configuredNasdaqSource() == "giw" || configuredNasdaqSource() == nasdaq.CurrentUniverseSourceGIW || snapshot.Source == nasdaq.CurrentUniverseSourceGIW {
+		extension = ".txt"
+	}
 	if len(raw) != 0 {
-		if err := m.archiveNasdaqResponse(raw, retrievedAt); err != nil {
+		if err := m.archiveNasdaqResponse(raw, retrievedAt, extension); err != nil {
 			return nasdaqSyncResult{}, fmt.Errorf("archive raw Nasdaq response: %w", err)
 		}
 	}
@@ -296,11 +307,11 @@ func (m *manager) syncNasdaq100(ctx context.Context) (nasdaqSyncResult, error) {
 	}
 	sort.Slice(profile.Members, func(i, j int) bool { return profile.Members[i].Ticker < profile.Members[j].Ticker })
 	profile.MembershipAsOf = sourceDate
-	profile.SourceURL = nasdaq.CurrentUniverseURL
+	profile.SourceURL = snapshot.SourceURL
 	if err := setMappingValue(profileNode, "membership_as_of", stringNode(sourceDate)); err != nil {
 		return nasdaqSyncResult{}, err
 	}
-	if err := setOrAppendMappingValue(profileNode, "source_url", stringNode(nasdaq.CurrentUniverseURL)); err != nil {
+	if err := setOrAppendMappingValue(profileNode, "source_url", stringNode(snapshot.SourceURL)); err != nil {
 		return nasdaqSyncResult{}, err
 	}
 	if err := setProfileMembers(profileNode, profile.Members); err != nil {
@@ -387,9 +398,9 @@ func (m *manager) syncNasdaq100(ctx context.Context) (nasdaqSyncResult, error) {
 		return nasdaqSyncResult{}, fmt.Errorf("write updated discovery profile: %w", err)
 	}
 	newState := nasdaqSyncState{
-		Version: nasdaqSyncStateVersion, SourceURL: nasdaq.CurrentUniverseURL,
+		Version: nasdaqSyncStateVersion, Source: snapshot.Source, SourceURL: snapshot.SourceURL,
 		SourceAsOf: sourceDate, RetrievedAt: retrievedAt.Format(time.RFC3339Nano),
-		SHA256: snapshot.SHA256, RawPath: filepath.Join(m.nasdaqSnapshotDir(), retrievedAt.Format("20060102T150405Z")+"-"+snapshot.SHA256+".json"),
+		SHA256: snapshot.SHA256, RawPath: filepath.Join(m.nasdaqSnapshotDir(), retrievedAt.Format("20060102T150405Z")+"-"+snapshot.SHA256+extension),
 		SourceTickers: snapshotTickers(snapshot.Members), ManualTickers: sortedKeys(manual),
 	}
 	stateBytes, err := json.MarshalIndent(newState, "", "  ")
@@ -403,12 +414,51 @@ func (m *manager) syncNasdaq100(ctx context.Context) (nasdaqSyncResult, error) {
 		return nasdaqSyncResult{}, fmt.Errorf("write Nasdaq snapshot state: %w", err)
 	}
 	return nasdaqSyncResult{
-		Status: "ok", Source: "nasdaq.com current constituent snapshot (undocumented UI feed)",
+		Status: "ok", Source: currentUniverseSourceName(snapshot.Source, snapshot.SourceURL),
 		SourceAsOf: sourceDate, RetrievedAt: retrievedAt.Format(time.RFC3339Nano),
 		Constituents: snapshot.Count, Tracked: len(profile.Members),
 		Added: sortedKeys(tickerSet(additions)), Removed: sortedKeys(tickerSet(removed)),
 		HistoryUnavailable: sortedKeys(tickerSet(historyUnavailable)), SHA256: snapshot.SHA256,
 	}, nil
+}
+
+func configuredNasdaqSource() string {
+	source := strings.ToLower(strings.TrimSpace(os.Getenv("INVS_NASDAQ_SOURCE")))
+	if source != "" {
+		return source
+	}
+	if strings.TrimSpace(os.Getenv("INVS_NASDAQ_GIW_USERNAME")) != "" || strings.TrimSpace(os.Getenv("INVS_NASDAQ_GIW_PASSWORD")) != "" {
+		return "giw"
+	}
+	return "website"
+}
+
+func fetchNasdaqCurrentUniverse(ctx context.Context, client nasdaq.HTTPDoer, userAgent string, retrievedAt time.Time) (nasdaq.CurrentUniverse, []byte, error) {
+	source := configuredNasdaqSource()
+	username := strings.TrimSpace(os.Getenv("INVS_NASDAQ_GIW_USERNAME"))
+	password := strings.TrimSpace(os.Getenv("INVS_NASDAQ_GIW_PASSWORD"))
+	switch source {
+	case "giw", nasdaq.CurrentUniverseSourceGIW:
+		return nasdaq.FetchGIWCurrentUniverse(ctx, client, username, password, userAgent, retrievedAt)
+	case "website", "nasdaq.com", nasdaq.CurrentUniverseSourceWebsite:
+		return nasdaq.FetchCurrentUniverse(ctx, client, userAgent, retrievedAt)
+	default:
+		return nasdaq.CurrentUniverse{}, nil, fmt.Errorf("unsupported INVS_NASDAQ_SOURCE %q; use giw or website", source)
+	}
+}
+
+func currentUniverseSourceName(source, sourceURL string) string {
+	switch source {
+	case nasdaq.CurrentUniverseSourceGIW:
+		return "Nasdaq GIW Web Services (licensed EOD constituent file)"
+	case nasdaq.CurrentUniverseSourceWebsite:
+		return "Nasdaq public website feed (temporary, undocumented)"
+	default:
+		if sourceURL == nasdaq.GIWWeightingURL {
+			return "Nasdaq GIW Web Services (licensed EOD constituent file)"
+		}
+		return "Nasdaq public website feed (temporary, undocumented)"
+	}
 }
 
 func newYahooHistoryClient(userAgent string, cfg config.Config, injected yahoo.Getter) (*yahoo.Client, error) {
@@ -485,12 +535,15 @@ func resolveNasdaqSector(member nasdaq.CurrentConstituent) (sector string, infer
 	return "unclassified", false, nil
 }
 
-func (m *manager) archiveNasdaqResponse(body []byte, retrieved time.Time) error {
+func (m *manager) archiveNasdaqResponse(body []byte, retrieved time.Time, extension string) error {
 	if err := os.MkdirAll(m.nasdaqSnapshotDir(), 0o700); err != nil {
 		return err
 	}
+	if extension != ".json" && extension != ".txt" {
+		return fmt.Errorf("unsupported Nasdaq archive extension %q", extension)
+	}
 	digest := sha256.Sum256(body)
-	path := filepath.Join(m.nasdaqSnapshotDir(), retrieved.Format("20060102T150405Z")+"-"+hex.EncodeToString(digest[:])+".json")
+	path := filepath.Join(m.nasdaqSnapshotDir(), retrieved.Format("20060102T150405Z")+"-"+hex.EncodeToString(digest[:])+extension)
 	return writeImmutable(path, body)
 }
 
@@ -506,10 +559,30 @@ func readNasdaqSyncState(path string) (nasdaqSyncState, bool, error) {
 	if err := json.Unmarshal(body, &state); err != nil {
 		return nasdaqSyncState{}, true, err
 	}
-	if state.Version != nasdaqSyncStateVersion || state.SourceURL != nasdaq.CurrentUniverseURL || len(tickerSet(state.SourceTickers)) != len(state.SourceTickers) || len(tickerSet(state.ManualTickers)) != len(state.ManualTickers) {
+	if state.Version != nasdaqSyncStateVersion || !isValidNasdaqStateSource(state.Source, state.SourceURL) || len(tickerSet(state.SourceTickers)) != len(state.SourceTickers) || len(tickerSet(state.ManualTickers)) != len(state.ManualTickers) {
 		return nasdaqSyncState{}, true, errors.New("stored Nasdaq sync state is invalid")
 	}
+	if state.Source == "" {
+		if state.SourceURL == nasdaq.GIWWeightingURL {
+			state.Source = nasdaq.CurrentUniverseSourceGIW
+		} else {
+			state.Source = nasdaq.CurrentUniverseSourceWebsite
+		}
+	}
 	return state, true, nil
+}
+
+func isValidNasdaqStateSource(source, sourceURL string) bool {
+	switch source {
+	case "":
+		return sourceURL == nasdaq.CurrentUniverseURL || sourceURL == nasdaq.GIWWeightingURL
+	case nasdaq.CurrentUniverseSourceWebsite:
+		return sourceURL == nasdaq.CurrentUniverseURL
+	case nasdaq.CurrentUniverseSourceGIW:
+		return sourceURL == nasdaq.GIWWeightingURL
+	default:
+		return false
+	}
 }
 
 func tickerSet(values []string) map[string]bool {
