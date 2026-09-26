@@ -118,7 +118,7 @@ func main() {
 		Handler:           m.routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 	slog.Info("stock manager listening", "addr", server.Addr)
