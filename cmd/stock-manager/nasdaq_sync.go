@@ -423,6 +423,12 @@ func newNasdaqHTTPClient() *http.Client {
 	// The public Nasdaq endpoint resets HTTP/2 streams on this deployment.
 	// Keep the feed's request on HTTP/1.1 so refreshes do not fail with 502.
 	transport.ForceAttemptHTTP2 = false
+	tlsConfig := &tls.Config{NextProtos: []string{"http/1.1"}}
+	if transport.TLSClientConfig != nil {
+		tlsConfig = transport.TLSClientConfig.Clone()
+		tlsConfig.NextProtos = []string{"http/1.1"}
+	}
+	transport.TLSClientConfig = tlsConfig
 	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
 	return &http.Client{
 		Transport: transport,

@@ -48,7 +48,8 @@ func TestNasdaqHTTPClientDisablesHTTP2(t *testing.T) {
 	if !ok {
 		t.Fatalf("Nasdaq HTTP transport type = %T", client.Transport)
 	}
-	if transport.ForceAttemptHTTP2 || transport.TLSNextProto == nil || len(transport.TLSNextProto) != 0 {
+	if transport.ForceAttemptHTTP2 || transport.TLSNextProto == nil || len(transport.TLSNextProto) != 0 ||
+		transport.TLSClientConfig == nil || len(transport.TLSClientConfig.NextProtos) != 1 || transport.TLSClientConfig.NextProtos[0] != "http/1.1" {
 		t.Fatalf("Nasdaq HTTP/2 remains enabled: force=%t protocols=%v", transport.ForceAttemptHTTP2, transport.TLSNextProto)
 	}
 }
