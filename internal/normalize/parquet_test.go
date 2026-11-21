@@ -733,6 +733,16 @@ func TestMacroRevisionsNoOpUnchangedAndPreserveABA(t *testing.T) {
 	if duplicateInput[0].Revision != 1 {
 		t.Fatalf("duplicate input revision=%d, want 1", duplicateInput[0].Revision)
 	}
+	// A no-op retry must not depend on the physical order of append-only parts.
+	// Real FRED partitions can contain historical revisions whose part order is
+	// not the globally sorted natural-key order.
+	reorderedExisting, err := readCommitted[EconomicRow](filepath.Dir(path), map[string]string{"dataset": "macroeconomics", "source": "fred", "series_id": "X"})
+	if err != nil || len(reorderedExisting) != 2 {
+		t.Fatalf("existing revisions=%d err=%v", len(reorderedExisting), err)
+	}
+	if _, n, err = w.WriteEconomics("X", duplicateInput); err != nil || n != 0 {
+		t.Fatalf("repeat no-op n=%d err=%v", n, err)
+	}
 	a2 := b
 	a2.Value = "1"
 	a2.Temporal.PublishedAt = a2.Temporal.PublishedAt.Add(time.Hour)

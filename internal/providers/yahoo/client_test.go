@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"testing"
 	"time"
 
@@ -40,15 +41,40 @@ func TestChartURLDoesNotDoubleEscapeSymbols(t *testing.T) {
 	}
 }
 
-func TestParseNormalizesExchangeCloseAndRejectsMissing(t *testing.T) {
-	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600,1719927000],"indicators":{"quote":[{"open":[10,null],"high":[12,null],"low":[9,null],"close":[11,null],"volume":[100,null]}]}}],"error":null}}`)
-	ingested := time.Date(2024, 7, 3, 22, 0, 0, 0, time.UTC)
-	bars, received, rejected, err := parse(b, "security-1", "USD", ingested)
+func TestFirstTradeDateUsesExchangeTimezoneAndRejectsMissingMetadata(t *testing.T) {
+	newYork, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(bars) != 1 || received != 2 || rejected != 1 {
-		t.Fatalf("bars=%v received=%d rejected=%d", bars, received, rejected)
+	tradeTime := time.Date(2010, 2, 4, 9, 30, 0, 0, newYork)
+	body := []byte(`{"chart":{"result":[{"meta":{"exchangeTimezoneName":"America/New_York","firstTradeDate":` + fmt.Sprint(tradeTime.Unix()) + `},"timestamp":[],"indicators":{}}],"error":null}}`)
+	c := NewClient(fakeGetter{body: body})
+	c.now = func() time.Time { return time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC) }
+	got, err := c.FirstTradeDate(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := time.Date(2010, 2, 4, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
+		t.Fatalf("first trade date = %s, want %s", got, want)
+	}
+	c.http = fakeGetter{body: []byte(`{"chart":{"result":[{"meta":{"exchangeTimezoneName":"America/New_York"}}],"error":null}}`)}
+	if _, err := c.FirstTradeDate(context.Background(), "AAPL"); err == nil {
+		t.Fatal("missing vendor first-trade metadata was accepted")
+	}
+}
+
+func TestParseNormalizesExchangeCloseAndReportsAllNullHistoricalBar(t *testing.T) {
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600,1719927000,1720013400],"indicators":{"quote":[{"open":[10,null,10],"high":[12,null,12],"low":[9,null,9],"close":[11,null,11],"volume":[100,null,100]}]}}],"error":null}}`)
+	ingested := time.Date(2024, 7, 3, 22, 0, 0, 0, time.UTC)
+	bars, received, rejected, missing, err := parse(b, "security-1", "USD", ingested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 2 || received != 3 || rejected != 0 || len(missing) != 1 {
+		t.Fatalf("bars=%v received=%d rejected=%d missing=%v", bars, received, rejected, missing)
+	}
+	if missing[0] != (MissingBarObservation{SessionDate: "2024-07-02", Reason: "all_ohlcv_null"}) {
+		t.Fatalf("missing bar = %+v", missing[0])
 	}
 	want := time.Date(2024, 7, 1, 20, 0, 0, 0, time.UTC)
 	if !bars[0].Temporal.ObservedAt.Equal(want) || bars[0].Temporal.ObservedPrecision != model.PrecisionSecond || bars[0].Source != "yahoo" || bars[0].PriceBasis != "split_adjusted" {
@@ -100,9 +126,43 @@ func TestCollectTruncatesInjectedReceiptTime(t *testing.T) {
 func TestParseRejectsIncompleteTradingDay(t *testing.T) {
 	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600],"indicators":{"quote":[{"open":[10],"high":[12],"low":[9],"close":[11],"volume":[100]}]}}],"error":null}}`)
 	// Noon UTC is before the 16:00 New York close (20:00 UTC during DST).
-	bars, received, rejected, err := parse(b, "security-1", "USD", time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC))
-	if err != nil || len(bars) != 0 || received != 1 || rejected != 0 {
-		t.Fatalf("bars=%v received=%d rejected=%d err=%v", bars, received, rejected, err)
+	bars, received, rejected, missing, err := parse(b, "security-1", "USD", time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC))
+	if err != nil || len(bars) != 0 || received != 1 || rejected != 0 || len(missing) != 0 {
+		t.Fatalf("bars=%v received=%d rejected=%d missing=%v err=%v", bars, received, rejected, missing, err)
+	}
+}
+
+func TestParseSkipsIncompleteFutureSessionAfterUTCDateRoll(t *testing.T) {
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600,1719927000],"indicators":{"quote":[{"open":[10,null],"high":[12,null],"low":[9,null],"close":[11,null],"volume":[100,null]}]}}],"error":null}}`)
+	// The previous session closed at 20:00 UTC; the following session has not
+	// closed at 00:30 UTC after the UTC date has rolled over.
+	bars, received, rejected, missing, err := parse(b, "security-1", "USD", time.Date(2024, 7, 2, 0, 30, 0, 0, time.UTC))
+	if err != nil || len(bars) != 1 || received != 2 || rejected != 0 || len(missing) != 0 {
+		t.Fatalf("bars=%v received=%d rejected=%d missing=%v err=%v", bars, received, rejected, missing, err)
+	}
+	if !bars[0].Temporal.ObservedAt.Equal(time.Date(2024, 7, 1, 20, 0, 0, 0, time.UTC)) {
+		t.Fatalf("observed_at=%s, want previous session close", bars[0].Temporal.ObservedAt)
+	}
+}
+
+func TestParseDefersIncompleteLatestClosedSession(t *testing.T) {
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719927000,1719840600],"indicators":{"quote":[{"open":[null,10],"high":[null,12],"low":[null,9],"close":[null,11],"volume":[null,100]}]}}],"error":null}}`)
+	// Yahoo can temporarily withdraw the latest close after the session has
+	// closed. Leave that newest row pending even when the response is unsorted.
+	bars, received, rejected, missing, err := parse(b, "security-1", "USD", time.Date(2024, 7, 3, 0, 30, 0, 0, time.UTC))
+	if err != nil || len(bars) != 1 || received != 2 || rejected != 0 || len(missing) != 0 {
+		t.Fatalf("bars=%v received=%d rejected=%d missing=%v err=%v", bars, received, rejected, missing, err)
+	}
+}
+
+func TestParseRejectsMalformedHistoricalRowLastInUnsortedResponse(t *testing.T) {
+	b := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1720013400,1719927000],"indicators":{"quote":[{"open":[10,10],"high":[12,null],"low":[9,9],"close":[11,11],"volume":[100,100]}]}}],"error":null}}`)
+	bars, received, rejected, missing, err := parse(b, "security-1", "USD", time.Date(2024, 7, 3, 22, 0, 0, 0, time.UTC))
+	if err != nil || len(bars) != 1 || received != 2 || rejected != 1 || len(missing) != 0 {
+		t.Fatalf("bars=%v received=%d rejected=%d missing=%v err=%v", bars, received, rejected, missing, err)
+	}
+	if !bars[0].Temporal.ObservedAt.Equal(time.Date(2024, 7, 3, 20, 0, 0, 0, time.UTC)) {
+		t.Fatalf("observed_at=%s, want newest session close", bars[0].Temporal.ObservedAt)
 	}
 }
 
@@ -132,5 +192,28 @@ func TestCollectRetainsRawOnParseError(t *testing.T) {
 				t.Fatalf("common downloaded resource = %+v, want the malformed response and metadata", r.Resources)
 			}
 		})
+	}
+}
+
+func TestCollectReportsMissingHistoricalBarAndRetainsRaw(t *testing.T) {
+	body := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600,1719927000,1720013400],"indicators":{"quote":[{"open":[10,null,10],"high":[12,null,12],"low":[9,null,9],"close":[11,null,11],"volume":[100,null,100]}]}}],"error":null}}`)
+	c := NewClient(fakeGetter{body: body})
+	c.now = func() time.Time { return time.Date(2024, 7, 5, 12, 0, 0, 0, time.UTC) }
+	result, err := c.Collect(context.Background(), model.HistoricalPriceRequest{
+		SecurityID: "security-1", VendorSymbol: "AAPL", Currency: "USD",
+		Start: time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC),
+		End:   time.Date(2024, 7, 3, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Bars) != 2 || result.RecordsReceived != 3 || result.RecordsRejected != 0 || result.RecordsMissing != 1 {
+		t.Fatalf("bars=%d received=%d rejected=%d missing=%d", len(result.Bars), result.RecordsReceived, result.RecordsRejected, result.RecordsMissing)
+	}
+	if len(result.MissingBars) != 1 || result.MissingBars[0] != (MissingBarObservation{SessionDate: "2024-07-02", Reason: "all_ohlcv_null"}) {
+		t.Fatalf("missing bars = %+v", result.MissingBars)
+	}
+	if !bytes.Equal(result.Raw, body) || result.SHA256 != sha256Hex(body) || len(result.Resources) != 1 || result.Resources[0].SHA256 != sha256Hex(body) {
+		t.Fatalf("raw Yahoo response was not retained: %+v", result)
 	}
 }

@@ -9,7 +9,7 @@ RUN_KEY ?=
 RUN_KEY_ARG = $(if $(RUN_KEY),--run-key $(RUN_KEY),)
 DASHBOARDS := $(wildcard docker/grafana/dashboards/*.json)
 
-.PHONY: setup config up migrate historical-truth-db-test health urls ingest rerun daily daily-cycle market-cycle install-market-timer market-cycle-scheduler-test discovery-run discovery-validate ops-status security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-release-guard-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance paper-make-target-acceptance v1-pre-release-acceptance v1-release-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-validate-inputs paper-create-account paper-run paper-reconcile paper-acceptance paper-acceptance-report paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
+.PHONY: setup config up stock-ui nasdaq100-sync migrate historical-truth-db-test health urls ingest rerun daily daily-cycle market-cycle install-market-timer market-cycle-scheduler-test discovery-run discovery-validate discovery-backfill ops-status ops-status-test security-check reconcile backup backup-validate backup-or-validate restore backup-restore-acceptance v1-daily-cycle-acceptance v1-forward-record-acceptance v1-release-guard-acceptance v1-resilience-acceptance v1-install-upgrade-acceptance paper-make-target-acceptance v1-pre-release-acceptance v1-release-acceptance release-validate feature feature-validate feature-batch feature-batch-validate feature-quality-report feature-catalog feature-report research-seed-theme research-theme-snapshot research-status-report research-acceptance backtest-acceptance backtest-reproduction paper-validate-inputs paper-create-account paper-run paper-reconcile paper-acceptance paper-acceptance-report paper-reproduction forward-record-capture workflow-acceptance action-snapshot adjust adjust-validate bias-audit bias-audit-validate test notebook dashboard-smoke validate down clean
 
 setup:
 	@test -f .env || (umask 077 && cp .env.example .env)
@@ -21,7 +21,11 @@ config:
 	@$(COMPOSE) config --quiet
 
 up: setup config
-	@$(COMPOSE) up -d --build postgres jupyter grafana
+	@$(COMPOSE) up -d --build postgres jupyter grafana stock-manager
+
+stock-ui: setup config
+	@$(COMPOSE) up -d --build stock-manager
+	@$(COMPOSE) config --format json | jq -r '.services["stock-manager"].ports[] | "Stock manager (\(if (.host_ip | startswith("127.")) then "local" else "Tailnet" end)): http://\(.host_ip):\(.published)"'
 
 migrate: setup config
 	@$(COMPOSE) up -d --wait --build postgres
@@ -90,6 +94,11 @@ migrate: setup config
 		grep -qx 'discovery_indexes' || \
 		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000017_discovery_indexes.up.sql
 
+	@$(COMPOSE) exec -T postgres sh -c \
+		'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT to_regclass('"'"'public.discovery_backfill_runs'"'"')"' | \
+		grep -qx 'discovery_backfill_runs' || \
+		$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrations/000018_discovery_backfill.up.sql
+
 historical-truth-db-test: config
 	@scripts/test-historical-truth-db.sh
 
@@ -97,16 +106,13 @@ health:
 	@$(COMPOSE) ps
 	@$(COMPOSE) exec -T postgres sh -c 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 	@$(COMPOSE) exec -T jupyter python -c "import socket; socket.create_connection(('0.0.0.0', 8888), 2).close()"
+	@$(COMPOSE) exec -T stock-manager wget -q -O /dev/null http://localhost:8080/api/health
 	@$(COMPOSE) exec -T grafana wget -q -O /dev/null http://0.0.0.0:3000/api/health
 
 urls:
-	@$(COMPOSE) exec -T jupyter jupyter server list
-	@published="$$($(COMPOSE) port grafana 3000 2>/dev/null || true)"; \
-		if test -n "$$published"; then \
-			echo "Grafana: http://$$published"; \
-		else \
-			echo "Grafana: http://$${INVS_BIND_ADDRESS:-127.0.0.1}:$${GRAFANA_PORT:-3000}"; \
-		fi
+	@$(COMPOSE) config --format json | jq -r '.services.jupyter.ports[] | "Jupyter (local): http://\(.host_ip):\(.published)"'
+	@echo "Jupyter access token, if enabled, is in the Jupyter container logs."
+	@$(COMPOSE) config --format json | jq -r '.services | to_entries[] | select(.key == "stock-manager" or .key == "grafana") | .key as $$service | .value.ports[] | "\($$service) (\(if (.host_ip | startswith("127.")) then "local" else "Tailnet" end)): http://\(.host_ip):\(.published)"'
 
 ingest: setup config
 	@$(COMPOSE) --profile collect run --rm collector --source $(SOURCE) $(RUN_KEY_ARG)
@@ -123,6 +129,10 @@ daily-cycle: setup config
 	@test -n "$(CYCLE_SPEC)" || (echo "CYCLE_SPEC is required" >&2; exit 2)
 	@test -f "$(CYCLE_SPEC)" || (echo "CYCLE_SPEC does not exist: $(CYCLE_SPEC)" >&2; exit 2)
 	@scripts/daily-cycle.sh --spec "$(CYCLE_SPEC)"
+
+nasdaq100-sync: setup config
+	@$(COMPOSE) up -d --build stock-manager
+	@$(COMPOSE) exec -T stock-manager wget -O - --post-data='' http://localhost:8080/api/nasdaq-100/sync
 
 market-cycle: setup config
 	@scripts/market-cycle.sh
@@ -145,8 +155,28 @@ discovery-validate: config
 	@$(COMPOSE) run --rm --no-deps jupyter python -m research.discovery_cli validate \
 		--manifest "$(DISCOVERY_MANIFEST)"
 
+discovery-backfill: $(if $(filter 1,$(DISCOVERY_SKIP_MIGRATION)),config,migrate)
+	@MONTHS="$(or $(MONTHS),3)" \
+		START_DATE="$(START_DATE)" \
+		END_DATE="$(END_DATE)" \
+		PROFILE="$(or $(DISCOVERY_PROFILE),config/universes/nasdaq-100-starter.yaml)" \
+		OUTPUT_ROOT="$(or $(DISCOVERY_BACKFILL_ROOT),/data/research/discovery/retrospective-current-universe)" \
+		EXPECTED_SESSION_COUNT="$(EXPECTED_SESSION_COUNT)" \
+		EXPECTED_START_DATE="$(EXPECTED_START_DATE)" \
+		EXPECTED_END_DATE="$(EXPECTED_END_DATE)" \
+		scripts/discovery-backfill.sh
+
 ops-status: setup config
 	@scripts/ops-status.sh
+
+ops-status-test:
+	@scripts/test-ops-status.sh
+
+projection-freshness: setup config
+	@INVS_PROJECTION_SCOPE="$(or $(PROJECTION_SCOPE),$(INVS_PROJECTION_SCOPE),all)" scripts/check-projection-freshness.sh
+
+projection-freshness-test:
+	@scripts/test-projection-freshness.sh
 
 security-check:
 	@scripts/security-check.sh
@@ -489,7 +519,7 @@ bias-audit-validate:
 	@PYTHONPATH=python/research python3 python/research/bias_audit_cli.py validate \
 		--manifest "$(AUDIT_MANIFEST)"
 
-test: config release-validate security-check backup-restore-acceptance market-cycle-scheduler-test
+test: config release-validate security-check backup-restore-acceptance market-cycle-scheduler-test ops-status-test
 	@go test ./...
 	@go vet ./...
 	@python3 schemas/validate_schemas.py

@@ -46,14 +46,52 @@ docker compose build collector jupyter
 
 service_path="$unit_dir/invs-market-cycle.service"
 timer_path="$unit_dir/invs-market-cycle.timer"
+daily_service_path="$unit_dir/invs-daily.service"
+daily_timer_path="$unit_dir/invs-daily.timer"
 temporary_service="$service_path.tmp"
 temporary_timer="$timer_path.tmp"
+temporary_daily_service="$daily_service_path.tmp"
+temporary_daily_timer="$daily_timer_path.tmp"
+
+cat >"$temporary_daily_service" <<EOF
+[Unit]
+Description=INVS enabled-source collection and operational checks
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=3h
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+WorkingDirectory=$repo_root
+ExecStart=$sg_path $docker_group -c "$repo_root/scripts/scheduled-daily.sh"
+Environment="INVS_MAKE_PATH=$make_path_unit"
+Environment="PATH=$service_path_unit"
+TimeoutStartSec=2h
+Restart=on-failure
+RestartSec=15min
+EOF
+
+cat >"$temporary_daily_timer" <<'EOF'
+[Unit]
+Description=Refresh all enabled INVS data sources daily
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 UTC
+Persistent=true
+Unit=invs-daily.service
+
+[Install]
+WantedBy=timers.target
+EOF
 
 cat >"$temporary_service" <<EOF
 [Unit]
 Description=INVS Nasdaq starter market collection, features, and paper cycle
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=7h
+StartLimitBurst=3
 
 [Service]
 Type=oneshot
@@ -65,6 +103,8 @@ ExecStart=$sg_path $docker_group -c "$make_path market-cycle"
 Environment="INVS_MAKE_PATH=$make_path_unit"
 Environment="PATH=$service_path_unit"
 TimeoutStartSec=2h
+Restart=on-failure
+RestartSec=5min
 EOF
 
 cat >"$temporary_timer" <<'EOF'
@@ -82,6 +122,9 @@ EOF
 
 mv "$temporary_service" "$service_path"
 mv "$temporary_timer" "$timer_path"
+mv "$temporary_daily_service" "$daily_service_path"
+mv "$temporary_daily_timer" "$daily_timer_path"
 systemctl --user daemon-reload
-systemctl --user enable --now invs-market-cycle.timer
+systemctl --user enable --now invs-daily.timer invs-market-cycle.timer
+systemctl --user status invs-daily.timer --no-pager
 systemctl --user status invs-market-cycle.timer --no-pager

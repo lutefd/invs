@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 _TIME_FILTER = re.compile(r"\$__timeFilter\((?P<column>[A-Za-z_][A-Za-z0-9_.]*)\)")
+_VARIABLE = re.compile(r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*):regex\}")
 _SMOKE_TIME_RANGE = "BETWEEN now() - interval '7 days' AND now()"
 
 
@@ -31,10 +32,14 @@ def load_dashboard(path: Path) -> dict[str, Any]:
 
 
 def _expand_grafana_macros(query: str) -> str:
+    query = _VARIABLE.sub(
+        lambda match: ".*" if match.group("name") == "ticker" else match.group(0),
+        query,
+    )
     query = _TIME_FILTER.sub(
         lambda match: f"{match.group('column')} {_SMOKE_TIME_RANGE}", query
     )
-    if "$__" in query:
+    if "$__" in query or "${" in query:
         raise ValueError("query smoke does not support unresolved Grafana macros")
     return query
 
@@ -46,6 +51,10 @@ def dashboard_queries(document: dict[str, Any]) -> tuple[str, ...]:
             query = target.get("rawSql")
             if isinstance(query, str) and query.strip():
                 queries.append(_expand_grafana_macros(query.rstrip(";")))
+    for variable in document.get("templating", {}).get("list", []):
+        query = variable.get("query")
+        if variable.get("type") == "query" and isinstance(query, str) and query.strip():
+            queries.append(_expand_grafana_macros(query.rstrip(";")))
     if not queries:
         raise ValueError("dashboard contains no SQL queries")
     return tuple(queries)

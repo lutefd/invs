@@ -52,7 +52,7 @@ WITH latest_success AS (
 )
 SELECT s.code,
        CASE WHEN s.enabled THEN 'enabled' ELSE 'disabled' END,
-       COALESCE(EXTRACT(EPOCH FROM (now() - max(r.started_at))) / 3600, -1)::numeric(12,2),
+       COALESCE(EXTRACT(EPOCH FROM (now() - latest_success.started_at)) / 3600, -1)::numeric(12,2),
        count(*) FILTER (WHERE r.status IN ('queued', 'running')),
        count(*) FILTER (
          WHERE r.status IN ('failed', 'partial')
@@ -71,9 +71,14 @@ if [[ -n "$source_rows" ]]; then
   while IFS='|' read -r code enabled age_hours active_runs unresolved_troubled_runs; do
     echo "source=$code enabled=$enabled age_hours=$age_hours unresolved_troubled_runs_24h=$unresolved_troubled_runs"
     if [[ "$enabled" == enabled ]]; then
-      if awk -v age="$age_hours" -v threshold="$stale_after_hours" 'BEGIN { exit !(age < 0 || age > threshold) }'; then
+      # Yahoo price freshness is checked against the latest completed XNAS
+      # session below. Wall-clock age is deliberately not authoritative for a
+      # market that closes on weekends and exchange holidays.
+      if [[ "$code" != yahoo ]] && awk -v age="$age_hours" -v threshold="$stale_after_hours" 'BEGIN { exit !(age < 0 || age > threshold) }'; then
         echo "attention=source_stale source=$code age_hours=$age_hours"
         issues=1
+      elif [[ "$code" == yahoo ]]; then
+        echo "source_freshness_policy=yahoo basis=xnas_completed_session"
       fi
       if (( active_runs > 0 )); then
         echo "attention=source_active_runs source=$code count=$active_runs"
@@ -87,24 +92,64 @@ if [[ -n "$source_rows" ]]; then
   done <<< "$source_rows"
 fi
 
-projection_sql=$(cat <<'SQL'
-SELECT 'price',
-       COALESCE(EXTRACT(EPOCH FROM (now() - max(projected_at))) / 3600, -1)::numeric(12,2)
-FROM market_price_snapshots
-UNION ALL
-SELECT 'macro',
-       COALESCE(EXTRACT(EPOCH FROM (now() - max(projected_at))) / 3600, -1)::numeric(12,2)
+price_projection_sql=$(cat <<'SQL'
+WITH chosen_calendar AS (
+    SELECT data_source_id, mic, calendar_version, exchange_timezone
+    FROM calendar_manifests
+    WHERE mic = 'XNAS'
+    ORDER BY available_at DESC, recorded_at DESC, id DESC
+    LIMIT 1
+), expected AS (
+    SELECT max(session.session_date) AS session_date
+    FROM chosen_calendar chosen
+    JOIN trading_sessions session
+      ON session.data_source_id = chosen.data_source_id
+     AND session.mic = chosen.mic
+     AND session.calendar_version = chosen.calendar_version
+     AND session.exchange_timezone = chosen.exchange_timezone
+    WHERE session.session_status = 'open'
+      AND session.close_at IS NOT NULL
+      AND session.close_at <= now()
+), latest AS (
+    SELECT (max(observed_at) AT TIME ZONE 'America/New_York')::date AS session_date,
+           COALESCE(EXTRACT(EPOCH FROM (now() - max(projected_at))) / 3600, -1)::numeric(12,2) AS age_hours
+    FROM market_price_snapshots
+)
+SELECT COALESCE(expected.session_date::text, ''),
+       COALESCE(latest.session_date::text, ''),
+       latest.age_hours
+FROM expected CROSS JOIN latest
+SQL
+)
+price_projection_row=$(run_sql "$price_projection_sql")
+IFS='|' read -r expected_price_session latest_price_session price_projection_age <<< "$price_projection_row"
+echo "projection=price age_hours=${price_projection_age:--1} latest_session=${latest_price_session:-none} expected_session=${expected_price_session:-none} freshness_basis=xnas_completed_session"
+if [[ -z "${expected_price_session:-}" || "$latest_price_session" != "$expected_price_session" ]]; then
+  echo "attention=projection_stale projection=price latest_session=${latest_price_session:-none} expected_session=${expected_price_session:-none}"
+  issues=1
+fi
+
+# Collection freshness alone cannot prove that dashboard publication ran.
+discovery_rows=$(run_sql "SELECT 'forward', COALESCE(max(market_session)::text, '') FROM discovery_latest_rankings UNION ALL SELECT 'history_rankings', COALESCE(max(market_session)::text, '') FROM discovery_backfill_rankings_history UNION ALL SELECT 'history_prices', COALESCE(max(market_session)::text, '') FROM discovery_backfill_prices_history")
+while IFS='|' read -r projection latest_session; do
+  echo "projection=$projection latest_session=${latest_session:-none} expected_session=${expected_price_session:-none}"
+  if [[ -z "${expected_price_session:-}" || "$latest_session" != "$expected_price_session" ]]; then
+    echo "attention=projection_stale projection=$projection latest_session=${latest_session:-none} expected_session=${expected_price_session:-none}"
+    issues=1
+  fi
+done <<< "$discovery_rows"
+
+macro_projection_sql=$(cat <<'SQL'
+SELECT COALESCE(EXTRACT(EPOCH FROM (now() - max(projected_at))) / 3600, -1)::numeric(12,2)
 FROM macro_observation_snapshots
 SQL
 )
-projection_rows=$(run_sql "$projection_sql")
-while IFS='|' read -r projection age_hours; do
-  echo "projection=$projection age_hours=$age_hours"
-  if awk -v age="$age_hours" -v threshold="$projection_after_hours" 'BEGIN { exit !(age < 0 || age > threshold) }'; then
-    echo "attention=projection_stale projection=$projection age_hours=$age_hours"
-    issues=1
-  fi
-done <<< "$projection_rows"
+macro_projection_age=$(run_sql "$macro_projection_sql")
+echo "projection=macro age_hours=$macro_projection_age"
+if awk -v age="$macro_projection_age" -v threshold="$projection_after_hours" 'BEGIN { exit !(age < 0 || age > threshold) }'; then
+  echo "attention=projection_stale projection=macro age_hours=$macro_projection_age"
+  issues=1
+fi
 
 disk_row=$(df -P -k -- "$data_root" | awk 'NR == 2 { gsub(/%/, "", $5); print $5 "|" $4 }')
 if [[ -z "$disk_row" ]]; then

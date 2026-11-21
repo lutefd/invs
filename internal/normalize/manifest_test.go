@@ -1,6 +1,8 @@
 package normalize
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -149,6 +151,106 @@ func TestManifestPublicationAppendsNewRowsAndKeepsLineage(t *testing.T) {
 	}
 	if err := w.ValidateExisting(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestManifestHistoryPreservesExactSnapshotsAcrossPublications(t *testing.T) {
+	root := t.TempDir()
+	w, err := NewWriter(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstAt := time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC)
+	snapshots := make(map[string][]byte)
+	var manifestPath string
+	for i := range 3 {
+		at := firstAt.Add(time.Duration(i) * 24 * time.Hour)
+		var rowsWritten int
+		manifestPath, rowsWritten, err = w.WritePrices(securityID, []model.PriceBar{price(at)})
+		if err != nil {
+			t.Fatalf("publication %d: %v", i+1, err)
+		}
+		if rowsWritten != 1 {
+			t.Fatalf("publication %d rows written=%d, want 1", i+1, rowsWritten)
+		}
+
+		current, err := os.ReadFile(manifestPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := sha256.Sum256(current)
+		hash := hex.EncodeToString(digest[:])
+		snapshots[hash] = append([]byte(nil), current...)
+
+		historyDir := filepath.Join(filepath.Dir(manifestPath), ".manifest-history")
+		entries, err := os.ReadDir(historyDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != len(snapshots) {
+			t.Fatalf("publication %d history entries=%d, want %d", i+1, len(entries), len(snapshots))
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+				t.Fatalf("unexpected manifest history entry %q", entry.Name())
+			}
+			archived, err := os.ReadFile(filepath.Join(historyDir, entry.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, ok := snapshots[strings.TrimSuffix(entry.Name(), ".json")]
+			if !ok {
+				t.Fatalf("unexpected archived snapshot %q", entry.Name())
+			}
+			if string(archived) != string(want) {
+				t.Fatalf("archived snapshot %q does not preserve exact published bytes", entry.Name())
+			}
+		}
+	}
+}
+
+func TestManifestArchiveCollisionFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	w, err := NewWriter(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestPath, _, err := w.WritePrices(securityID, []model.PriceBar{price(time.Date(2024, 1, 2, 20, 0, 0, 0, time.UTC))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(current)
+	archivePath := filepath.Join(filepath.Dir(manifestPath), ".manifest-history", hex.EncodeToString(digest[:])+".json")
+	collision := []byte("different bytes under the same content hash")
+	if err := os.WriteFile(archivePath, collision, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest, err := ReadManifest(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.IngestionRunID = "00000000-0000-4000-8000-000000000001"
+	if err := writeManifest(manifestPath, manifest, defaultPublicationOps()); err == nil || !strings.Contains(err.Error(), "manifest archive collision") {
+		t.Fatalf("writeManifest error=%v, want manifest archive collision", err)
+	}
+	after, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(current) {
+		t.Fatal("manifest pointer changed after an archive collision")
+	}
+	stored, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stored) != string(collision) {
+		t.Fatal("colliding archive contents were overwritten")
 	}
 }
 

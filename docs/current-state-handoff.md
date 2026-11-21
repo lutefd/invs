@@ -255,9 +255,14 @@ after later closes.
 Activation was recorded at 2026-09-06T20:41:05Z. Because the selected close
 predates activation, the paper stage correctly reports `awaiting_forward_session`;
 the first genuine paper decision must come from a later complete close. A user-level
-systemd timer runs the cycle at 18:30 `America/Sao_Paulo` on weekdays. Host services
-intentionally remain published on `0.0.0.0` for Tailscale access; Tailscale ACLs,
-host firewall rules, and service authentication remain part of that policy.
+systemd timer runs the cycle at 18:30 `America/Sao_Paulo` on weekdays. A separate
+daily maintenance timer at 02:15 UTC refreshes every enabled source, reconciles the
+canonical tree, and runs operational checks without coupling macro/SEC availability
+to the after-close market path. Price freshness is based on the latest completed
+XNAS session, not raw elapsed hours, so weekends and exchange holidays do not create
+false stale alerts. Host services intentionally remain published on `0.0.0.0` for
+Tailscale access; Tailscale ACLs, host firewall rules, and service authentication
+remain part of that policy.
 
 Two runtime gaps were closed for this path. Mutable Yahoo corrections at committed
 price natural keys are retained as raw evidence and explicitly quarantined while
@@ -266,6 +271,17 @@ revision without altering the committed bar. Paper account terms remain immutabl
 while each later session can pin a new strictly validated immutable input bundle and
 record a new decision fingerprint. This makes multi-day forward operation possible
 without weakening account or ledger immutability.
+
+The 2026-09-27 maintenance recovery made price freshness XNAS-session-aware and
+installed a separate daily enabled-source timer. Its first live pass exposed SEC
+facts whose declared period ends followed their publication timestamps and a stable
+filing accession whose position moved inside SEC's growing submissions array. The
+collector now retains and logs those unsafe facts as quarantined raw evidence,
+excludes them from canonical fundamentals, and treats a locator-only filing replay
+as idempotent while preserving first lineage. The same recovery made unchanged
+FRED/BCB revisions a true zero-row no-op. A full run through `invs-daily.service`
+then completed with every enabled source successful, `operational_status=ok`, and
+zero reconciliation issues.
 
 This activation still does not complete v1.0. Yahoo price fitness remains
 installation-replay/current-research only, the curated profile is not automated full

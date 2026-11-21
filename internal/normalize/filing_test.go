@@ -167,6 +167,7 @@ func TestWriteSECFilingsIgnoresChangedContainerHashForUnchangedAccession(t *test
 	retry := first
 	retry.RawPayloadHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	retry.Provenance.RawPayloadHash = retry.RawPayloadHash
+	retry.Provenance.RawRecordLocator = "filings/recent/accessionNumber/982"
 	retry.Provenance.IngestionRunID = "b2468ace-1357-4bdf-9024-6e2f59b9527a"
 	retry.Provenance.IngestedAt = first.Provenance.IngestedAt.Add(time.Hour)
 	retry.Temporal.IngestedAt = retry.Provenance.IngestedAt
@@ -175,7 +176,7 @@ func TestWriteSECFilingsIgnoresChangedContainerHashForUnchangedAccession(t *test
 		t.Fatalf("retry path=%q n=%d err=%v", path, n, err)
 	}
 	rows := rowsFromManifest[FilingRow](t, path)
-	if len(rows) != 1 || rows[0].RawPayloadHash != rawHash || rows[0].IngestionRunID != runID {
+	if len(rows) != 1 || rows[0].RawPayloadHash != rawHash || rows[0].IngestionRunID != runID || rows[0].RawRecordLocator != first.Provenance.RawRecordLocator {
 		t.Fatalf("retry replaced first raw lineage: %+v", rows)
 	}
 
@@ -199,6 +200,64 @@ func TestFilingParquetTimestampPhysicalTypes(t *testing.T) {
 		column, ok := parquet.SchemaOf(new(FilingRow)).Lookup(name)
 		if !ok || column.Node.Type().Kind() != parquet.Int64 {
 			t.Fatalf("%s schema=%v want INT64 timestamp", name, column.Node)
+		}
+	}
+}
+
+func TestWriteSECFilingsQuarantiningRetainsCommittedAndAdmitsNew(t *testing.T) {
+	w, _ := NewWriter(t.TempDir())
+	acceptedAt := time.Date(2026, 9, 29, 18, 30, 23, 0, time.UTC)
+	first := filingForTest("0001140361-26-038021", rawHash, runID, acceptedAt.Add(time.Hour))
+	first.Source = "sec"
+	first.DocumentURL = "https://www.sec.gov/Archives/edgar/data/320193/000114036126038021/form4.xml"
+	first.AccessionNumber = first.SourceDocumentID
+	first.FormType = "4"
+	first.PrimaryDocument = "form4.xml"
+	first.Category, first.DocumentType, first.Species, first.Subject, first.PresentationType = "", "", "", "", ""
+	first.Temporal.ObservedAt = time.Time{}
+	first.Temporal.ObservedPrecision = model.PrecisionUnknown
+	first.Temporal.PublishedAt = acceptedAt
+	first.Temporal.PublishedPrecision = model.PrecisionSecond
+	first.Temporal.AvailableAt = acceptedAt
+	if _, n, err := w.WriteFilings(issuerID, []model.Filing{first}); err != nil || n != 1 {
+		t.Fatalf("initial n=%d err=%v", n, err)
+	}
+
+	// Simulate SEC backfilling acceptanceDateTime (+4h EDT->UTC) alongside a new filing.
+	revised := first
+	revised.Temporal.PublishedAt = acceptedAt.Add(4 * time.Hour)
+	revised.Temporal.AvailableAt = acceptedAt.Add(4 * time.Hour)
+	revised.RawPayloadHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	revised.Provenance.RawPayloadHash = revised.RawPayloadHash
+	revised.Provenance.RawRecordLocator = "filings/recent/accessionNumber/32"
+	revised.Provenance.IngestionRunID = "b2468ace-1357-4bdf-9024-6e2f59b9527a"
+	revised.Provenance.IngestedAt = first.Provenance.IngestedAt.Add(24 * time.Hour)
+	revised.Temporal.IngestedAt = revised.Provenance.IngestedAt
+
+	fresh := revised
+	fresh.ID = "2c4e99f6-66c9-4eb6-b7cf-3f88f0a88312"
+	fresh.SourceDocumentID = "0001140361-26-099999"
+	fresh.AccessionNumber = fresh.SourceDocumentID
+	fresh.DocumentURL = "https://www.sec.gov/Archives/edgar/data/320193/000114036126099999/form4.xml"
+	fresh.Provenance.RawRecordLocator = "filings/recent/accessionNumber/0"
+
+	res, err := w.WriteFilingsQuarantining(issuerID, []model.Filing{revised, fresh})
+	if err != nil {
+		t.Fatalf("WriteFilingsQuarantining err=%v", err)
+	}
+	if res.RowsChanged != 1 {
+		t.Fatalf("RowsChanged=%d want 1", res.RowsChanged)
+	}
+	if len(res.ConflictKeys) != 1 || res.ConflictKeys[0] != "sec\x1f0001140361-26-038021" {
+		t.Fatalf("ConflictKeys=%v want [sec\\x1f0001140361-26-038021]", res.ConflictKeys)
+	}
+	rows := rowsFromManifest[FilingRow](t, res.Path)
+	if len(rows) != 2 {
+		t.Fatalf("rows=%d want 2", len(rows))
+	}
+	for _, row := range rows {
+		if row.SourceDocumentID == first.SourceDocumentID && row.PublishedAt != acceptedAt.UnixMicro() {
+			t.Fatalf("committed filing published_at mutated: got %d want %d", row.PublishedAt, acceptedAt.UnixMicro())
 		}
 	}
 }

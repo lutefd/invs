@@ -40,6 +40,16 @@ type Result struct {
 	Raw                              []byte
 	SHA256                           string
 	RecordsReceived, RecordsRejected int
+	RecordsMissing                   int
+	MissingBars                      []MissingBarObservation
+}
+
+// MissingBarObservation identifies a historical Yahoo timestamp for which the
+// provider returned explicit nulls for every OHLCV field. The response itself
+// remains available in Resources and is retained by the collector.
+type MissingBarObservation struct {
+	SessionDate string
+	Reason      string
 }
 
 func (c *Client) HistoricalPrices(ctx context.Context, req model.HistoricalPriceRequest) ([]model.PriceBar, []byte, error) {
@@ -74,8 +84,10 @@ func (c *Client) Collect(ctx context.Context, req model.HistoricalPriceRequest) 
 		Raw:            resource.Bytes,
 		SHA256:         resource.SHA256,
 	}
-	bars, received, rejected, err := parse(resource.Bytes, req.SecurityID, req.Currency, fetchedAt)
+	bars, received, rejected, missing, err := parse(resource.Bytes, req.SecurityID, req.Currency, fetchedAt)
 	result.Bars, result.RecordsReceived, result.RecordsRejected = bars, received, rejected
+	result.MissingBars = missing
+	result.RecordsMissing = len(missing)
 	if err != nil {
 		return result, err
 	}
@@ -104,12 +116,55 @@ type chartResult struct {
 	Meta struct {
 		Currency             string `json:"currency"`
 		ExchangeTimezoneName string `json:"exchangeTimezoneName"`
+		FirstTradeDate       int64  `json:"firstTradeDate"`
 	} `json:"meta"`
 	Timestamp  []int64 `json:"timestamp"`
 	Indicators struct {
 		Quote []quote `json:"quote"`
 	} `json:"indicators"`
 }
+
+// FirstTradeDate returns Yahoo's earliest available observation date for a
+// symbol, normalized to its exchange timezone. It is vendor-history metadata,
+// not an official listing-date assertion.
+func (c *Client) FirstTradeDate(ctx context.Context, symbol string) (time.Time, error) {
+	if c == nil || c.http == nil {
+		return time.Time{}, fmt.Errorf("Yahoo HTTP client is required")
+	}
+	u, err := chartURL(c.baseURL, symbol)
+	if err != nil {
+		return time.Time{}, err
+	}
+	now := c.now().UTC()
+	query := u.Query()
+	query.Set("period1", strconv.FormatInt(now.AddDate(0, 0, -30).Unix(), 10))
+	query.Set("period2", strconv.FormatInt(now.AddDate(0, 0, 1).Unix(), 10))
+	query.Set("interval", "1d")
+	query.Set("events", "history")
+	u.RawQuery = query.Encode()
+	body, err := c.http.Get(ctx, u.String())
+	if err != nil {
+		return time.Time{}, fmt.Errorf("Yahoo history metadata %s: %w", symbol, err)
+	}
+	var raw response
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return time.Time{}, fmt.Errorf("decode Yahoo history metadata %s: %w", symbol, err)
+	}
+	if raw.Chart.Error != nil {
+		return time.Time{}, fmt.Errorf("Yahoo API %s: %s", raw.Chart.Error.Code, raw.Chart.Error.Description)
+	}
+	if len(raw.Chart.Result) != 1 || raw.Chart.Result[0].Meta.FirstTradeDate <= 0 {
+		return time.Time{}, fmt.Errorf("Yahoo did not provide a first-trade date for %s", symbol)
+	}
+	meta := raw.Chart.Result[0].Meta
+	location, err := time.LoadLocation(meta.ExchangeTimezoneName)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("Yahoo exchange timezone %q: %w", meta.ExchangeTimezoneName, err)
+	}
+	day := time.Unix(meta.FirstTradeDate, 0).In(location)
+	return time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC), nil
+}
+
 type quote struct {
 	Open   []*json.Number `json:"open"`
 	High   []*json.Number `json:"high"`
@@ -118,34 +173,57 @@ type quote struct {
 	Volume []*json.Number `json:"volume"`
 }
 
-func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.PriceBar, int, int, error) {
+func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.PriceBar, int, int, []MissingBarObservation, error) {
 	ingested = ingested.UTC().Truncate(time.Microsecond)
 	var raw response
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.UseNumber()
 	if err := dec.Decode(&raw); err != nil {
-		return nil, 0, 0, fmt.Errorf("decode Yahoo response: %w", err)
+		return nil, 0, 0, nil, fmt.Errorf("decode Yahoo response: %w", err)
 	}
 	if raw.Chart.Error != nil {
-		return nil, 0, 0, fmt.Errorf("Yahoo API %s: %s", raw.Chart.Error.Code, raw.Chart.Error.Description)
+		return nil, 0, 0, nil, fmt.Errorf("Yahoo API %s: %s", raw.Chart.Error.Code, raw.Chart.Error.Description)
 	}
 	if len(raw.Chart.Result) != 1 || len(raw.Chart.Result[0].Indicators.Quote) != 1 {
-		return nil, 0, 0, fmt.Errorf("unexpected Yahoo chart result")
+		return nil, 0, 0, nil, fmt.Errorf("unexpected Yahoo chart result")
 	}
 	r := raw.Chart.Result[0]
 	if r.Meta.Currency != "" && r.Meta.Currency != currency {
-		return nil, 0, 0, fmt.Errorf("Yahoo currency %q does not match configured %q", r.Meta.Currency, currency)
+		return nil, 0, 0, nil, fmt.Errorf("Yahoo currency %q does not match configured %q", r.Meta.Currency, currency)
 	}
 	loc, err := time.LoadLocation(r.Meta.ExchangeTimezoneName)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("Yahoo exchange timezone %q: %w", r.Meta.ExchangeTimezoneName, err)
+		return nil, 0, 0, nil, fmt.Errorf("Yahoo exchange timezone %q: %w", r.Meta.ExchangeTimezoneName, err)
 	}
 	q := r.Indicators.Quote[0]
 	received, rejected := len(r.Timestamp), 0
+	var missing []MissingBarObservation
+	var latestTimestamp int64
+	if len(r.Timestamp) > 0 {
+		latestTimestamp = r.Timestamp[0]
+		for _, ts := range r.Timestamp[1:] {
+			if ts > latestTimestamp {
+				latestTimestamp = ts
+			}
+		}
+	}
 	unique := map[string]model.PriceBar{}
 	hash := digest(b)
 	for i, ts := range r.Timestamp {
-		if i >= len(q.Open) || i >= len(q.High) || i >= len(q.Low) || i >= len(q.Close) || i >= len(q.Volume) || q.Open[i] == nil || q.High[i] == nil || q.Low[i] == nil || q.Close[i] == nil || q.Volume[i] == nil {
+		day := time.Unix(ts, 0).In(loc)
+		closeAt := time.Date(day.Year(), day.Month(), day.Day(), 16, 0, 0, 0, loc).UTC()
+		if closeAt.After(ingested) {
+			continue
+		}
+		arraysContainTimestamp := i < len(q.Open) && i < len(q.High) && i < len(q.Low) && i < len(q.Close) && i < len(q.Volume)
+		if !arraysContainTimestamp || q.Open[i] == nil || q.High[i] == nil || q.Low[i] == nil || q.Close[i] == nil || q.Volume[i] == nil {
+			if ts == latestTimestamp {
+				continue
+			}
+			if arraysContainTimestamp && q.Open[i] == nil && q.High[i] == nil && q.Low[i] == nil && q.Close[i] == nil && q.Volume[i] == nil {
+				missing = append(missing, MissingBarObservation{SessionDate: day.Format(time.DateOnly), Reason: "all_ohlcv_null"})
+				continue
+			}
 			rejected++
 			continue
 		}
@@ -156,11 +234,6 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 		volume, e4 := model.CanonicalDecimal(q.Volume[i].String(), true)
 		if e0 != nil || e1 != nil || e2 != nil || e3 != nil || e4 != nil || compareDecimal(low, high) > 0 || compareDecimal(open, low) < 0 || compareDecimal(open, high) > 0 || compareDecimal(closeValue, low) < 0 || compareDecimal(closeValue, high) > 0 {
 			rejected++
-			continue
-		}
-		day := time.Unix(ts, 0).In(loc)
-		closeAt := time.Date(day.Year(), day.Month(), day.Day(), 16, 0, 0, 0, loc).UTC()
-		if closeAt.After(ingested) {
 			continue
 		}
 		key := closeAt.Format("2006-01-02")
@@ -174,7 +247,7 @@ func parse(b []byte, securityID, currency string, ingested time.Time) ([]model.P
 		bars = append(bars, v)
 	}
 	sort.Slice(bars, func(i, j int) bool { return bars[i].Temporal.ObservedAt.Before(bars[j].Temporal.ObservedAt) })
-	return bars, received, rejected, nil
+	return bars, received, rejected, missing, nil
 }
 func digest(b []byte) string { return providers.SHA256(b) }
 func compareDecimal(a, b string) int {

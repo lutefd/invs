@@ -58,20 +58,23 @@ type Report struct {
 	NormalizedPartHashMismatches          []HashFinding    `json:"normalized_part_hash_mismatches"`
 	FeatureArtifactErrors                 []PathFinding    `json:"feature_artifact_errors"`
 	FeatureArtifactsWithUnavailableInputs []FeatureFinding `json:"feature_artifacts_with_unavailable_inputs"`
+	FeatureArtifactLineageAdvisories      []PathFinding    `json:"feature_artifact_lineage_advisories"`
 }
 
 type Summary struct {
-	TotalIssues                           int `json:"total_issues"`
-	QueuedOrRunning                       int `json:"queued_or_running"`
-	RawManifestsWithoutTerminalRun        int `json:"raw_manifests_without_terminal_run"`
-	RawManifestErrors                     int `json:"raw_manifest_errors"`
-	RawManifestHashMismatches             int `json:"raw_manifest_hash_mismatches"`
-	InvalidNormalizedManifests            int `json:"invalid_normalized_manifests"`
-	UnlistedNormalizedParts               int `json:"unlisted_normalized_parts"`
-	MissingNormalizedParts                int `json:"missing_normalized_parts"`
-	NormalizedPartHashMismatches          int `json:"normalized_part_hash_mismatches"`
-	FeatureArtifactErrors                 int `json:"feature_artifact_errors"`
-	FeatureArtifactsWithUnavailableInputs int `json:"feature_artifacts_with_unavailable_inputs"`
+	Status                                string `json:"status"`
+	TotalIssues                           int    `json:"total_issues"`
+	QueuedOrRunning                       int    `json:"queued_or_running"`
+	RawManifestsWithoutTerminalRun        int    `json:"raw_manifests_without_terminal_run"`
+	RawManifestErrors                     int    `json:"raw_manifest_errors"`
+	RawManifestHashMismatches             int    `json:"raw_manifest_hash_mismatches"`
+	InvalidNormalizedManifests            int    `json:"invalid_normalized_manifests"`
+	UnlistedNormalizedParts               int    `json:"unlisted_normalized_parts"`
+	MissingNormalizedParts                int    `json:"missing_normalized_parts"`
+	NormalizedPartHashMismatches          int    `json:"normalized_part_hash_mismatches"`
+	FeatureArtifactErrors                 int    `json:"feature_artifact_errors"`
+	FeatureArtifactsWithUnavailableInputs int    `json:"feature_artifacts_with_unavailable_inputs"`
+	FeatureArtifactLineageAdvisories      int    `json:"feature_artifact_lineage_advisories"`
 }
 
 type RunFinding struct {
@@ -141,6 +144,7 @@ func Reconcile(ctx context.Context, roots Roots, runs []RunRecord, now time.Time
 		NormalizedPartHashMismatches:          make([]HashFinding, 0),
 		FeatureArtifactErrors:                 make([]PathFinding, 0),
 		FeatureArtifactsWithUnavailableInputs: make([]FeatureFinding, 0),
+		FeatureArtifactLineageAdvisories:      make([]PathFinding, 0),
 	}
 
 	for _, run := range runs {
@@ -422,12 +426,18 @@ func scanFeatures(report *Report, roots Roots) error {
 				}
 			}
 		}
-		inputs := unavailableFeatureInputs(manifest, roots)
+		inputs, degradedManifests := unavailableFeatureInputs(manifest, roots)
 		if len(inputs) > 0 {
 			report.FeatureArtifactsWithUnavailableInputs = append(report.FeatureArtifactsWithUnavailableInputs, FeatureFinding{
 				Path:   displayPath(path, roots.DataRoot),
 				Detail: "feature artifact lineage cannot be resolved to available normalized manifests and parts",
 				Inputs: inputs,
+			})
+		} else if len(degradedManifests) > 0 {
+			report.FeatureArtifactLineageAdvisories = append(report.FeatureArtifactLineageAdvisories, PathFinding{
+				Path: displayPath(path, roots.DataRoot),
+				Detail: "degraded lineage verification: exact historical normalized manifest archive is unavailable; " +
+					"selected parts were verified against the current valid append-only manifests: " + strings.Join(degradedManifests, ", "),
 			})
 		}
 		return nil
@@ -631,8 +641,9 @@ func validUTCTimestamp(value string) bool {
 	return err == nil && strings.HasSuffix(value, "Z") && parsed.UTC().Format(time.RFC3339Nano) == value
 }
 
-func unavailableFeatureInputs(manifest featureManifest, roots Roots) []InputFinding {
+func unavailableFeatureInputs(manifest featureManifest, roots Roots) ([]InputFinding, []string) {
 	findings := make([]InputFinding, 0)
+	degradedManifests := make([]string, 0)
 	selectedManifests := make([]struct {
 		path     string
 		manifest normalize.Manifest
@@ -644,24 +655,65 @@ func unavailableFeatureInputs(manifest featureManifest, roots Roots) []InputFind
 			findings = append(findings, InputFinding{Kind: "manifest", Path: input.Path, Expected: input.SHA256, Detail: err.Error()})
 			continue
 		}
-		actual, hashErr := hashFile(path)
-		if errors.Is(hashErr, os.ErrNotExist) {
-			findings = append(findings, InputFinding{Kind: "manifest", Path: input.Path, Expected: input.SHA256, Detail: "selected normalized manifest is missing"})
+		currentHash, currentHashErr := hashFile(path)
+		if currentHashErr == nil && currentHash == input.SHA256 {
+			normalizedManifest, readErr := normalize.ReadManifest(path)
+			if readErr != nil {
+				findings = append(findings, InputFinding{Kind: "manifest", Path: input.Path, Expected: input.SHA256, Detail: "selected normalized manifest is structurally invalid: " + readErr.Error()})
+				continue
+			}
+			selectedManifests = append(selectedManifests, struct {
+				path     string
+				manifest normalize.Manifest
+				dir      string
+			}{path: input.Path, manifest: normalizedManifest, dir: filepath.Dir(path)})
 			continue
 		}
-		if hashErr != nil {
-			findings = append(findings, InputFinding{Kind: "manifest", Path: input.Path, Expected: input.SHA256, Detail: "selected normalized manifest is unreadable: " + hashErr.Error()})
+
+		// Feature artifacts pin the exact normalized manifest bytes. Newer
+		// writers preserve those bytes in a content-addressed sibling archive,
+		// so a later append to the current pointer does not break lineage.
+		archivePath := filepath.Join(filepath.Dir(path), ".manifest-history", input.SHA256+".json")
+		archiveHash, archiveHashErr := hashFile(archivePath)
+		if archiveHashErr == nil {
+			if archiveHash != input.SHA256 {
+				findings = append(findings, InputFinding{Kind: "manifest", Path: filepath.ToSlash(filepath.Join(filepath.Dir(input.Path), ".manifest-history", input.SHA256+".json")), Expected: input.SHA256, Actual: archiveHash, Detail: "historical normalized manifest archive hash differs from its content-addressed name"})
+				continue
+			}
+			normalizedManifest, readErr := normalize.ReadManifest(archivePath)
+			if readErr != nil {
+				findings = append(findings, InputFinding{Kind: "manifest", Path: filepath.ToSlash(filepath.Join(filepath.Dir(input.Path), ".manifest-history", input.SHA256+".json")), Expected: input.SHA256, Detail: "historical normalized manifest archive is structurally invalid: " + readErr.Error()})
+				continue
+			}
+			selectedManifests = append(selectedManifests, struct {
+				path     string
+				manifest normalize.Manifest
+				dir      string
+			}{path: input.Path, manifest: normalizedManifest, dir: filepath.Dir(path)})
 			continue
 		}
-		if actual != input.SHA256 {
-			findings = append(findings, InputFinding{Kind: "manifest", Path: input.Path, Expected: input.SHA256, Actual: actual, Detail: "selected normalized manifest hash differs from feature lineage"})
+		if !errors.Is(archiveHashErr, os.ErrNotExist) {
+			findings = append(findings, InputFinding{Kind: "manifest", Path: filepath.ToSlash(filepath.Join(filepath.Dir(input.Path), ".manifest-history", input.SHA256+".json")), Expected: input.SHA256, Detail: "historical normalized manifest archive is unreadable: " + archiveHashErr.Error()})
 			continue
 		}
+		if currentHashErr != nil {
+			detail := "selected normalized manifest is missing"
+			if !errors.Is(currentHashErr, os.ErrNotExist) {
+				detail = "selected normalized manifest is unreadable: " + currentHashErr.Error()
+			}
+			findings = append(findings, InputFinding{Kind: "manifest", Path: input.Path, Expected: input.SHA256, Detail: detail})
+			continue
+		}
+		// Legacy publications predate exact manifest archives. Accept their
+		// lineage only through the current structurally valid append-only
+		// pointer; the later part check below still requires every pinned part
+		// to be listed and to hash to its recorded SHA-256.
 		normalizedManifest, readErr := normalize.ReadManifest(path)
 		if readErr != nil {
-			findings = append(findings, InputFinding{Kind: "manifest", Path: input.Path, Expected: input.SHA256, Detail: "selected normalized manifest is structurally invalid: " + readErr.Error()})
+			findings = append(findings, InputFinding{Kind: "manifest", Path: input.Path, Expected: input.SHA256, Actual: currentHash, Detail: "selected normalized manifest hash differs from feature lineage and current manifest is structurally invalid: " + readErr.Error()})
 			continue
 		}
+		degradedManifests = append(degradedManifests, input.Path)
 		selectedManifests = append(selectedManifests, struct {
 			path     string
 			manifest normalize.Manifest
@@ -692,7 +744,11 @@ func unavailableFeatureInputs(manifest featureManifest, roots Roots) []InputFind
 			findings = append(findings, InputFinding{Kind: "part", Path: input.Path, Expected: input.SHA256, Detail: "selected part is not listed by any selected normalized manifest"})
 		}
 	}
-	return findings
+	if len(findings) > 0 {
+		return findings, nil
+	}
+	slices.Sort(degradedManifests)
+	return findings, degradedManifests
 }
 
 func safeRelativeChild(dir, name string) (string, error) {
@@ -754,6 +810,7 @@ func isTerminal(status string) bool {
 
 func (r Report) summary() Summary {
 	summary := Summary{
+		Status:                                "ok",
 		QueuedOrRunning:                       len(r.QueuedOrRunning),
 		RawManifestsWithoutTerminalRun:        len(r.RawManifestsWithoutTerminalRun),
 		RawManifestErrors:                     len(r.RawManifestErrors),
@@ -764,12 +821,18 @@ func (r Report) summary() Summary {
 		NormalizedPartHashMismatches:          len(r.NormalizedPartHashMismatches),
 		FeatureArtifactErrors:                 len(r.FeatureArtifactErrors),
 		FeatureArtifactsWithUnavailableInputs: len(r.FeatureArtifactsWithUnavailableInputs),
+		FeatureArtifactLineageAdvisories:      len(r.FeatureArtifactLineageAdvisories),
 	}
 	summary.TotalIssues = summary.QueuedOrRunning + summary.RawManifestsWithoutTerminalRun +
 		summary.RawManifestErrors + summary.RawManifestHashMismatches +
 		summary.InvalidNormalizedManifests + summary.UnlistedNormalizedParts +
 		summary.MissingNormalizedParts + summary.NormalizedPartHashMismatches +
 		summary.FeatureArtifactErrors + summary.FeatureArtifactsWithUnavailableInputs
+	if summary.TotalIssues > 0 {
+		summary.Status = "issues"
+	} else if summary.FeatureArtifactLineageAdvisories > 0 {
+		summary.Status = "degraded"
+	}
 	return summary
 }
 
@@ -799,5 +862,8 @@ func sortReport(report *Report) {
 	})
 	sort.Slice(report.FeatureArtifactsWithUnavailableInputs, func(i, j int) bool {
 		return report.FeatureArtifactsWithUnavailableInputs[i].Path < report.FeatureArtifactsWithUnavailableInputs[j].Path
+	})
+	sort.Slice(report.FeatureArtifactLineageAdvisories, func(i, j int) bool {
+		return report.FeatureArtifactLineageAdvisories[i].Path < report.FeatureArtifactLineageAdvisories[j].Path
 	})
 }

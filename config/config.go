@@ -667,11 +667,9 @@ func (c Config) Validate() error {
 			errs = append(errs, fmt.Errorf("%s: yahoo_symbol required when prices enabled", pfx))
 		}
 		{
-			validFrom, err := time.Parse("2006-01-02", s.IdentifierValidFrom)
+			_, err := time.Parse("2006-01-02", s.IdentifierValidFrom)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("%s: identifier_valid_from must be ISO date", pfx))
-			} else if start, parseErr := time.Parse("2006-01-02", c.Providers.Prices.Start); c.Providers.Prices.Enabled && parseErr == nil && validFrom.After(start) {
-				errs = append(errs, fmt.Errorf("%s: identifier_valid_from must not follow prices.start", pfx))
 			}
 		}
 	}

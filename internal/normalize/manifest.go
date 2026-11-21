@@ -314,6 +314,18 @@ func writeManifest(path string, manifest Manifest, ops publicationOps) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
+	// Keep exact, content-addressed copies of every published pointer. Feature
+	// artifacts pin its bytes even after the mutable current pointer advances.
+	if previous, err := os.ReadFile(path); err == nil {
+		if err := archiveManifest(path, previous); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := archiveManifest(path, contents); err != nil {
+		return err
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".manifest-*")
 	if err != nil {
 		return err
@@ -347,6 +359,71 @@ func writeManifest(path string, manifest Manifest, ops publicationOps) error {
 	}
 	removeTemp = false
 	return ops.syncDir(filepath.Dir(path))
+}
+
+func archiveManifest(path string, contents []byte) error {
+	digest := sha256.Sum256(contents)
+	dir := filepath.Join(filepath.Dir(path), ".manifest-history")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return err
+	}
+	// Persist the history directory entry before publishing files inside it.
+	if err := syncDirectoryPath(filepath.Dir(dir)); err != nil {
+		return err
+	}
+	archive := filepath.Join(dir, hex.EncodeToString(digest[:])+".json")
+	tmp, err := os.CreateTemp(dir, ".manifest-archive-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	removeTemp := true
+	defer func() {
+		if removeTemp {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if err := tmp.Chmod(0o640); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if n, err := tmp.Write(contents); err != nil {
+		_ = tmp.Close()
+		return err
+	} else if n != len(contents) {
+		_ = tmp.Close()
+		return io.ErrShortWrite
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	// Linking publishes the fully written snapshot atomically and fails rather
+	// than replacing an existing content-addressed entry.
+	if err := os.Link(tmpName, archive); errors.Is(err, os.ErrExist) {
+		stored, readErr := os.ReadFile(archive)
+		if readErr != nil {
+			return readErr
+		}
+		if !bytes.Equal(stored, contents) {
+			return fmt.Errorf("manifest archive collision: %s", archive)
+		}
+		if err := os.Remove(tmpName); err != nil {
+			return err
+		}
+		removeTemp = false
+		return syncDirectoryPath(dir)
+	} else if err != nil {
+		return err
+	}
+	if err := os.Remove(tmpName); err != nil {
+		return err
+	}
+	removeTemp = false
+	return syncDirectoryPath(dir)
 }
 
 func partitionIdentityFromDir(root, dir string) (map[string]string, error) {

@@ -78,6 +78,8 @@ def _fmt(value: Decimal, places: str = "0.000000000001") -> str:
 
 
 def _percentiles(values: Mapping[str, Decimal], *, higher_is_better: bool = True) -> dict[str, Decimal]:
+    if not values:
+        return {}
     if len(values) == 1:
         return {key: Decimal("0.5") for key in values}
     result: dict[str, Decimal] = {}

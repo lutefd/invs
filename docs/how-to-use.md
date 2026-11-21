@@ -85,11 +85,22 @@ make health
 make urls
 ```
 
-`make up` starts PostgreSQL, JupyterLab, and Grafana. The collector is a batch
-job and is intentionally not a long-running health-checked service; run it
-with `make ingest` below. `make urls` prints the Jupyter URL and the configured
-Grafana URL. Ports default to PostgreSQL `5432`, Jupyter `8888`, and Grafana
-`3000`; `.env` can override them.
+`make up` starts PostgreSQL, JupyterLab, Grafana, and the stock manager. The
+collector is a batch job and is intentionally not a long-running health-checked
+service; run it with `make ingest` below. `make urls` prints local UI URLs and,
+when configured, Tailnet URLs for Grafana and the stock manager. PostgreSQL and
+Jupyter remain bound only to `127.0.0.1`. Grafana and the stock manager use the
+same configured port for their local and explicit Tailnet bindings; without a
+Tailnet address, both remain loopback-only.
+
+To open the two UIs from another device on your Tailnet, add the machine's
+Tailscale IPv4 address to `.env` as `INVS_TAILSCALE_IPV4=100.x.y.z`, then run
+`make up`. The stock manager is reachable at `http://<tailscale-ip>:8090` and
+Grafana at `http://<tailscale-ip>:<GRAFANA_PORT>` (default port `3000`). The
+address must be in Tailscale's `100.64.0.0/10` range. The Grafana link to the
+manager uses this address, and the manager's dashboard link uses the host from
+the browser URL. Keep Tailnet ACLs limited to trusted users: Grafana requires
+sign-in, and the stock manager can change the tracked universe.
 
 To verify the v0.2 historical metadata boundary against PostgreSQL, run
 `make historical-truth-db-test`. It uses isolated fixtures and a disposable fresh
@@ -1499,7 +1510,7 @@ its limitations are in the [resilience acceptance report](acceptance/2026-08-30-
 For the first unattended real-market path, the repository includes a curated
 20-security Nasdaq-100 starter profile at
 `config/universes/nasdaq-100-starter.yaml`. The local collector configuration is
-the source of ticker/identifier mappings; the profile adds paper-risk metadata and
+the source of ticker/identifier mappings; the profile adds research metadata and
 the explicit 2026-09-06 membership-admission boundary.
 
 Run one complete operator pass:
@@ -1522,11 +1533,12 @@ retry finds an existing paper report for that session, it reuses the report's
 immutable decision clock before validation and execution, allowing the scheduler to
 resume idempotently without changing the paper record.
 
-Install the user-level systemd timer after validating one manual pass:
+Install the user-level systemd timers after validating one manual pass:
 
 ```sh
 make install-market-timer
-systemctl --user list-timers invs-market-cycle.timer
+systemctl --user list-timers invs-daily.timer invs-market-cycle.timer
+journalctl --user -u invs-daily.service -n 100 --no-pager
 journalctl --user -u invs-market-cycle.service -n 100 --no-pager
 ```
 
@@ -1540,18 +1552,98 @@ absolute `sg` tool as `sg docker -c "<absolute-make> market-cycle"`. Installatio
 fails closed unless `sg`, the `docker` group, and current-user membership are
 available; do not add `SupplementaryGroups=docker` to this user unit.
 Re-run `make install-market-timer` after changing the host Make installation or
-repository path; do not hand-edit the generated unit under `~/.config/systemd`.
+repository path; do not hand-edit the generated units under `~/.config/systemd`.
 
-The timer runs Monday through Friday at 18:30 `America/Sao_Paulo`, after the US
-regular close in both daylight-saving regimes. Runtime state is under
+The maintenance timer runs every day at 02:15 UTC and refreshes every enabled
+source, reconciles storage, and runs operational checks. It is independent from the
+market timer, which runs Monday through Friday at 18:30 `America/Sao_Paulo`, after
+the US regular close in both daylight-saving regimes. `make ops-status` evaluates
+Yahoo and price freshness against the latest completed XNAS session rather than a
+wall-clock age, so weekends and market holidays are not reported as missing data.
+Runtime state is under
 `.runtime/market-cycle/`, logs are under `logs/`, canonical features remain under
 `data/features/`, and operator snapshots plus the paper ledger are under
 `data/research/forward/nasdaq-100-starter/`. Each snapshot directory includes a
 human-readable `market-snapshot.json` with ticker, close, currency, basis,
-availability, and source-record locator for all 20 securities.
+availability, and source-record locator for every configured security.
 
-The discovery index ranks every eligible starter-universe security using
-cross-sectional percentiles: 3-month return (25%), 6-month return (30%), 12-month
+### Add and visualize a tracked stock
+
+The local stock manager edits the collector universe and discovery profile
+together. Start it with the rest of the app using `make up`, or on its own with:
+
+```sh
+make stock-ui
+```
+
+Open the Stock manager URL printed by `make urls` (local by default). Add the
+ticker, its Yahoo symbol, company name, sector, optional themes, ticker-valid-from
+date, and universe membership date.
+The valid-from date should reflect when that ticker mapping became valid. For a
+new mapping the manager creates stable security and issuer IDs, validates the
+updated collector config and profile, and saves protected backups under
+`data/research/stock-manager/backups/`. If the security already exists in the
+collector config, the manager reuses its IDs and adds it to the discovery profile.
+
+Price collection starts each ticker at the later of `providers.prices.start` and
+that security's `identifier_valid_from`. This lets a recently listed stock join
+without requesting prices before the mapping was valid or changing the history
+start for other names. The profile membership date cannot move backwards or into
+the future. A newly added ticker enters the next eligible `make market-cycle`
+index; already published market sessions remain immutable. The installed weekday
+timer picks it up automatically after a new close.
+
+In Grafana, use the **Ticker** filter to focus the forward rank table, candidate
+history, score history, and retrospective views. The **Manage tracked stocks**
+dashboard link opens the stock manager. Historical views remain explicitly
+retrospective and use the captured profile snapshot. The scheduled cycle ranks
+the current full Nasdaq-100 snapshot together with stocks you track manually;
+it does not search every listed stock on an exchange.
+
+### Full Nasdaq-100 constituent refresh
+
+The stock manager's **Refresh Nasdaq-100** button and `make nasdaq100-sync` use
+Nasdaq GIW Web Services when GIW credentials are configured. Add
+`INVS_NASDAQ_GIW_USERNAME` and `INVS_NASDAQ_GIW_PASSWORD` to the untracked
+`.env` file. The manager sends them only in the HTTPS form body, requests the
+NDX end-of-day weighting file, and searches the latest eight calendar days for
+the most recent complete trading-day file. `INVS_NASDAQ_SOURCE=giw` can force
+GIW mode; missing credentials or index entitlement keep the existing complete
+roster active and report the failure. With no GIW credentials configured, the
+manager still uses Nasdaq's current website feed as a temporary fallback.
+`INVS_NASDAQ_SOURCE=website` explicitly selects that fallback. The daily
+`make market-cycle` refreshes the selected source before collecting prices.
+Complete responses are validated, retained under
+`data/research/stock-manager/nasdaq-100-snapshots/`, and merged with manually
+tracked names. Stable ticker-based IDs are reused on later refreshes. Newly
+added tickers use Yahoo's reported earliest history date when available; if that
+lookup fails, the mapping starts on the snapshot date and the manager reports
+that history needs review. A failed or partial source response leaves the last
+complete universe active.
+
+GIW is Nasdaq's authenticated REST API for current and historical constituent
+weighting files, so it is the supported automated source. The public website
+fallback needs no account and is requested over HTTP/1.1 with browser-style
+headers because Nasdaq's endpoint resets HTTP/2 streams and stalls on the app's
+SEC-style user agent in this environment. The feed can return a date-only
+snapshot, which the manager handles. It remains an undocumented UI feed that
+may change; a failed or partial response leaves the last complete roster
+active. Yahoo continues to supply price history, but its **Most Actives —
+NASDAQ 100** screen is not used to replace the member roster: a live check on
+2026-09-26 returned AZN and omitted GOOG, while Nasdaq had already announced
+[AZN's replacement by Walmart](https://www.nasdaq.com/press-release/walmart-inc-join-nasdaq-100-indexr-beginning-january-20th-2026-2026-01-10).
+Nasdaq's [May 1 component factsheet](https://www.nasdaq.com/docs/2026/05/04/NDX.pdf)
+still lists GOOG. Treat Yahoo's screen as a discovery view only. The index is
+current research, and the retrospective backfill remains labeled hindsight. Do
+not project the current list into earlier point-in-time universes.
+
+The retrospective backfill includes every member in the captured current
+profile. A name with no installed prices remains in each session as a rejected
+row with `missing_price_bar_for_market_session`; it no longer aborts the whole
+backfill. Missing bars are not synthesized.
+
+The discovery index ranks every eligible Nasdaq-100 and manually tracked security
+using cross-sectional percentiles: 3-month return (25%), 6-month return (30%), 12-month
 return (30%), lower 1-month realized volatility (10%), and shallower 1-month maximum
 drawdown (5%). The top five are labeled `candidate`; that label means
 `research_watchlist_only` and never creates or changes a paper order. Missing or null
@@ -1569,6 +1661,63 @@ docker compose exec -T postgres sh -c \
   "SELECT market_session, rank, ticker, score, candidate
    FROM discovery_latest_rankings ORDER BY rank NULLS LAST"'
 ```
+
+### Retrospective three-month price and ranking backfill
+
+To reconstruct daily prices and discovery ranks for the latest three calendar
+months, run:
+
+```sh
+START_DATE=2026-06-22 \
+END_DATE=2026-09-22 \
+EXPECTED_SESSION_COUNT=65 \
+EXPECTED_START_DATE=2026-06-22 \
+EXPECTED_END_DATE=2026-09-22 \
+make discovery-backfill MONTHS=3
+```
+
+The explicit start and end dates retain the 2026-06-22 through 2026-09-22
+window when this example is rerun later. The expected count and dates make the
+operator command stop before database registration if calendar coverage differs.
+For a later window, update both date bounds and the expected values after checking
+the XNAS calendar snapshot, or omit the three `EXPECTED_*` values.
+
+This creates a separate immutable run under
+`data/research/discovery/retrospective-current-universe/backfills/` and registers
+it in the `discovery_backfill_*` tables. The Grafana page shows these records in
+separate panels. `discovery_backfill_rankings_all_runs` and
+`discovery_backfill_prices_all_runs` retain every reconstruction; the `*_history`
+views select the latest run per model, version, and universe so reruns do not
+duplicate dates in the charts.
+
+The labels are intentional: these are `retrospective_current_universe` rankings
+over the profile's current membership snapshot, with Yahoo's currently installed
+split-adjusted price vintage (`installation_replay_only`). They are hindsight
+reconstructions, not rankings that were actually available on those dates. The
+profile's `membership_as_of` boundary remains attached, and the reconstruction
+does not claim that all current members belonged to the universe before that
+date. Each price keeps its original `observed_at`, `available_at`, and
+`ingested_at`; receipt times are never moved back to the historical close.
+The `current_vintage_with_preserved_receipt_times` availability policy means the
+calculation uses the installed current price vintage while carrying the original
+receipt timestamps through as lineage; it does not treat those prices as known at
+each reconstructed close.
+
+The run pins the exact profile, XNAS calendar snapshot, normalized manifests,
+and content-addressed Parquet parts under its own `inputs/` directory. This
+makes its lineage recoverable after current normalized manifests change. To
+check a retained run:
+
+```sh
+docker compose run --rm --no-deps jupyter python -m research.retrospective_discovery_cli validate \
+  --manifest /data/research/discovery/retrospective-current-universe/backfills/<run-id>/manifest.json
+```
+
+`make market-cycle` now archives normalized manifest bytes in
+`data/normalized/.manifest-history/` as new revisions are published. Reconcile
+can still report `status=degraded` for 200 legacy artifacts created before that
+archive existed while reporting `issue_count=0`; the latest-session freshness
+gate is separate and continues to require a current successful market cycle.
 
 To validate a retained artifact independently:
 

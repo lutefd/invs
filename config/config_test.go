@@ -11,6 +11,14 @@ import (
 func validConfig() Config {
 	return Config{UserAgent: "invs/1 user@real.test", HTTP: HTTP{Timeout: 1, RequestsPerSecond: 1}, Providers: Providers{Prices: PriceProvider{Enabled: true, Start: "2020-01-01"}, FRED: FREDProvider{Enabled: true, Series: []string{"DGS10"}}}, Universe: []Security{{IssuerID: "1b3d88f5-55b8-4dc5-a6be-2f77e9e99201", SecurityID: "469fc20f-7d4b-45bb-b827-05f8410e71aa", LegalName: "Apple", CountryCode: "US", SecurityType: "common_stock", CIK: 320193, Ticker: "AAPL", IdentifierValidFrom: "1980-12-12", YahooSymbol: "AAPL", MIC: "XNAS", Currency: "USD"}}}
 }
+
+func TestValidateAllowsTickerToBeginAfterGlobalPriceHistoryStart(t *testing.T) {
+	c := validConfig()
+	c.Universe[0].IdentifierValidFrom = "2024-03-15"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valid ticker start after the shared history floor: %v", err)
+	}
+}
 func TestValidateStrictCanonicalIdentity(t *testing.T) {
 	if err := validConfig().Validate(); err != nil {
 		t.Fatal(err)

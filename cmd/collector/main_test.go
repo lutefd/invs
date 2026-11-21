@@ -869,6 +869,81 @@ func TestCollectorStoresRawBeforeCanonicalPublication(t *testing.T) {
 	}
 }
 
+func TestCollectorContinuesOnMissingOnlyYahooBarsAndRecordsPartialRun(t *testing.T) {
+	payload := []byte(`{"chart":{"result":[{"meta":{"currency":"USD","exchangeTimezoneName":"America/New_York"},"timestamp":[1719840600,1719927000,1720013400],"indicators":{"quote":[{"open":[10,null,10],"high":[12,null,12],"low":[9,null,9],"close":[11,null,11],"volume":[100,null,100]}]}}],"error":null}}`)
+	raw := &orderingRawStore{}
+	run := testRun()
+	var finalized metadata.Metrics
+	var published []model.PriceBar
+	app := &app{
+		cfg: config.Config{
+			Universe:  []config.Security{{SecurityID: testSecurityID, Ticker: "AAPL", YahooSymbol: "AAPL", Currency: "USD"}},
+			Providers: config.Providers{Prices: config.PriceProvider{Enabled: true, Start: "2024-01-01", End: "2024-12-31"}},
+		},
+		raw: raw,
+		normalized: &orderingNormalizedStore{
+			raw: raw, expectedRun: run, expectedHash: hashPayload(payload), expectedSource: "yahoo", locatorPrefix: "chart/date=",
+		},
+		http: collectorHTTPFake{payload: payload},
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metadata: collectorMetadataFake{run: run, onFinalize: func(m metadata.Metrics, prices []model.PriceBar, _ []model.EconomicObservation) {
+			finalized = m
+			published = append([]model.PriceBar(nil), prices...)
+		}},
+		batchKey: "missing-bars-test",
+	}
+
+	if err := app.run(context.Background(), "prices"); err != nil {
+		t.Fatalf("missing-only Yahoo gaps blocked the market cycle: %v", err)
+	}
+	if len(published) != 2 || finalized.Written != 2 || finalized.Rejected != 0 {
+		t.Fatalf("published=%d metrics=%+v", len(published), finalized)
+	}
+	if finalized.Err == nil || !strings.Contains(finalized.Err.Error(), "1 Yahoo historical price bars missing") {
+		t.Fatalf("partial run error = %v", finalized.Err)
+	}
+	if finalized.Cursor["records_missing"] != 1 {
+		t.Fatalf("records_missing cursor = %v", finalized.Cursor["records_missing"])
+	}
+	observations, ok := finalized.Cursor["missing_price_observations"].([]map[string]string)
+	if !ok || len(observations) != 1 {
+		t.Fatalf("missing price observations cursor = %#v", finalized.Cursor["missing_price_observations"])
+	}
+	wantObservation := map[string]string{
+		"security_id": testSecurityID, "ticker": "AAPL", "vendor_symbol": "AAPL",
+		"session_date": "2024-07-02", "reason": "all_ohlcv_null", "raw_payload_hash": hashPayload(payload),
+	}
+	if !reflect.DeepEqual(observations[0], wantObservation) {
+		t.Fatalf("missing observation = %+v, want %+v", observations[0], wantObservation)
+	}
+	if !reflect.DeepEqual(raw.events, []string{"raw:put:complete", "canonical:prices:write"}) {
+		t.Fatalf("publication order = %v", raw.events)
+	}
+	manifest := decodeTestManifest(t, raw.manifestPayload)
+	if len(manifest.Entries) != 1 || manifest.Entries[0].LogicalKey == "" {
+		t.Fatalf("successful raw manifest entries = %+v", manifest.Entries)
+	}
+}
+
+func TestPricesRunInputsUsesPerSecurityValidFromDate(t *testing.T) {
+	globalStart := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
+	universe := []config.Security{
+		{SecurityID: testSecurityID, Ticker: "AAPL", YahooSymbol: "AAPL", Currency: "USD", IdentifierValidFrom: "1980-12-12"},
+		{SecurityID: "50000000-0000-4000-8000-000000000001", Ticker: "NEWCO", YahooSymbol: "NEWCO", Currency: "USD", IdentifierValidFrom: "2024-03-15"},
+	}
+	inputs := pricesRunInputs(universe, globalStart, end)
+	if len(inputs.Provider.SecurityRequests) != 2 {
+		t.Fatalf("price security requests = %+v", inputs.Provider.SecurityRequests)
+	}
+	if got := inputs.Provider.SecurityRequests[0].Start; got != "2020-01-01" {
+		t.Fatalf("older listing start = %s, want global start", got)
+	}
+	if got := inputs.Provider.SecurityRequests[1].Start; got != "2024-03-15" {
+		t.Fatalf("newer listing start = %s, want ticker valid-from", got)
+	}
+}
+
 func TestCollectorB3StoresRawBeforeHistoricalPublication(t *testing.T) {
 	body, err := os.ReadFile("../../internal/providers/b3/testdata/instruments-2026-08-21.csv")
 	if err != nil {

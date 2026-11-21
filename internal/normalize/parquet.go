@@ -29,6 +29,22 @@ type PriceWriteResult struct {
 	ConflictKeys []string
 }
 
+// FundamentalWriteResult reports rows admitted to the canonical partition and
+// any provider revisions quarantined at an already-committed natural key.
+type FundamentalWriteResult struct {
+	Path         string
+	RowsChanged  int
+	ConflictKeys []string
+}
+
+// FilingWriteResult reports rows admitted to the canonical partition and any
+// provider revisions quarantined at an already-committed natural key.
+type FilingWriteResult struct {
+	Path         string
+	RowsChanged  int
+	ConflictKeys []string
+}
+
 type PriceRow struct {
 	SchemaVersion      string `parquet:"schema_version"`
 	Source             string `parquet:"source"`
@@ -381,48 +397,90 @@ func (w *Writer) writePrices(securityID string, obs []model.PriceBar, quarantine
 	}, nil
 }
 func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObservation) (string, int, error) {
-	if _, err := uuid.Parse(issuerID); err != nil {
-		return "", 0, fmt.Errorf("issuer ID must be UUID: %w", err)
-	}
-	dir, err := w.partition("fundamentals", "source=sec", "issuer_id="+issuerID)
+	result, err := w.writeFundamentals(issuerID, obs, false)
 	if err != nil {
 		return "", 0, err
 	}
+	return result.Path, result.RowsChanged, nil
+}
+
+// WriteFundamentalsQuarantining appends new facts while retaining committed
+// values when a mutable provider revises an already-committed natural key
+// (for example, SEC backfilling acceptanceDateTime timestamps). Raw payload
+// retention remains the evidence for later review.
+func (w *Writer) WriteFundamentalsQuarantining(issuerID string, obs []model.FundamentalObservation) (FundamentalWriteResult, error) {
+	return w.writeFundamentals(issuerID, obs, true)
+}
+
+func (w *Writer) writeFundamentals(issuerID string, obs []model.FundamentalObservation, quarantine bool) (FundamentalWriteResult, error) {
+	if _, err := uuid.Parse(issuerID); err != nil {
+		return FundamentalWriteResult{}, fmt.Errorf("issuer ID must be UUID: %w", err)
+	}
+	dir, err := w.partition("fundamentals", "source=sec", "issuer_id="+issuerID)
+	if err != nil {
+		return FundamentalWriteResult{}, err
+	}
 	for _, o := range obs {
 		if o.IssuerID != issuerID || o.Source != "sec" {
-			return "", 0, errors.New("fundamental observation/path identity mismatch")
+			return FundamentalWriteResult{}, errors.New("fundamental observation/path identity mismatch")
 		}
 	}
 	in := make([]FundamentalRow, 0, len(obs))
 	for _, o := range obs {
 		r, err := fundamentalRow(o)
 		if err != nil {
-			return "", 0, err
+			return FundamentalWriteResult{}, err
 		}
 		in = append(in, r)
 	}
 	partition := map[string]string{"dataset": "fundamentals", "source": "sec", "issuer_id": issuerID}
 	existing, err := readCommitted[FundamentalRow](dir, partition)
 	if err != nil {
-		return "", 0, fmt.Errorf("read existing fundamentals: %w", err)
+		return FundamentalWriteResult{}, fmt.Errorf("read existing fundamentals: %w", err)
 	}
 	for _, r := range existing {
 		if r.Source != "sec" || r.IssuerID != issuerID {
-			return "", 0, fmt.Errorf("read existing fundamentals: %w: partition identity mismatch", ErrMigrationRequired)
+			return FundamentalWriteResult{}, fmt.Errorf("read existing fundamentals: %w: partition identity mismatch", ErrMigrationRequired)
 		}
 	}
-	rows, err := merge(existing, in, fundamentalKey, sameFundamental)
-	if err != nil {
-		return "", 0, err
+	byKey := make(map[string]FundamentalRow, len(existing)+len(in))
+	for _, row := range existing {
+		byKey[fundamentalKey(row)] = row
+	}
+	conflicts := make([]string, 0)
+	for _, row := range in {
+		key := fundamentalKey(row)
+		if previous, ok := byKey[key]; ok {
+			if !sameFundamental(previous, row) {
+				conflicts = append(conflicts, key)
+			}
+			continue
+		}
+		byKey[key] = row
+	}
+	if len(conflicts) > 0 && !quarantine {
+		return FundamentalWriteResult{ConflictKeys: conflicts}, fmt.Errorf(
+			"%w: %s", ErrNaturalKeyConflict, conflicts[0],
+		)
+	}
+	rows := make([]FundamentalRow, 0, len(byKey))
+	for _, row := range byKey {
+		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool { return fundamentalKey(rows[i]) < fundamentalKey(rows[j]) })
 	metadata, err := metadataFromRows(in, func(r FundamentalRow) publicationMetadata {
 		return publicationMetadata{Source: r.Source, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID, NormalizerVersion: r.NormalizerVersion}
 	})
 	if err != nil && !slices.Equal(existing, rows) {
-		return "", 0, err
+		return FundamentalWriteResult{}, err
 	}
-	return publish(w, dir, partition, existing, rows, fundamentalKey, metadata)
+	path, changed, err := publish(w, dir, partition, existing, rows, fundamentalKey, metadata)
+	if err != nil {
+		return FundamentalWriteResult{}, err
+	}
+	return FundamentalWriteResult{
+		Path: path, RowsChanged: changed, ConflictKeys: conflicts,
+	}, nil
 }
 
 // WriteFilings publishes one issuer/source partition of canonical filing
@@ -431,50 +489,92 @@ func (w *Writer) WriteFundamentals(issuerID string, obs []model.FundamentalObser
 // protocol/version identity). Source-specific replay rules preserve the first
 // raw lineage only when the canonical document metadata is unchanged.
 func (w *Writer) WriteFilings(issuerID string, obs []model.Filing) (string, int, error) {
-	if len(obs) == 0 {
-		return "", 0, nil
-	}
-	if _, err := uuid.Parse(issuerID); err != nil {
-		return "", 0, fmt.Errorf("issuer ID must be UUID: %w", err)
-	}
-	source := sourceOfFilings(obs)
-	if source == "" {
-		return "", 0, errors.New("filing source required")
-	}
-	dir, err := w.partition("filings", "source="+source, "issuer_id="+issuerID)
+	result, err := w.writeFilings(issuerID, obs, false)
 	if err != nil {
 		return "", 0, err
 	}
+	return result.Path, result.RowsChanged, nil
+}
+
+// WriteFilingsQuarantining appends new filings while retaining committed values
+// when a mutable provider revises an already-committed natural key (for
+// example, SEC backfilling acceptanceDateTime timestamps from Eastern time to
+// UTC). Raw payload retention remains the evidence for later review.
+func (w *Writer) WriteFilingsQuarantining(issuerID string, obs []model.Filing) (FilingWriteResult, error) {
+	return w.writeFilings(issuerID, obs, true)
+}
+
+func (w *Writer) writeFilings(issuerID string, obs []model.Filing, quarantine bool) (FilingWriteResult, error) {
+	if len(obs) == 0 {
+		return FilingWriteResult{}, nil
+	}
+	if _, err := uuid.Parse(issuerID); err != nil {
+		return FilingWriteResult{}, fmt.Errorf("issuer ID must be UUID: %w", err)
+	}
+	source := sourceOfFilings(obs)
+	if source == "" {
+		return FilingWriteResult{}, errors.New("filing source required")
+	}
+	dir, err := w.partition("filings", "source="+source, "issuer_id="+issuerID)
+	if err != nil {
+		return FilingWriteResult{}, err
+	}
 	for _, o := range obs {
 		if o.IssuerID != issuerID || o.Source != source {
-			return "", 0, errors.New("filing observation/path identity mismatch")
+			return FilingWriteResult{}, errors.New("filing observation/path identity mismatch")
 		}
 	}
 	in := make([]FilingRow, 0, len(obs))
 	for _, o := range obs {
 		r, err := filingRow(o)
 		if err != nil {
-			return "", 0, err
+			return FilingWriteResult{}, err
 		}
 		in = append(in, r)
 	}
 	partition := map[string]string{"dataset": "filings", "source": source, "issuer_id": issuerID}
 	existing, err := readCommitted[FilingRow](dir, partition)
 	if err != nil {
-		return "", 0, fmt.Errorf("read existing filings: %w", err)
+		return FilingWriteResult{}, fmt.Errorf("read existing filings: %w", err)
 	}
-	rows, err := merge(existing, in, filingKey, sameFiling)
-	if err != nil {
-		return "", 0, err
+	byKey := make(map[string]FilingRow, len(existing)+len(in))
+	for _, row := range existing {
+		byKey[filingKey(row)] = row
+	}
+	conflicts := make([]string, 0)
+	for _, row := range in {
+		key := filingKey(row)
+		if previous, ok := byKey[key]; ok {
+			if !sameFiling(previous, row) {
+				conflicts = append(conflicts, key)
+			}
+			continue
+		}
+		byKey[key] = row
+	}
+	if len(conflicts) > 0 && !quarantine {
+		return FilingWriteResult{ConflictKeys: conflicts}, fmt.Errorf(
+			"%w: %s", ErrNaturalKeyConflict, conflicts[0],
+		)
+	}
+	rows := make([]FilingRow, 0, len(byKey))
+	for _, row := range byKey {
+		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool { return filingKey(rows[i]) < filingKey(rows[j]) })
 	metadata, err := metadataFromRows(in, func(r FilingRow) publicationMetadata {
 		return publicationMetadata{Source: r.Source, DataSourceID: r.DataSourceID, IngestionRunID: r.IngestionRunID, NormalizerVersion: r.NormalizerVersion}
 	})
 	if err != nil && !slices.Equal(existing, rows) {
-		return "", 0, err
+		return FilingWriteResult{}, err
 	}
-	return publish(w, dir, partition, existing, rows, filingKey, metadata)
+	path, changed, err := publish(w, dir, partition, existing, rows, filingKey, metadata)
+	if err != nil {
+		return FilingWriteResult{}, err
+	}
+	return FilingWriteResult{
+		Path: path, RowsChanged: changed, ConflictKeys: conflicts,
+	}, nil
 }
 
 // WriteEconomics updates obs revisions in place after a successful write so
@@ -533,6 +633,12 @@ func (w *Writer) WriteEconomics(seriesID string, obs []model.EconomicObservation
 		}
 		effectiveRevisions[i] = int(r.Revision)
 		in = append(in, r)
+	}
+	if len(in) == 0 {
+		for i := range obs {
+			obs[i].Revision = effectiveRevisions[i]
+		}
+		return filepath.Join(dir, ManifestFilename), 0, nil
 	}
 	rows, err := merge(existing, in, economicKey, sameEconomic)
 	if err != nil {
@@ -1230,6 +1336,7 @@ func sameFiling(a, b FilingRow) bool {
 	// appended. Preserve the first raw lineage for an unchanged canonical row.
 	if a.Source == "sec" {
 		a.RawPayloadHash = b.RawPayloadHash
+		a.RawRecordLocator = b.RawRecordLocator
 	}
 	// CVM's conservative availability for date-only delivery metadata is the
 	// local receipt time, so retries may legitimately have a new availability

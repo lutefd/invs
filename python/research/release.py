@@ -504,15 +504,27 @@ def _validate_security(security: Mapping[str, Any], repo_root: Path) -> None:
         compose_text = compose.read_text(encoding="utf-8")
     except OSError as error:
         raise CompatibilityError(f"cannot read {compose}: {error}") from error
-    if compose_text.count("${INVS_BIND_ADDRESS:-127.0.0.1}") < 3:
-        raise CompatibilityError("docker-compose.yml must default all host services to loopback")
+    required_loopback_bindings = (
+        '"127.0.0.1:${POSTGRES_PORT:-5432}:5432"',
+        '"127.0.0.1:${JUPYTER_PORT:-8888}:8888"',
+        '"127.0.0.1:${STOCK_MANAGER_PORT:-8090}:8080"',
+        '"127.0.0.1:${GRAFANA_PORT:-3000}:3000"',
+    )
+    if any(binding not in compose_text for binding in required_loopback_bindings):
+        raise CompatibilityError("docker-compose.yml must keep primary host services on loopback")
+    required_tailnet_bindings = (
+        '"${INVS_TAILSCALE_IPV4:-127.0.0.2}:${STOCK_MANAGER_PORT:-8090}:8080"',
+        '"${INVS_TAILSCALE_IPV4:-127.0.0.2}:${GRAFANA_PORT:-3000}:3000"',
+    )
+    if any(binding not in compose_text for binding in required_tailnet_bindings):
+        raise CompatibilityError("docker-compose.yml must default optional tailnet services to loopback")
     if "0.0.0.0:" in compose_text:
         raise CompatibilityError("docker-compose.yml contains an unsafe 0.0.0.0 host binding")
     if 'GF_AUTH_ANONYMOUS_ENABLED: "false"' not in compose_text:
         raise CompatibilityError("Grafana anonymous access must remain disabled")
     env_example = repo_root / ".env.example"
-    if "INVS_BIND_ADDRESS=127.0.0.1" not in env_example.read_text(encoding="utf-8"):
-        raise CompatibilityError(".env.example must declare the loopback bind default")
+    if "INVS_TAILSCALE_IPV4=" not in env_example.read_text(encoding="utf-8"):
+        raise CompatibilityError(".env.example must leave the optional tailnet bind disabled")
 
 
 def _validate_upgrade(upgrade: Mapping[str, Any]) -> None:

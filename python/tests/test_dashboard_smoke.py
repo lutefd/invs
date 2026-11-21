@@ -79,6 +79,20 @@ def test_paper_dashboard_exposes_catalog_status_and_event_monitoring() -> None:
     assert "local paper ledger" in document["description"]
 
 
+def test_stock_discovery_dashboard_filters_all_panels_by_ticker() -> None:
+    dashboard = DASHBOARD.parent / "stock-discovery.json"
+    document = load_dashboard(dashboard)
+    queries = dashboard_queries(document)
+    sql = "\n".join(queries)
+
+    assert len(queries) == 9
+    assert sql.count("ticker ~ '.*'") == 4
+    assert "FROM discovery_backfill_latest_rankings" in sql
+    assert "FROM discovery_backfill_latest_ranks " not in sql
+    assert "discovery_backfill_latest_rankings" in document["templating"]["list"][0]["query"]
+    assert "Manage tracked stocks" in document["links"][0]["title"]
+
+
 @pytest.mark.parametrize(
     ("payload", "key"),
     [

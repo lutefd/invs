@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -185,6 +186,103 @@ func TestReconcileResolvesFeatureLineage(t *testing.T) {
 	if report.Summary.TotalIssues != 0 {
 		t.Fatalf("clean lineage report has %d issues: %+v", report.Summary.TotalIssues, report)
 	}
+	if report.Summary.Status != "ok" {
+		t.Fatalf("clean lineage status = %q, want ok", report.Summary.Status)
+	}
+
+	// Advance the mutable manifest pointer while preserving the exact bytes
+	// pinned by the feature artifact, as the normalized writer now does.
+	archiveDir := filepath.Join(normalizedDir, ".manifest-history")
+	if err := os.MkdirAll(archiveDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	archivePath := filepath.Join(archiveDir, manifestHashText+".json")
+	if err := os.WriteFile(archivePath, manifestBytes, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	laterBytes := []byte("later append")
+	laterDigest := sha256.Sum256(laterBytes)
+	laterHash := hex.EncodeToString(laterDigest[:])
+	laterName := "part-" + laterHash + ".parquet"
+	if err := os.WriteFile(filepath.Join(normalizedDir, laterName), laterBytes, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	currentParts := append(manifest["parts"].([]map[string]any), map[string]any{
+		"path": laterName, "sha256": laterHash, "row_count": 1,
+	})
+	manifest["parts"] = currentParts
+	manifest["row_count"] = 2
+	advancedManifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, advancedManifestBytes, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	report, err = Reconcile(context.Background(), Roots{DataRoot: dataRoot}, nil, time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Summary.TotalIssues != 0 || len(report.FeatureArtifactsWithUnavailableInputs) != 0 {
+		t.Fatalf("exact historical manifest archive should preserve lineage: %+v", report)
+	}
+	if report.Summary.FeatureArtifactLineageAdvisories != 0 || report.Summary.Status != "ok" {
+		t.Fatalf("archived lineage should not be degraded: %+v", report.Summary)
+	}
+
+	// A present but corrupt archive is evidence of tampering and must not be
+	// hidden by the permissive legacy fallback.
+	if err := os.WriteFile(archivePath, []byte(`{"tampered":true}`), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	report, err = Reconcile(context.Background(), Roots{DataRoot: dataRoot}, nil, time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.FeatureArtifactsWithUnavailableInputs) != 1 || report.Summary.FeatureArtifactLineageAdvisories != 0 {
+		t.Fatalf("corrupt historical archive must remain an issue: %+v", report)
+	}
+	if err := os.WriteFile(archivePath, manifestBytes, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	// Legacy pre-archive manifests may use the current valid append-only
+	// pointer only when every selected part remains listed and hash-valid.
+	if err := os.Remove(archivePath); err != nil {
+		t.Fatal(err)
+	}
+	report, err = Reconcile(context.Background(), Roots{DataRoot: dataRoot}, nil, time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Summary.TotalIssues != 0 || len(report.FeatureArtifactsWithUnavailableInputs) != 0 {
+		t.Fatalf("valid legacy append-only fallback should remain non-fatal: %+v", report)
+	}
+	if report.Summary.Status != "degraded" || report.Summary.FeatureArtifactLineageAdvisories != 1 {
+		t.Fatalf("legacy fallback must surface degraded status and advisory: %+v", report.Summary)
+	}
+	if len(report.FeatureArtifactLineageAdvisories) != 1 || !strings.Contains(report.FeatureArtifactLineageAdvisories[0].Detail, "append-only") {
+		t.Fatalf("missing fallback advisory detail: %+v", report.FeatureArtifactLineageAdvisories)
+	}
+
+	// The fallback never masks a selected part that has been modified.
+	if err := os.WriteFile(filepath.Join(normalizedDir, partName), []byte("tampered"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	report, err = Reconcile(context.Background(), Roots{DataRoot: dataRoot}, nil, time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.FeatureArtifactsWithUnavailableInputs) != 1 || len(report.NormalizedPartHashMismatches) != 1 {
+		t.Fatalf("tampered selected part should remain visible: %+v", report)
+	}
+	if report.Summary.FeatureArtifactLineageAdvisories != 0 {
+		t.Fatalf("failed fallback must not be reported as an accepted advisory: %+v", report.Summary)
+	}
+
+	if err := os.WriteFile(filepath.Join(normalizedDir, partName), partBytes, 0o640); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := os.Remove(filepath.Join(normalizedDir, partName)); err != nil {
 		t.Fatal(err)
@@ -195,6 +293,9 @@ func TestReconcileResolvesFeatureLineage(t *testing.T) {
 	}
 	if len(report.FeatureArtifactsWithUnavailableInputs) != 1 {
 		t.Fatalf("unavailable feature artifacts = %d, want 1", len(report.FeatureArtifactsWithUnavailableInputs))
+	}
+	if report.Summary.MissingNormalizedParts != 1 {
+		t.Fatalf("missing selected part findings = %d, want 1", report.Summary.MissingNormalizedParts)
 	}
 }
 
