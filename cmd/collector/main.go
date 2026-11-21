@@ -83,6 +83,14 @@ type priceRevisionQuarantineWriter interface {
 	WritePricesQuarantining(string, []model.PriceBar) (normalize.PriceWriteResult, error)
 }
 
+type fundamentalRevisionQuarantineWriter interface {
+	WriteFundamentalsQuarantining(string, []model.FundamentalObservation) (normalize.FundamentalWriteResult, error)
+}
+
+type filingRevisionQuarantineWriter interface {
+	WriteFilingsQuarantining(string, []model.Filing) (normalize.FilingWriteResult, error)
+}
+
 type operatorMetadataStore interface {
 	LookupRun(context.Context, string, string, string) (metadata.Run, error)
 	CancelRun(context.Context, metadata.Run, time.Time, string) error
@@ -102,6 +110,7 @@ type metrics struct {
 	Duration                       time.Duration
 	Received, OutputRows, Rejected int
 	RecordsMissing                 int
+	RecordsQuarantined             int
 	RawObjects                     int
 	RawBytes                       int64
 	Manifest                       storage.RawManifest
@@ -524,6 +533,20 @@ func (a *app) collectSEC(ctx context.Context) error {
 		}
 		m.Received += r.RecordsReceived
 		m.Rejected += r.RecordsRejected
+		m.RecordsQuarantined += r.RecordsQuarantined
+		for _, observation := range r.QuarantinedFacts {
+			a.log.Warn(
+				"SEC company fact quarantined",
+				"issuer_id", s.IssuerID,
+				"taxonomy", observation.Taxonomy,
+				"concept", observation.Concept,
+				"unit", observation.Unit,
+				"accession_number", observation.AccessionNumber,
+				"period_end", observation.PeriodEnd.Format(time.DateOnly),
+				"published_at", observation.PublishedAt,
+				"reason", observation.Reason,
+			)
+		}
 		rawOK := true
 		rawHashes := map[string]string{}
 		for _, d := range r.Resources {
@@ -551,7 +574,29 @@ func (a *app) collectSEC(ctx context.Context) error {
 			errs = append(errs, err)
 			continue
 		}
-		fundamentalPath, fundamentalRows, fundamentalErr := a.normalized.WriteFundamentals(s.IssuerID, r.Facts)
+		var (
+			fundamentalPath string
+			fundamentalRows int
+			fundamentalErr  error
+		)
+		if writer, ok := a.normalized.(fundamentalRevisionQuarantineWriter); ok {
+			result, writeErr := writer.WriteFundamentalsQuarantining(s.IssuerID, r.Facts)
+			fundamentalPath, fundamentalRows, fundamentalErr = result.Path, result.RowsChanged, writeErr
+			if len(result.ConflictKeys) > 0 {
+				conflictCount, _ := m.Cursor["fundamental_revision_conflicts"].(int)
+				m.Cursor["fundamental_revision_conflicts"] = conflictCount + len(result.ConflictKeys)
+				m.RecordsQuarantined += len(result.ConflictKeys)
+				a.log.Warn(
+					"provider fundamental revisions quarantined",
+					"source", "sec",
+					"issuer_id", s.IssuerID,
+					"conflicts", len(result.ConflictKeys),
+					"first_natural_key", result.ConflictKeys[0],
+				)
+			}
+		} else {
+			fundamentalPath, fundamentalRows, fundamentalErr = a.normalized.WriteFundamentals(s.IssuerID, r.Facts)
+		}
 		if fundamentalErr != nil {
 			errs = append(errs, fmt.Errorf("SEC issuer %s fundamentals: %w", s.IssuerID, fundamentalErr))
 		} else {
@@ -559,7 +604,29 @@ func (a *app) collectSEC(ctx context.Context) error {
 			m.Cursor["last_issuer_id"] = s.IssuerID
 			a.log.Info("normalized dataset", "source", "sec", "dataset", "fundamentals", "issuer_id", s.IssuerID, "path", fundamentalPath, "rows", len(r.Facts), "rows_changed", fundamentalRows, "legal_name", r.Issuer.LegalName)
 		}
-		filingPath, filingRows, filingErr := a.normalized.WriteFilings(s.IssuerID, r.Filings)
+		var (
+			filingPath string
+			filingRows int
+			filingErr  error
+		)
+		if writer, ok := a.normalized.(filingRevisionQuarantineWriter); ok {
+			result, writeErr := writer.WriteFilingsQuarantining(s.IssuerID, r.Filings)
+			filingPath, filingRows, filingErr = result.Path, result.RowsChanged, writeErr
+			if len(result.ConflictKeys) > 0 {
+				conflictCount, _ := m.Cursor["filing_revision_conflicts"].(int)
+				m.Cursor["filing_revision_conflicts"] = conflictCount + len(result.ConflictKeys)
+				m.RecordsQuarantined += len(result.ConflictKeys)
+				a.log.Warn(
+					"provider filing revisions quarantined",
+					"source", "sec",
+					"issuer_id", s.IssuerID,
+					"conflicts", len(result.ConflictKeys),
+					"first_natural_key", result.ConflictKeys[0],
+				)
+			}
+		} else {
+			filingPath, filingRows, filingErr = a.normalized.WriteFilings(s.IssuerID, r.Filings)
+		}
 		if filingErr != nil {
 			errs = append(errs, fmt.Errorf("SEC issuer %s filings: %w", s.IssuerID, filingErr))
 		} else {
@@ -570,6 +637,9 @@ func (a *app) collectSEC(ctx context.Context) error {
 	}
 	if m.Rejected > 0 {
 		errs = append(errs, fmt.Errorf("%d records rejected", m.Rejected))
+	}
+	if m.RecordsQuarantined > 0 {
+		m.Cursor["records_quarantined"] = m.RecordsQuarantined
 	}
 	collectErr := errors.Join(errs...)
 	return errors.Join(collectErr, a.finish(ctx, run, m, collectErr, nil, nil))
@@ -3308,7 +3378,7 @@ func (a *app) finish(ctx context.Context, run metadata.Run, m metrics, err error
 		a.log.Error("persist collector run failed", "source", m.Source, "error", dbErr)
 		return dbErr
 	}
-	a.log.Info("collector run", "source", m.Source, "status", status, "started_at", m.StartedAt, "duration_seconds", m.Duration.Seconds(), "records_received", m.Received, "output_rows_changed", m.OutputRows, "records_rejected", m.Rejected, "records_missing", m.RecordsMissing, "raw_objects", m.RawObjects, "raw_manifest_key", manifestKey, "raw_manifest_hash", manifestHash)
+	a.log.Info("collector run", "source", m.Source, "status", status, "started_at", m.StartedAt, "duration_seconds", m.Duration.Seconds(), "records_received", m.Received, "output_rows_changed", m.OutputRows, "records_rejected", m.Rejected, "records_missing", m.RecordsMissing, "records_quarantined", m.RecordsQuarantined, "raw_objects", m.RawObjects, "raw_manifest_key", manifestKey, "raw_manifest_hash", manifestHash)
 	return nil
 }
 func rawKey(parts1, parts2, entity string, b []byte, at time.Time, ext string) string {

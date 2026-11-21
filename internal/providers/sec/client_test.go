@@ -119,15 +119,15 @@ func TestCollectCompanyTruncatesInjectedReceiptTime(t *testing.T) {
 
 func TestInvalidFactTimestampRejected(t *testing.T) {
 	facts := []byte(`{"facts":{"us-gaap":{"Revenue":{"units":{"USD":[{"end":"bad","val":1,"accn":"1","filed":"2024-01-01"}]}}}}}`)
-	got, received, rejected, err := parseCompanyFacts(facts, "issuer", 0, time.Now(), nil)
+	got, received, rejected, quarantined, err := parseCompanyFacts(facts, "issuer", 0, time.Now(), nil)
 	if err != nil || len(got) != 0 || received != 1 || rejected != 1 {
-		t.Fatalf("got=%v received=%d rejected=%d err=%v", got, received, rejected, err)
+		t.Fatalf("got=%v received=%d rejected=%d quarantined=%v err=%v", got, received, rejected, quarantined, err)
 	}
 }
 
 func TestFactWithoutAcceptanceUsesFortyEightHourFallback(t *testing.T) {
 	facts := []byte(`{"facts":{"us-gaap":{"Revenue":{"units":{"USD":[{"end":"2023-12-31","val":1,"accn":"1","filed":"2024-01-01"}]}}}}}`)
-	got, _, _, err := parseCompanyFacts(facts, "issuer", 0, time.Now(), nil)
+	got, _, _, _, err := parseCompanyFacts(facts, "issuer", 0, time.Now(), nil)
 	if err != nil || len(got) != 1 {
 		t.Fatal(err)
 	}
@@ -139,6 +139,17 @@ func TestFactWithoutAcceptanceUsesFortyEightHourFallback(t *testing.T) {
 	}
 	if got[0].Temporal.ObservedPrecision != "date" {
 		t.Fatalf("observed precision=%q want date", got[0].Temporal.ObservedPrecision)
+	}
+}
+
+func TestFactWhosePeriodEndsAfterPublicationIsQuarantined(t *testing.T) {
+	facts := []byte(`{"facts":{"us-gaap":{"Forecast":{"units":{"USD":[{"end":"2024-03-31","val":1,"accn":"1","filed":"2024-01-01"}]}}}}}`)
+	got, received, rejected, quarantined, err := parseCompanyFacts(facts, "issuer", 0, time.Date(2024, 4, 1, 0, 0, 0, 0, time.UTC), nil)
+	if err != nil || len(got) != 0 || received != 1 || rejected != 0 || len(quarantined) != 1 {
+		t.Fatalf("got=%v received=%d rejected=%d quarantined=%v err=%v", got, received, rejected, quarantined, err)
+	}
+	if q := quarantined[0]; q.Reason != "period_end_after_publication" || q.Concept != "Forecast" || q.PeriodEnd.Format(time.DateOnly) != "2024-03-31" || q.PublishedAt.Format(time.DateOnly) != "2024-01-03" {
+		t.Fatalf("quarantined fact=%+v", q)
 	}
 }
 

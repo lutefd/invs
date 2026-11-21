@@ -1533,11 +1533,12 @@ retry finds an existing paper report for that session, it reuses the report's
 immutable decision clock before validation and execution, allowing the scheduler to
 resume idempotently without changing the paper record.
 
-Install the user-level systemd timer after validating one manual pass:
+Install the user-level systemd timers after validating one manual pass:
 
 ```sh
 make install-market-timer
-systemctl --user list-timers invs-market-cycle.timer
+systemctl --user list-timers invs-daily.timer invs-market-cycle.timer
+journalctl --user -u invs-daily.service -n 100 --no-pager
 journalctl --user -u invs-market-cycle.service -n 100 --no-pager
 ```
 
@@ -1551,10 +1552,15 @@ absolute `sg` tool as `sg docker -c "<absolute-make> market-cycle"`. Installatio
 fails closed unless `sg`, the `docker` group, and current-user membership are
 available; do not add `SupplementaryGroups=docker` to this user unit.
 Re-run `make install-market-timer` after changing the host Make installation or
-repository path; do not hand-edit the generated unit under `~/.config/systemd`.
+repository path; do not hand-edit the generated units under `~/.config/systemd`.
 
-The timer runs Monday through Friday at 18:30 `America/Sao_Paulo`, after the US
-regular close in both daylight-saving regimes. Runtime state is under
+The maintenance timer runs every day at 02:15 UTC and refreshes every enabled
+source, reconciles storage, and runs operational checks. It is independent from the
+market timer, which runs Monday through Friday at 18:30 `America/Sao_Paulo`, after
+the US regular close in both daylight-saving regimes. `make ops-status` evaluates
+Yahoo and price freshness against the latest completed XNAS session rather than a
+wall-clock age, so weekends and market holidays are not reported as missing data.
+Runtime state is under
 `.runtime/market-cycle/`, logs are under `logs/`, canonical features remain under
 `data/features/`, and operator snapshots plus the paper ledger are under
 `data/research/forward/nasdaq-100-starter/`. Each snapshot directory includes a

@@ -462,7 +462,7 @@
       }
     ],
     "migrations": {
-      "latest": "migrations/000017_discovery_indexes.up.sql",
+      "latest": "migrations/000018_discovery_backfill.up.sql",
       "files": [
         {
           "path": "migrations/000001_core_metadata.up.sql",
@@ -531,6 +531,10 @@
         {
           "path": "migrations/000017_discovery_indexes.up.sql",
           "sha256": "6a960616bc8862d3dbfad8172b5a6851f52e7ac6c7b1dbb9de8bbfb32daeec6d"
+        },
+        {
+          "path": "migrations/000018_discovery_backfill.up.sql",
+          "sha256": "73cffe56fa3f0cbdb974ab1c0e5ca1508131b211e2983d7c11d8f8ba18ee6f4e"
         }
       ]
     },
@@ -542,10 +546,10 @@
         "sha256": "14d33a642831644a828e396c06caab199e6588ae9d69a936c19402586d0a60bd"
       },
       {
-        "name": "discovery",
-        "path": "python/research/discovery.py",
-        "version": "python-discovery-1.0.0",
-        "sha256": "25e0ad6967be7e6a03242a8ef89b0dda819fb53c37a029d16fe59b02ee6aa809"
+      "name": "discovery",
+      "path": "python/research/discovery.py",
+      "version": "python-discovery-1.0.0",
+      "sha256": "bc1f16e083581693c5896a179cb96ee97bc59c702617158a7d2c3da0c91abe14"
       },
       {
         "name": "paper",
@@ -633,13 +637,13 @@
       },
       {
         "name": "compose",
-        "path": "docker-compose.yml",
-        "sha256": "a1c128ed8a251e269753bc94f56bba73fc9301e7b5906dbf4f0369f1510f055b"
+      "path": "docker-compose.yml",
+      "sha256": "24044fc136e32ec64057e9c2baa162ec954c693daff0c5d4e0bf6a7e2e148bee"
       },
       {
         "name": "collector-dockerfile",
-        "path": "docker/collector.Dockerfile",
-        "sha256": "a3a4d797009f0d5f9c9228cd6f883a8675a7e3516fbe79f8d9879b7fc52ea0d9"
+      "path": "docker/collector.Dockerfile",
+      "sha256": "bb9ab1439fcaf46981489d0fb9b33ea0caba4546d028158091ad17482a83dc58"
       },
       {
         "name": "jupyter-dockerfile",
@@ -648,8 +652,8 @@
       },
       {
         "name": "postgres-dockerfile",
-        "path": "docker/postgres.Dockerfile",
-        "sha256": "1acb28887449816cd1da031659a39ef4417ee443d61904422f1bb342bcb84792"
+      "path": "docker/postgres.Dockerfile",
+      "sha256": "bb016947d4556816155a99ea8047c68650b8613e4836473436c7207b8ef41916"
       }
     ]
   },

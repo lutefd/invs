@@ -50,7 +50,11 @@ make ops-status
 status_status=$?
 echo "ops_status=$status_status"
 
-if (( collection_status != 0 || reconcile_status != 0 || status_status != 0 )); then
+make projection-freshness PROJECTION_SCOPE=all
+freshness_status=$?
+echo "projection_freshness_status=$freshness_status"
+
+if (( collection_status != 0 || reconcile_status != 0 || status_status != 0 || freshness_status != 0 )); then
   echo "daily_status=attention"
   exit 1
 fi

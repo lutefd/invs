@@ -33,7 +33,7 @@ def test_checked_in_manifest_is_valid() -> None:
     assert result.manifest["release_version"] == "1.0.0"
     assert len(result.manifest["contracts"]["schemas"]) == 62
     assert len(result.manifest["contracts"]["registries"]) == 3
-    assert len(result.manifest["contracts"]["migrations"]["files"]) == 17
+    assert len(result.manifest["contracts"]["migrations"]["files"]) == 18
 
 
 def test_unknown_top_level_field_is_rejected(tmp_path: Path) -> None:

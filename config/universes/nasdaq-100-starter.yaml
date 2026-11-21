@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 universe_id: 51efed8d-2106-5ac7-b12a-a66cfe0eb097
 name: nasdaq-100-starter
-membership_as_of: "2026-09-24"
+membership_as_of: "2026-11-20"
 source_url: https://api.nasdaq.com/api/quote/list-type/nasdaq100?limit=200&offset=0
 members:
   - ticker: AAPL
@@ -509,6 +509,13 @@ members:
     sources:
       - nasdaq_100
       - nasdaq_sector_lookup
+  - ticker: MRNA
+    security_id: d7e758d8-0011-507f-a464-9005b815b334
+    issuer_id: a2839dad-2b57-59cd-a5d6-3d44ff7aab22
+    sector: unclassified
+    themes: []
+    sources:
+      - nasdaq_100
   - ticker: MRVL
     security_id: 0fa35a6c-82c2-51fc-b50c-722f6a90365b
     issuer_id: c11c534b-2ba4-535c-905f-84c62481cb35
@@ -798,14 +805,6 @@ members:
     security_id: 286a5958-8a4f-561d-8db1-53e1dd38a4a1
     issuer_id: a943f80a-eeac-53db-99db-a27f6dfab476
     sector: health_care
-    themes: []
-    sources:
-      - nasdaq_100
-      - nasdaq_sector_lookup
-  - ticker: WBD
-    security_id: 71fbfe87-bc5a-5d4b-b186-ca12b5b91951
-    issuer_id: 83fe7837-95a1-5b7d-9724-4b9f3ce84621
-    sector: consumer_discretionary
     themes: []
     sources:
       - nasdaq_100

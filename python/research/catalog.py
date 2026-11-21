@@ -1194,15 +1194,14 @@ class ResearchCatalog:
         expected_row_count = sum(manifest.row_count for manifest in manifests)
         observed_precision_by_path = self._validate_file_schemas(name, verified_parts, dataset)
         physical_view = f"_{name}_physical"
-        part_projections = [
-            self._part_compatibility_projection(
-                path, dataset, observed_precision_by_path[path]
-            )
-            for path in verified_parts
-        ]
+        physical_sql = self._grouped_physical_query(
+            verified_parts,
+            dataset,
+            observed_precision_by_path,
+            include_filename=False,
+        )
         self.connection.execute(
-            f"CREATE OR REPLACE VIEW {_quote_identifier(physical_view)} AS "
-            + " UNION ALL ".join(part_projections)
+            f"CREATE OR REPLACE VIEW {_quote_identifier(physical_view)} AS {physical_sql}"
         )
         versions = self.connection.execute(
             f"SELECT DISTINCT schema_version FROM {_quote_identifier(physical_view)} "
@@ -1369,25 +1368,48 @@ class ResearchCatalog:
         return observed_precision_by_path
 
     @staticmethod
-    def _part_compatibility_projection(
-        path: Path, dataset: _Dataset, has_observed_precision: bool
+    def _grouped_physical_query(
+        paths: list[Path],
+        dataset: _Dataset,
+        observed_precision_by_path: dict[Path, bool],
+        *,
+        include_filename: bool,
     ) -> str:
-        expressions = []
-        for field in dataset.fields:
-            source = _quote_identifier(field.name)
-            expression = (
-                "CAST('unknown' AS VARCHAR)"
-                if field.name == "observed_precision" and not has_observed_precision
-                else source
+        """Build a batched read_parquet query grouped by schema compatibility.
+
+        Grouping by ``has_observed_precision`` produces at most two scan
+        branches instead of an N-way UNION ALL across thousands of part files,
+        keeping DuckDB memory bounded as daily partitions grow.
+        """
+        groups: list[tuple[list[Path], bool]] = []
+        with_precision = [path for path in paths if observed_precision_by_path[path]]
+        without_precision = [path for path in paths if not observed_precision_by_path[path]]
+        if with_precision:
+            groups.append((with_precision, True))
+        if without_precision:
+            groups.append((without_precision, False))
+
+        branches: list[str] = []
+        for group_paths, has_observed_precision in groups:
+            expressions = []
+            for field in dataset.fields:
+                source = _quote_identifier(field.name)
+                expression = (
+                    "CAST('unknown' AS VARCHAR)"
+                    if field.name == "observed_precision" and not has_observed_precision
+                    else source
+                )
+                expressions.append(f"{expression} AS {source}")
+            if include_filename:
+                expressions.append("filename AS _invs_part_path")
+            file_list = ", ".join(_quote_literal(str(path)) for path in group_paths)
+            options = "hive_partitioning=false, filename=true" if include_filename else "hive_partitioning=false"
+            branches.append(
+                "SELECT "
+                + ", ".join(expressions)
+                + f" FROM read_parquet([{file_list}], {options})"
             )
-            expressions.append(f"{expression} AS {source}")
-        return (
-            "SELECT "
-            + ", ".join(expressions)
-            + " FROM read_parquet("
-            + _quote_literal(str(path))
-            + ", hive_partitioning=false)"
-        )
+        return " UNION ALL ".join(branches)
 
     def _validate_decimal_strings(
         self, name: str, physical_view: str, dataset: _Dataset
@@ -1577,26 +1599,35 @@ class ResearchCatalog:
             )
             return
 
-        canonical_fields = self._canonical_projections(name, dataset.fields)
-        projections = []
-        for manifest, part, path in records:
-            physical = self._part_compatibility_projection(
-                path,
-                dataset,
-                observed_precision_by_path[path],
-            )
-            projections.append(
-                "SELECT "
-                + ", ".join(
-                    [
-                        *canonical_fields,
-                        f"{_quote_literal(str(manifest.path))} AS manifest_path",
-                        f"{_quote_literal(str(path.resolve()))} AS part_path",
-                        f"{_quote_literal(part.sha256)} AS part_sha256",
-                    ]
-                )
-                + f" FROM ({physical}) AS part"
-            )
+        lineage_table = _quote_identifier(f"_{name}_part_lineage")
         self.connection.execute(
-            f"CREATE OR REPLACE VIEW {lineage_view} AS " + " UNION ALL ".join(projections)
+            f"CREATE OR REPLACE TEMP TABLE {lineage_table} ("
+            "part_path VARCHAR, manifest_path VARCHAR, part_sha256 VARCHAR)"
+        )
+        self.connection.executemany(
+            f"INSERT INTO {lineage_table} VALUES (?, ?, ?)",
+            [
+                (str(path.resolve()), str(manifest.path), part.sha256)
+                for manifest, part, path in records
+            ],
+        )
+        canonical_fields = self._canonical_projections(name, dataset.fields)
+        physical = self._grouped_physical_query(
+            [path for _, _, path in records],
+            dataset,
+            observed_precision_by_path,
+            include_filename=True,
+        )
+        self.connection.execute(
+            f"CREATE OR REPLACE VIEW {lineage_view} AS SELECT "
+            + ", ".join(
+                [
+                    *canonical_fields,
+                    "lineage.manifest_path AS manifest_path",
+                    "lineage.part_path AS part_path",
+                    "lineage.part_sha256 AS part_sha256",
+                ]
+            )
+            + f" FROM ({physical}) AS part"
+            + f" JOIN {lineage_table} AS lineage ON part._invs_part_path = lineage.part_path"
         )

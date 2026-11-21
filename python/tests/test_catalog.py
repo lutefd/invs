@@ -1364,3 +1364,36 @@ universe:
     )
     assert "current YAML" in (load_security_mappings.__doc__ or "")
     assert "not historical" in (SecurityMapping.__doc__ or "")
+
+
+def test_catalog_batches_read_parquet_instead_of_per_part_union_all(
+    tmp_path: Path,
+) -> None:
+    manifest_path = _write_price_parts(
+        tmp_path / "normalized",
+        [
+            _price_select(observed="2026-01-02 21:00:00Z", close="100.00"),
+            _price_select(observed="2026-01-03 21:00:00Z", close="101.00"),
+            _price_select(observed="2026-01-04 21:00:00Z", close="102.00"),
+        ],
+    )
+    catalog = ResearchCatalog(tmp_path).register()
+
+    for view_name in ("_prices_physical", "_prices_lineage"):
+        sql = catalog.connection.execute(
+            "SELECT sql FROM duckdb_views() WHERE view_name = ?",
+            [view_name],
+        ).fetchone()[0]
+        assert sql.count("read_parquet(") == 1, f"{view_name} should batch read_parquet: {sql}"
+
+    rows = catalog.connection.execute(
+        """
+        SELECT close, manifest_path, part_path, part_sha256
+        FROM _prices_lineage
+        ORDER BY observed_at
+        """
+    ).fetchall()
+    assert [row[0] for row in rows] == ["100.00", "101.00", "102.00"]
+    assert all(Path(row[1]) == manifest_path for row in rows)
+    assert len({row[2] for row in rows}) == 3
+    assert all(len(row[3]) == 64 for row in rows)

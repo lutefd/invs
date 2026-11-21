@@ -85,8 +85,8 @@ def test_stock_discovery_dashboard_filters_all_panels_by_ticker() -> None:
     queries = dashboard_queries(document)
     sql = "\n".join(queries)
 
-    assert len(queries) == 8
-    assert sql.count("ticker ~ '.*'") == 6
+    assert len(queries) == 9
+    assert sql.count("ticker ~ '.*'") == 4
     assert "FROM discovery_backfill_latest_rankings" in sql
     assert "FROM discovery_backfill_latest_ranks " not in sql
     assert "discovery_backfill_latest_rankings" in document["templating"]["list"][0]["query"]

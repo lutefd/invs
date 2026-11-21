@@ -22,8 +22,9 @@ The default objectives are:
 
 | Signal | Objective | Operator surface |
 | --- | --- | --- |
-| Enabled-source run freshness | A successful run in the last 26 hours for each source scheduled by the local daily cycle | `make ops-status` and `logs/` |
-| Latest price/macro projection | No more than 26 hours old | `make ops-status` and Grafana |
+| Enabled-source run freshness | A successful run in the last 26 hours for each non-market source scheduled by the local daily cycle; Yahoo is evaluated by XNAS session coverage | `make ops-status` and `logs/` |
+| Latest price/macro projection | Prices cover the latest completed XNAS session; macro projection is no more than 26 hours old | `make ops-status` and Grafana |
+| Discovery/dashboard publication | Forward rankings, retrospective rankings, and retrospective prices cover the latest completed XNAS session | `make ops-status` and Grafana |
 | Unresolved failed/partial runs | Zero after the latest successful run for each enabled source | `make ops-status` and PostgreSQL run lineage |
 | Complete-cycle window | Finish within 120 minutes of the scheduled start | Daily-cycle report `started_at`/`updated_at` |
 | Backup age | A validated backup no more than 30 hours old | `INVS_BACKUP_ROOT` plus `make ops-status` |
@@ -38,6 +39,31 @@ the operator log. `INVS_BACKUP_ROOT` may point at one backup directory or at a
 dedicated directory containing backup directories; it must not point at a broad
 filesystem root. The complete daily-cycle runner sets it to the exact backup it
 created or validated, so the final observation checks backup age.
+
+The scheduled `market-cycle` also refreshes the three-month retrospective price
+and ranking index, with its end date pinned to the verified latest completed
+XNAS session. Historical artifacts retain `retrospective_current_universe` and
+`installation_replay_only` labels. Missed sessions are recovered from installed
+prices on the next cycle; they are not relabeled as forward observations.
+Scheduled refreshes use the deployed schema (`DISCOVERY_SKIP_MIGRATION=1`) so
+each refresh does not rebuild or recreate PostgreSQL. Run `make migrate` during
+installation/upgrades; standalone `make discovery-backfill` retains that check.
+
+A partial Yahoo collection can publish dashboard updates only when the exact
+collection run is recorded as partial, reconciliation passes, and the operator
+snapshot verifies a common latest completed session for the entire active roster.
+The cycle then reports `market_cycle_status=degraded`, preserves the partial
+ingestion record, and halts paper processing. `ops-status` still returns attention
+for unresolved collection failures. Failed collections and stale/incomplete roster
+snapshots stop publication. This lets a rejected quote outside the active roster
+remain visible without freezing valid dashboard data.
+Manual dashboard recovery with `INVS_MARKET_SKIP_COLLECTION=1 make market-cycle`
+also halts paper processing because that invocation did not validate collection.
+
+The Jupyter/research container uses a 65,536 open-file limit because DuckDB opens
+manifest-backed Parquet parts across the tracked universe. After changing this
+Compose setting, recreate the service with `docker compose up -d --no-deps jupyter`;
+new `docker compose run` research jobs receive the same limit.
 
 Run the executable security and backup contract checks before accepting a host
 configuration:
@@ -284,11 +310,24 @@ The v0.x-compatible `make daily` wrapper remains available for collection,
 reconcile, and status-only maintenance runs. It serializes the batch with the
 same stable UTC date-key convention, but it is not the v1.0 complete-cycle gate.
 
-The default schedule is:
+`make install-market-timer` installs the default maintenance schedule as the
+user-level `invs-daily.timer`:
 
-```cron
-15 02 * * * cd /home/luis/dev/invs && make daily >> /home/luis/dev/invs/logs/cron.log 2>&1
+```systemd
+OnCalendar=*-*-* 02:15:00 UTC
 ```
+
+The maintenance service uses a unique invocation run key so an automatic retry
+never collides with an earlier partial run. It is independent from the weekday
+after-close `invs-market-cycle.timer`; a macro, SEC, or calendar-provider failure
+therefore cannot block price features, discovery, or paper reconciliation.
+SEC company facts whose period ends after their publication timestamp are retained
+in raw evidence, logged as `SEC company fact quarantined`, counted in the run cursor
+as `records_quarantined`, and excluded from canonical fundamentals. A growing SEC
+submissions response may move an unchanged accession to a different array position;
+that locator-only change is an idempotent replay and preserves the first accepted
+raw lineage. Unchanged FRED/BCB observations are also valid zero-row publications;
+the maintenance retry must not require new manifest metadata for such a no-op.
 
 The legacy wrapper writes one log per UTC run under `logs/` and takes
 `.runtime/daily.lock` with `flock`; an overlapping invocation exits with status
@@ -301,12 +340,16 @@ INVS_DAILY_RUN_KEY=daily-2026-08-13-retry-1 make daily DAILY_DATE=2026-08-13
 
 Use `INVS_DAILY_SOURCE` to narrow an operator retry. `make ops-status` reports
 enabled-source freshness, active runs, unresolved failed/partial runs after the
-latest successful run in the last 24 hours, projection age, and data-root disk
-headroom. A later successful run clears the source's unresolved alert, but older
-attempts remain visible in PostgreSQL and the daily log. It exits nonzero with an
-`operational_status=attention` summary when any threshold is exceeded. The
-thresholds are locally configurable with `INVS_STALE_AFTER_HOURS`,
-`INVS_PROJECTION_AFTER_HOURS`, and `INVS_DISK_WARN_PERCENT`.
+latest successful run in the last 24 hours, projection coverage, and data-root
+disk headroom. Yahoo and the price projection are checked against the latest
+completed session in the selected XNAS calendar, so weekends and exchange holidays
+do not create false stale alerts. Macro projections and non-market sources retain
+the configured wall-clock thresholds. A later successful run clears the source's
+unresolved alert, but older attempts remain visible in PostgreSQL and the daily log.
+It exits nonzero with an `operational_status=attention` summary when any threshold
+is exceeded. The thresholds are locally configurable with
+`INVS_STALE_AFTER_HOURS`, `INVS_PROJECTION_AFTER_HOURS`, and
+`INVS_DISK_WARN_PERCENT`.
 
 The log is the local alert surface: inspect it for failed/partial runs, stale
 source coverage, reconciliation findings, projection lag, and disk headroom.

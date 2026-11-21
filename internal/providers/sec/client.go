@@ -39,12 +39,22 @@ type RawDocument struct {
 type CompanyResult struct {
 	providers.ResourceResult
 
-	Issuer                           model.Issuer
-	StateOfIncorporation             string
-	Filings                          []model.Filing
-	Facts                            []model.FundamentalObservation
-	Raw                              []RawDocument
-	RecordsReceived, RecordsRejected int
+	Issuer                                               model.Issuer
+	StateOfIncorporation                                 string
+	Filings                                              []model.Filing
+	Facts                                                []model.FundamentalObservation
+	QuarantinedFacts                                     []QuarantinedFactObservation
+	Raw                                                  []RawDocument
+	RecordsReceived, RecordsRejected, RecordsQuarantined int
+}
+
+// QuarantinedFactObservation records a source fact whose reporting period ends
+// after its publication time. The raw SEC response remains authoritative
+// evidence, but the fact is not admitted to canonical normalized storage.
+type QuarantinedFactObservation struct {
+	Taxonomy, Concept, Unit, AccessionNumber string
+	PeriodEnd, PublishedAt                   time.Time
+	Reason                                   string
 }
 
 func (c *Client) CollectCompany(ctx context.Context, issuerID string, cik int64) (CompanyResult, error) {
@@ -88,15 +98,16 @@ func (c *Client) CollectCompany(ctx context.Context, issuerID string, cik int64)
 			acceptedByAccession[filing.AccessionNumber] = *filing.AcceptedAt
 		}
 	}
-	facts, receivedFacts, rejectedFacts, err := parseCompanyFacts(factBytes, issuerID, cik, ingested, acceptedByAccession)
+	facts, receivedFacts, rejectedFacts, quarantinedFacts, err := parseCompanyFacts(factBytes, issuerID, cik, ingested, acceptedByAccession)
 	if err != nil {
 		return result, err
 	}
 	return CompanyResult{
 		ResourceResult: providers.ResourceResult{Resources: result.Resources},
 		Issuer:         issuer, StateOfIncorporation: submissionState(subBytes), Filings: filings, Facts: facts,
-		Raw:             rawDocuments,
+		QuarantinedFacts: quarantinedFacts, Raw: rawDocuments,
 		RecordsReceived: receivedFilings + receivedFacts, RecordsRejected: rejectedFilings + rejectedFacts,
+		RecordsQuarantined: len(quarantinedFacts),
 	}, nil
 }
 
@@ -274,19 +285,20 @@ type fact struct {
 	Val                                      json.Number `json:"val"`
 }
 
-func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested time.Time, acceptedByAccession map[string]time.Time) ([]model.FundamentalObservation, int, int, error) {
+func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested time.Time, acceptedByAccession map[string]time.Time) ([]model.FundamentalObservation, int, int, []QuarantinedFactObservation, error) {
 	ingested = ingested.UTC().Truncate(time.Microsecond)
 	var raw companyFacts
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.UseNumber()
 	if err := dec.Decode(&raw); err != nil {
-		return nil, 0, 0, fmt.Errorf("decode SEC companyfacts: %w", err)
+		return nil, 0, 0, nil, fmt.Errorf("decode SEC companyfacts: %w", err)
 	}
 	if raw.CIK != expectedCIK {
-		return nil, 0, 0, fmt.Errorf("SEC companyfacts CIK mismatch: got %d want %d", raw.CIK, expectedCIK)
+		return nil, 0, 0, nil, fmt.Errorf("SEC companyfacts CIK mismatch: got %d want %d", raw.CIK, expectedCIK)
 	}
 	hash := digest(b)
 	received, rejected := 0, 0
+	var quarantined []QuarantinedFactObservation
 	unique := map[string]model.FundamentalObservation{}
 	for taxonomy, concepts := range raw.Facts {
 		for concept, definition := range concepts {
@@ -316,6 +328,14 @@ func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested ti
 					if accepted, ok := acceptedByAccession[f.Accn]; ok {
 						published, available, precision = accepted.UTC(), accepted.UTC(), model.PrecisionSecond
 					}
+					end = end.UTC()
+					if end.After(published) {
+						quarantined = append(quarantined, QuarantinedFactObservation{
+							Taxonomy: taxonomy, Concept: concept, Unit: unit, AccessionNumber: f.Accn,
+							PeriodEnd: end, PublishedAt: published, Reason: "period_end_after_publication",
+						})
+						continue
+					}
 					currency := ""
 					if isISOCurrency(unit) {
 						currency = unit
@@ -323,8 +343,8 @@ func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested ti
 					o := model.FundamentalObservation{
 						Source: "sec", IssuerID: issuerID, Taxonomy: taxonomy, Concept: concept, Unit: unit, Value: value,
 						Currency: currency, Revision: 0,
-						Temporal:    model.Temporal{ObservedAt: end.UTC(), ObservedPrecision: model.PrecisionDate, PublishedAt: published, PublishedPrecision: precision, AvailableAt: available, IngestedAt: ingested},
-						PeriodStart: start, PeriodEnd: end.UTC(), AccessionNumber: f.Accn, Form: f.Form, FiscalYear: fy, FiscalPeriod: fiscalPeriod(f.FP, start), Frame: f.Frame, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion},
+						Temporal:    model.Temporal{ObservedAt: end, ObservedPrecision: model.PrecisionDate, PublishedAt: published, PublishedPrecision: precision, AvailableAt: available, IngestedAt: ingested},
+						PeriodStart: start, PeriodEnd: end, AccessionNumber: f.Accn, Form: f.Form, FiscalYear: fy, FiscalPeriod: fiscalPeriod(f.FP, start), Frame: f.Frame, RawPayloadHash: hash, Provenance: model.Provenance{RawPayloadHash: hash, IngestedAt: ingested, NormalizerVersion: model.NormalizerVersion},
 					}
 					o.Provenance.RawRecordLocator = strings.Join([]string{"companyfacts", "taxonomy=" + taxonomy, "concept=" + concept, "unit=" + unit, "accn=" + f.Accn, "start=" + f.Start, "end=" + f.End, "frame=" + f.Frame}, "/")
 					key := strings.Join([]string{issuerID, taxonomy, concept, unit, f.Accn, f.Start, f.End, f.Frame}, "\x1f")
@@ -350,7 +370,7 @@ func parseCompanyFacts(b []byte, issuerID string, expectedCIK int64, ingested ti
 		}
 		return a.AccessionNumber < b.AccessionNumber
 	})
-	return result, received, rejected, nil
+	return result, received, rejected, quarantined, nil
 }
 
 func digest(b []byte) string { return providers.SHA256(b) }

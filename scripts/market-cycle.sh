@@ -55,8 +55,32 @@ if [[ "${INVS_MARKET_SKIP_COLLECTION:-0}" != 1 && "${INVS_NASDAQ100_REFRESH:-1}"
     echo "nasdaq100_refresh=degraded action=keep_last_complete_snapshot"
   fi
 fi
+collection_status=0
 if [[ "${INVS_MARKET_SKIP_COLLECTION:-0}" != 1 ]]; then
-  "$make_command" ingest SOURCE="$source" RUN_KEY="market-${source}-${invocation}"
+  run_key="market-${source}-${invocation}"
+  if "$make_command" ingest SOURCE="$source" RUN_KEY="$run_key"; then
+    :
+  else
+    collection_status=$?
+    # A partial Yahoo run may contain valid new prices for the entire active
+    # roster while an unrelated tracked security is rejected. Keep that failure
+    # visible, and require the exact run plus the roster/session checks below.
+    if [[ "$source" != prices ]]; then
+      exit "$collection_status"
+    fi
+    run_status=$(docker compose exec -T postgres sh -c \
+      'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -v run_key="$1"' sh "$run_key/yahoo" <<'SQL'
+SELECT status FROM ingestion_runs
+WHERE data_source_id = (SELECT id FROM data_sources WHERE code = 'yahoo')
+  AND run_key = :'run_key';
+SQL
+    )
+    if [[ "$run_status" != partial ]]; then
+      echo "market_cycle=failed reason=collection_failed status=${run_status:-unknown}"
+      exit "$collection_status"
+    fi
+    echo "collection_status=partial action=validate_active_roster_before_publication"
+  fi
 fi
 "$make_command" reconcile
 
@@ -125,6 +149,16 @@ if [[ -z "$expected_session" || "$actual_session" != "$expected_session" ]]; the
   exit 1
 fi
 
+# Refresh the historical dashboard on every eligible cycle. These artifacts
+# retain their retrospective/current-universe labels and never become forward
+# evidence. Use the verified closed session as the explicit end bound.
+"$make_command" discovery-backfill \
+  DISCOVERY_SKIP_MIGRATION=1 \
+  DISCOVERY_PROFILE="$profile_host" \
+  END_DATE="$expected_session" \
+  EXPECTED_END_DATE="$expected_session" \
+  MONTHS=3
+
 container_to_host() {
   local path=$1
   case "$path" in
@@ -160,7 +194,11 @@ momentum_manifest=$(printf '%s\n' "$momentum_result" | jq -er '.manifest_path')
   DISCOVERY_MARKET_SESSION="$(jq -r '.session_date' "$result_path")"
 
 status=$(jq -r '.status' "$result_path")
-if [[ "$status" == paper_ready ]]; then
+if (( collection_status != 0 )); then
+  echo "paper_status=halted reason=partial_collection"
+elif [[ "${INVS_MARKET_SKIP_COLLECTION:-0}" == 1 ]]; then
+  echo "paper_status=halted reason=collection_not_run"
+elif [[ "$status" == paper_ready ]]; then
   account_id=$(jq -r '.paper.account_id' "$result_path")
   generated_spec=$(container_to_host "$(jq -r '.paper.spec' "$result_path")")
   inputs_container=$(jq -r '.paper.inputs' "$result_path")
@@ -199,4 +237,13 @@ else
   echo "paper_status=$status reason=$(jq -r '.paper_reason // "not ready"' "$result_path")"
 fi
 
-echo "market_cycle_status=ok materialization=$result_path log=$log_path"
+if ! INVS_PROJECTION_REQUIRE_RECENT_DISCOVERY=1 "$make_command" projection-freshness PROJECTION_SCOPE=market; then
+  echo "market_cycle=failed reason=projection_stale expected_session=$expected_session" >&2
+  exit 1
+fi
+
+if (( collection_status != 0 )); then
+  echo "market_cycle_status=degraded reason=partial_collection dashboard_session=$expected_session materialization=$result_path log=$log_path"
+else
+  echo "market_cycle_status=ok materialization=$result_path log=$log_path"
+fi

@@ -67,6 +67,11 @@ services:
     command: ["jupyter-entrypoint"]
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     working_dir: /workspace
+    # DuckDB opens manifest-backed parts across the full tracked universe.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     ports:
       - "127.0.0.1:${JUPYTER_PORT:-8888}:8888"
     volumes:
